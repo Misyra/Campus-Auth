@@ -74,70 +74,181 @@ Python 解释器基线:          ~18 MB
 ### 3.1 进程拓扑
 
 ```
-┌── 主进程（Python，常驻，目标 30-35MB）──────────────┐
-│  FastAPI / Uvicorn / Engine / Scheduler / Tray       │
-│  ServiceContainer 全部服务实例                       │
-│  PlaywrightWorkerProxy（不 import playwright）       │
-│    ├─ subprocess.Popen(worker_proc)                  │
-│    ├─ stdin 写 JSON 命令                             │
-│    ├─ 读线程：stdout 按行解析 → id→Future 派发       │
-│    └─ watchdog：PING 心跳 + EOF 检测 → 自动重启      │
-└────────────────────┬─────────────────────────────────┘
-                     │ stdin  (JSON 请求)
-                     │ stdout (JSON 响应)
-                     │ stderr (loguru → 文件)
-┌────────────────────▼─────────────────────────────────┐
-│ Worker 子进程（Python，按需启动，闲置回收）          │
-│  app.workers.worker_proc.main()                      │
-│    ├─ PlaywrightWorker 实现（原 _async_run 保留）    │
-│    ├─ Playwright + ddddocr + onnxruntime（仅本进程） │
-│    └─ stdin 读循环 → _dispatch → stdout 写响应       │
-│  浏览器子进程（Chromium，由 Playwright 自管）        │
-│  内存：闲置 ~40MB，OCR 期尖峰 ~120MB，退出即归还 OS  │
-└──────────────────────────────────────────────────────┘
+┌── 主进程（Python，常驻，目标 ~48MB）──────────────────────────┐
+│  FastAPI / Uvicorn / Engine / Scheduler / Tray                │
+│  ServiceContainer 全部服务实例                                 │
+│                                                                │
+│  WorkerManager（协调者，不 import playwright）                 │
+│    ├─ ProcessController  ── asyncio.create_subprocess_exec    │
+│    ├─ RpcClient          ── 长度前缀帧读写 + id→Future 派发   │
+│    ├─ LifecycleManager   ── idle 判定 + keepalive 锁 + 重启   │
+│    │    └─ LifecyclePolicy（IdleShutdown / NeverShutdown）    │
+│    └─ WorkerFacade       ── 对外接口（submit/cancel/is_alive）│
+│                                                                │
+│  get_worker() → 返回 WorkerFacade                              │
+└────────────────────┬───────────────────────────────────────────┘
+                     │ stdin  (长度前缀 + JSON 请求)
+                     │ stdout (长度前缀 + JSON 响应)
+                     │ stderr (loguru → 转发到主进程日志)
+┌────────────────────▼───────────────────────────────────────────┐
+│ Worker 子进程（Python，按需启动，闲置回收）                     │
+│  app.workers.worker_proc.main()                                │
+│    ├─ CommandRegistry ── 命令注册与分派（非 switch/cmd）       │
+│    │    ├─ LoginCommand / CancelCommand / PingCommand          │
+│    │    ├─ DebugStartCommand / DebugStepCommand / ...          │
+│    │    └─ ShutdownCommand                                     │
+│    ├─ PlaywrightWorker 实现（原 _async_run 保留）              │
+│    ├─ Playwright + ddddocr + onnxruntime（仅本进程）           │
+│    └─ RSS Watchdog（超阈值自杀）                               │
+│  浏览器子进程（Chromium，由 Playwright 自管）                  │
+│  内存：闲置 ~40MB，OCR 期尖峰 ~90-140MB，退出即归还 OS         │
+└────────────────────────────────────────────────────────────────┘
 ```
 
 ### 3.2 IPC 协议
 
 借鉴 LSP（rust-analyzer / gopls / Claude Desktop）风格：子进程是独立可执行入口，stdin 读命令、stdout 写响应、stderr 走日志。
 
-**帧格式**：行分隔 JSON。
+**帧格式**：4 字节大端长度前缀 + UTF-8 JSON body。
 
-**请求（父→子，stdin）**：
-```json
-{"id": 1, "cmd": "login", "data": {"config": {...}}}
+```
+[4 bytes: payload length (big-endian unsigned int)][payload: UTF-8 JSON]
 ```
 
-**响应（子→父，stdout）**：
-```json
-{"id": 1, "ok": true, "data": "登录成功"}
-{"id": 1, "ok": false, "error": "超时"}
+`struct.pack('>I', len(payload)) + payload`。相比行分隔 JSON，不怕子进程任何库意外写 stdout（防御性设计，应对未来 ddddocr/onnxruntime verbose 模式可能的 stdout 污染）。
+
+### 3.3 协议模型（Pydantic + 统一 Message）
+
+符合 project_memory 约定「API endpoints 应使用 Pydantic 模型进行请求/响应验证」。定义在 `app/workers/worker_protocol.py`。
+
+**统一 Message 基类**：Request / Response / Event 均继承 `WorkerMessage`，共享公共字段，便于协议升级和统一处理。
+
+```python
+class WorkerMessage(BaseModel):
+    """协议消息基类。"""
+    version: int = 1  # 协议版本号
+
+class WorkerRequest(WorkerMessage):
+    """请求（父→子）。"""
+    id: int
+    cmd: str
+    data: dict = {}
+
+class WorkerResponse(WorkerMessage):
+    """响应（子→父，对应某个请求）。"""
+    id: int
+    ok: bool
+    data: Any | None = None
+    error: str | None = None
+
+class WorkerEvent(WorkerMessage):
+    """事件（子→父，无对应请求）。"""
+    event: str  # "ready" / "shutdown" / "log"
+    reason: str | None = None
+    data: Any | None = None  # 事件附加数据（如 ready 携带 version）
 ```
 
-**事件（子→父，stdout，无对应请求）**：
-```json
-{"event": "ready"}
-{"event": "shutdown", "reason": "idle_timeout"}
+**帧编解码函数**：
+
+```python
+def encode_frame(msg: WorkerMessage) -> bytes:
+    payload = msg.model_dump_json().encode()
+    return struct.pack('>I', len(payload)) + payload
+
+async def decode_frame(reader: asyncio.StreamReader) -> WorkerMessage:
+    length = struct.unpack('>I', await reader.readexactly(4))[0]
+    payload = await reader.readexactly(length)
+    data = json.loads(payload)
+    if "cmd" in data:
+        return WorkerRequest(**data)
+    elif "ok" in data:
+        return WorkerResponse(**data)
+    else:
+        return WorkerEvent(**data)
 ```
 
-**取消**：
-```json
-{"id": 2, "cmd": "cancel", "data": {"cmd_id": 1}}
+**命令常量**：`CMD_LOGIN`, `CMD_CANCEL`, `CMD_PING`, `CMD_DEBUG_START`, `CMD_DEBUG_STEP`, `CMD_DEBUG_STOP`, `CMD_BROWSER_ACQUIRE`, `CMD_BROWSER_RELEASE`, `CMD_BROWSER_CLOSE`, `CMD_BROWSER_HEALTH_CHECK`, `CMD_SHUTDOWN`
+
+### 3.3.1 Command Registry（子进程侧命令分派）
+
+子进程内不使用 `switch(cmd)` 字符串分派，而是用 Command Registry 模式。每个命令是一个类，注册后自动分派。定义在 `app/workers/worker_commands.py`。
+
+```python
+class Command(ABC):
+    """命令基类。子进程内执行，接收 data dict，返回 WorkerResponse。"""
+    cmd: str  # 命令名，如 "login"
+
+    @abstractmethod
+    async def execute(self, worker: PlaywrightWorker, data: dict) -> WorkerResponse:
+        ...
+
+class CommandRegistry:
+    """命令注册中心。新增命令只需注册，不改 dispatch 逻辑。"""
+    def __init__(self):
+        self._commands: dict[str, Command] = {}
+
+    def register(self, command: Command) -> None:
+        self._commands[command.cmd] = command
+
+    async def dispatch(self, worker: PlaywrightWorker, request: WorkerRequest) -> WorkerResponse:
+        cmd = self._commands.get(request.cmd)
+        if cmd is None:
+            return WorkerResponse(id=request.id, ok=False, error=f"未知命令: {request.cmd}")
+        return await cmd.execute(worker, request.data)
 ```
 
-**心跳**：
-```json
-{"id": 3, "cmd": "ping"} → {"id": 3, "ok": true}
+**具体命令实现**（示例）：
+
+```python
+class LoginCommand(Command):
+    cmd = CMD_LOGIN
+    async def execute(self, worker, data):
+        # 子进程内创建本地 threading.Event，传给 LoginAttemptHandler
+        cancel_event = threading.Event()
+        cmd_id = data.pop("_cmd_id", None)  # 父进程下发的 cmd_id
+        if cmd_id is not None:
+            worker._current_cancel_events[cmd_id] = cancel_event
+        config = data.get("config", {})
+        handler = LoginAttemptHandler(config=config, cancel_event=cancel_event)
+        success, message = await handler.attempt_login()
+        return WorkerResponse(id=..., ok=success, data=message)
+
+class CancelCommand(Command):
+    cmd = CMD_CANCEL
+    async def execute(self, worker, data):
+        cmd_id = data.get("cmd_id")
+        event = worker._current_cancel_events.pop(cmd_id, None)
+        if event:
+            event.set()
+        return WorkerResponse(id=..., ok=True)
+
+class PingCommand(Command):
+    cmd = CMD_PING
+    async def execute(self, worker, data):
+        return WorkerResponse(id=..., ok=True)
+
+class ShutdownCommand(Command):
+    cmd = CMD_SHUTDOWN
+    async def execute(self, worker, data):
+        worker._stop_event.set()
+        return WorkerResponse(id=..., ok=True)
 ```
 
-### 3.3 协议模型（Pydantic）
+**注册**：
 
-符合 project_memory 约定「API endpoints 应使用 Pydantic 模型进行请求/响应验证」。定义在 `app/workers/worker_protocol.py`：
+```python
+registry = CommandRegistry()
+registry.register(LoginCommand())
+registry.register(CancelCommand())
+registry.register(PingCommand())
+registry.register(ShutdownCommand())
+registry.register(DebugStartCommand())
+registry.register(DebugStepCommand())
+registry.register(DebugStopCommand())
+# ... 其他命令
+```
 
-- `WorkerRequest`：`id: int`, `cmd: str`, `data: dict`
-- `WorkerResponse`：`id: int`, `ok: bool`, `data: Any | None`, `error: str | None`
-- `WorkerEvent`：`event: str`, `reason: str | None`
-- 命令常量：`CMD_LOGIN`, `CMD_CANCEL`, `CMD_PING`, `CMD_DEBUG_START`, `CMD_DEBUG_STEP`, `CMD_DEBUG_STOP`, `CMD_BROWSER_ACQUIRE`, `CMD_BROWSER_RELEASE`, `CMD_BROWSER_CLOSE`, `CMD_BROWSER_HEALTH_CHECK`, `CMD_SHUTDOWN`
+**优势**：新增命令只需写一个类 + 一行注册，不改 `worker_proc.main()` 的 dispatch 逻辑。未来插件化、命令数增长都能保持结构清晰。
 
 ### 3.4 关键设计决策
 
@@ -198,6 +309,61 @@ Python 解释器基线:          ~18 MB
 14. **协议版本号**：ready 事件含 `"version": 1` 字段。父进程启动时校验版本，不匹配则拒绝启动并报错。未来协议升级可做兼容性判断。
 
 15. **Windows 信号处理**：Windows 无 SIGTERM，`stop()` 用 `proc.terminate()`（等价于 TerminateProcess）+ `proc.wait()`。Unix 用 `os.kill(proc.pid, signal.SIGTERM)` + 等待。SHUTDOWN_GRACE 逻辑跨平台一致：先写 CMD_SHUTDOWN 请求优雅退出，超时后强制 terminate。
+
+16. **Proxy 职责拆分为 WorkerManager 组件群**：原 `PlaywrightWorkerProxy` 承担了进程管理、协议读写、心跳、idle 判定、keepalive 锁、重启、submit、cancel、日志全部职责——这是 Manager 而非 Proxy。拆分为职责单一的组件，避免单文件膨胀到 1000+ 行：
+
+    ```
+    app/workers/manager/
+    ├── worker_manager.py      # WorkerManager：协调各组件，对外暴露 get_facade()
+    ├── process_controller.py  # ProcessController：asyncio.create_subprocess_exec + stop/is_alive
+    ├── rpc_client.py          # RpcClient：长度前缀帧读写 + id→Future 派发 + stderr 转发
+    ├── lifecycle_manager.py   # LifecycleManager：idle 判定 + keepalive 锁 + 心跳 + 重启 + on_restart 回调
+    ├── lifecycle_policy.py    # LifecyclePolicy：策略抽象（IdleShutdown / NeverShutdown）
+    └── worker_facade.py       # WorkerFacade：对外接口（submit/cancel/is_alive/keepalive lock）
+    ```
+
+    `get_worker()` 返回 `WorkerFacade` 实例。消费方只看到 `submit()` / `cancel()` / `is_alive()` / `acquire_keepalive_lock()` / `release_keepalive_lock()` 五个方法，内部组件全部隐藏。
+
+    **WorkerManager 职责**：创建并持有 ProcessController / RpcClient / LifecycleManager，协调它们的生命周期。不直接处理协议帧或进程细节。
+
+    **ProcessController 职责**：`async start()` / `async stop(timeout)` / `is_alive()`。只管进程，不管协议。
+
+    **RpcClient 职责**：`async send(request) -> response` / `async send_event(event)`。只管帧编解码和 Future 派发，不管进程或 idle。
+
+    **LifecycleManager 职责**：持有 LifecyclePolicy + keepalive 锁 + 心跳定时器 + 重启逻辑 + on_restart 回调列表。判断「何时该关」和「死了如何重启」。
+
+    **WorkerFacade 职责**：薄封装，委托给内部组件。`submit()` → RpcClient.send()，`is_alive()` → ProcessController.is_alive()，`acquire_keepalive_lock()` → LifecycleManager.acquire()。
+
+17. **Command Registry 模式（子进程侧）**：子进程内不用 `switch(cmd)` 字符串分派，而是用 Command Registry。每个命令是一个继承 `Command` 的类，注册到 `CommandRegistry` 后自动分派。新增命令只需写一个类 + 一行注册，不改 `worker_proc.main()` 的 dispatch 逻辑。详见 §3.3.1。
+
+18. **统一 Message 基类**：Request / Response / Event 均继承 `WorkerMessage`，共享 `version` 字段。便于协议升级时统一处理版本兼容，也简化 RpcClient 的帧解析逻辑（一个 decode_frame 函数处理所有消息类型）。
+
+19. **LifecyclePolicy 策略抽象**：将 idle 判定策略从 LifecycleManager 中抽象为可替换的策略对象。当前只有 `IdleShutdown`（默认 180s 空闲 + engine.can_shutdown_worker 判定），未来可扩展 `NeverShutdown`（调试会话期间动态切换）、`MemoryShutdown`（RSS 阈值触发，子进程侧已有独立实现）、`TimedShutdown`（定时关闭）。
+
+    ```python
+    class LifecyclePolicy(ABC):
+        @abstractmethod
+        def should_shutdown(self, context: ShutdownContext) -> bool:
+            ...
+
+    class IdleShutdown(LifecyclePolicy):
+        """空闲超时 + engine 许可后关闭。"""
+        def __init__(self, idle_timeout: float = 180):
+            self.idle_timeout = idle_timeout
+        def should_shutdown(self, ctx: ShutdownContext) -> bool:
+            if ctx.active_count > 0 or ctx.keepalive_lock_count > 0:
+                return False
+            if time.time() - ctx.last_active_ts < self.idle_timeout:
+                return False
+            return ctx.engine.can_shutdown_worker()
+
+    class NeverShutdown(LifecyclePolicy):
+        """永不关闭（调试会话期间动态切换）。"""
+        def should_shutdown(self, ctx) -> bool:
+            return False
+    ```
+
+    LifecycleManager 持有当前策略，keepalive 锁的 acquire/release 可动态切换策略（acquire 时切到 NeverShutdown，release 时切回 IdleShutdown）。
 
 ## 4. 生命周期与状态机
 
@@ -276,24 +442,48 @@ def can_shutdown_worker(self) -> bool:
     return True
 ```
 
-### 4.5 Keepalive 定时器（主进程代理层）
+### 4.5 Keepalive 定时器（LifecycleManager 内，策略驱动）
+
+LifecycleManager 持有 LifecyclePolicy，每 30s 用策略判定是否关闭：
 
 ```python
 async def _keepalive_loop(self):
     """每 30s 检查一次是否可以关闭 Worker。"""
     while not self._stop_event.is_set():
         await asyncio.sleep(KEEPALIVE_CHECK_INTERVAL)
-        if self._active_count == 0:  # 无活跃命令
-            last_active_age = time.time() - self._last_active_ts
-            if last_active_age >= WORKER_IDLE_TIMEOUT:
-                if self._engine.can_shutdown_worker():
-                    await self._graceful_shutdown()
-                    return
-                # engine 说不能杀，重置 last_active_ts 给下一个周期
-                self._last_active_ts = time.time()
+        ctx = ShutdownContext(
+            active_count=self._rpc_client.active_count,
+            keepalive_lock_count=self._keepalive_lock_count,
+            last_active_ts=self._last_active_ts,
+            engine=self._engine,
+        )
+        if self._policy.should_shutdown(ctx):
+            await self._process_controller.stop(timeout=SHUTDOWN_GRACE)
+            return
+        # 策略拒绝关闭（如 engine 有待执行重试），重置 last_active_ts 给下一个周期
+        if ctx.active_count == 0 and ctx.keepalive_lock_count == 0:
+            self._last_active_ts = time.time()
 ```
 
-**重置 `last_active_ts` 的妙处**：engine 拒绝关闭时，代理层不立即杀，而是再等一个 IDLE_TIMEOUT 周期。这样重试期间（`_next_retry_time > 0`）代理层每 30s 检查一次都被拒绝，直到重试用尽（`_next_retry_time` 归零）才放行。
+**keepalive 锁与策略动态切换**：
+
+```python
+def acquire_keepalive_lock(self):
+    """调试会话 acquire 时，切换到 NeverShutdown 策略。"""
+    with self._lock:
+        self._keepalive_lock_count += 1
+        if self._keepalive_lock_count == 1:
+            self._policy = NeverShutdown()  # 首次 acquire 切策略
+
+def release_keepalive_lock(self):
+    """调试会话 release 后，切回 IdleShutdown 策略。"""
+    with self._lock:
+        self._keepalive_lock_count = max(0, self._keepalive_lock_count - 1)
+        if self._keepalive_lock_count == 0:
+            self._policy = IdleShutdown(idle_timeout=WORKER_IDLE_TIMEOUT)
+```
+
+**重置 `last_active_ts` 的妙处**：策略拒绝关闭时，LifecycleManager 不立即杀，而是再等一个周期。这样重试期间（`_next_retry_time > 0`）每 30s 检查一次都被 IdleShutdown 策略拒绝，直到重试用尽才放行。
 
 ### 4.6 心跳检测（僵死兜底）
 
@@ -542,28 +732,34 @@ for attempt in range(1, max_retries + 1):
 
 ## 7. 改造影响面与文件清单
 
-### 7.1 新增文件（3 个）
+### 7.1 新增文件（9 个）
 
 | 文件 | 职责 |
 |---|---|
-| `app/workers/worker_protocol.py` | Pydantic 协议模型：`WorkerRequest` / `WorkerResponse` / `WorkerEvent`，及命令常量。包含长度前缀编解码函数（`encode_frame` / `decode_frame`） |
-| `app/workers/worker_proxy.py` | `PlaywrightWorkerProxy`：`asyncio.create_subprocess_exec` 管理、长度前缀帧读写、asyncio 读循环（无读线程）、id→Future 派发、keepalive、心跳、`on_restart` 回调注册、`acquire/release_keepalive_lock` 引用计数、`is_alive()` 查询、`submit_login`/`submit_cancel` 登录专用接口 |
-| `app/workers/worker_proc.py` | 子进程入口 `main()`：设置 `CAMPUS_AUTH_ROLE=worker` → import 业务模块 → 调用 `cleanup_orphan_browsers()` → RSS 监控任务启动 → stdin 读循环 → `_dispatch` → stdout 写响应；`python -m app.workers.worker_proc` 可独立运行调试。模块体不 import 业务模块，避免角色判断时机问题 |
+| `app/workers/worker_protocol.py` | 统一 `WorkerMessage` 基类 + `WorkerRequest` / `WorkerResponse` / `WorkerEvent` + 命令常量 + `encode_frame` / `decode_frame` 帧编解码 |
+| `app/workers/worker_commands.py` | `Command` 基类 + `CommandRegistry` + 各命令实现（LoginCommand / CancelCommand / PingCommand / ShutdownCommand / DebugStartCommand / ...） |
+| `app/workers/worker_proc.py` | 子进程入口 `main()`：设置 `CAMPUS_AUTH_ROLE=worker` → import 业务模块 → `cleanup_orphan_browsers()` → RSS Watchdog → stdin 读循环 → CommandRegistry.dispatch → stdout 写响应 |
+| `app/workers/manager/__init__.py` | 包初始化 |
+| `app/workers/manager/worker_manager.py` | `WorkerManager`：协调 ProcessController / RpcClient / LifecycleManager，对外暴露 `get_facade()` |
+| `app/workers/manager/process_controller.py` | `ProcessController`：`async start()` / `async stop(timeout)` / `is_alive()`。只管 `asyncio.create_subprocess_exec` 进程生命周期 |
+| `app/workers/manager/rpc_client.py` | `RpcClient`：长度前缀帧 `async send()` / `async send_event()` / id→Future 派发 / stderr asyncio 逐行读转发 loguru |
+| `app/workers/manager/lifecycle_manager.py` | `LifecycleManager`：keepalive 锁 + 心跳定时器 + 重启逻辑 + `on_restart` 回调 + 持有 LifecyclePolicy |
+| `app/workers/manager/lifecycle_policy.py` | `LifecyclePolicy` 抽象 + `IdleShutdown` / `NeverShutdown` + `ShutdownContext` |
+| `app/workers/manager/worker_facade.py` | `WorkerFacade`：薄封装，对外接口 `async submit()` / `async submit_login()` / `async submit_cancel()` / `is_alive()` / `acquire_keepalive_lock()` / `release_keepalive_lock()` / `on_restart()` |
 
-### 7.2 修改文件（11 个）
+### 7.2 修改文件（10 个）
 
 | 文件 | 改动 |
 |---|---|
-| `app/workers/playwright_worker.py` | 保留 `PlaywrightWorker` 类（子进程内实现）；`get_worker()` 在主进程返回 `PlaywrightWorkerProxy` 实例，在子进程返回真正实现。用 `CAMPUS_AUTH_ROLE` 环境变量区分进程角色。`_handle_login` 改为在子进程内创建本地 `threading.Event` 传给 LoginAttemptHandler（不再从 data 接收 cancel_event）。`get_worker()` 重启逻辑中删除 `cleanup_orphan_browsers()` 调用（移到子进程）。`shutdown_worker` 改 async |
-| `app/services/engine.py` | 新增 `can_shutdown_worker() -> bool`；`_reload_config_internal` 重载时同步更新 retry_policy 参数；`_do_async_login` 中 `handle.result()` 改 `await handle.result()` |
+| `app/workers/playwright_worker.py` | 保留 `PlaywrightWorker` 类（子进程内实现）；`get_worker()` 在主进程返回 `WorkerFacade` 实例（由 WorkerManager 创建），在子进程返回真正实现。用 `CAMPUS_AUTH_ROLE` 环境变量区分进程角色。`_handle_login` 改为在子进程内创建本地 `threading.Event` 传给 LoginAttemptHandler（不再从 data 接收 cancel_event）。`get_worker()` 重启逻辑中删除 `cleanup_orphan_browsers()` 调用（移到子进程）。`shutdown_worker` 改 async（阶段一，container.shutdown 是 async 上下文） |
+| `app/services/engine.py` | 阶段一：新增 `can_shutdown_worker() -> bool`；`_reload_config_internal` 重载时同步更新 retry_policy 参数。阶段二：`_do_async_login` 中 `handle.result()` 改 `await handle.result()` |
 | `app/services/retry_policy.py` | 删除 `_DELAYS` 硬编码表；构造函数接收 `retry_interval`；`delay_before()` 返回 `retry_interval`；`max_retries=0` 直接生效（删除 `max(1, ...)`） |
-| `app/services/login_runner.py` | 删除 `max(1, ...)`，允许 `max_retries=0`（直接 return TEMPORARY_FAILURE）；`login_once` 改 async，`handle.result()` 改 `await handle.result()` |
-| `app/services/debug_service.py` | 启动时注册 `worker.on_restart()` 回调（兜底 release keepalive 锁 + 重置 `_session`）；`start` 时 `acquire_keepalive_lock()`，`stop`/`close`/失败路径时 `release_keepalive_lock()`；`_close_debug_browser` 增加 `is_alive()` 短路判断避免白启动新子进程；所有 `asyncio.to_thread(lambda: submit())` 改为 `await submit()` |
+| `app/services/login_runner.py` | 阶段一：删除 `max(1, ...)`，允许 `max_retries=0`（直接 return TEMPORARY_FAILURE）。阶段二：`login_once` 改 async，`handle.result()` 改 `await handle.result()` |
+| `app/services/debug_service.py` | 阶段一：启动时注册 `worker.on_restart()` 回调（兜底 release keepalive 锁 + 重置 `_session`）；`start` 时 `acquire_keepalive_lock()`，`stop`/`close`/失败路径时 `release_keepalive_lock()`；`_close_debug_browser` 增加 `is_alive()` 短路判断避免白启动新子进程。阶段二：所有 `asyncio.to_thread(lambda: submit())` 改为 `await submit()` |
 | `app/tasks/step_handlers.py` | `OcrHandler`：删除 `schedule_cleanup` / `_cancel_cleanup` / `_do_cleanup` / `_cleanup_timers` / `_IDLE_TIMEOUT`（~40 行） |
-| `app/services/login_orchestrator.py` | **全面 async 化**：`submit()`/`_dispatch()`/`_run()` 改 async；`_slot_lock` 从 `threading.Condition` 改 `asyncio.Lock`+`asyncio.Event`；`LoginHandle.future` 改 `asyncio.Future`；`LoginHandle.result()` 改 `async def`；`LoginHandle.cancel()` 改 `async def cancel(worker_proxy)`（同时 submit_cancel）；删除 `ThreadPoolExecutor`/`BoundedExecutor` 相关代码，改用 `asyncio.Task`+`asyncio.Semaphore`；`_dispatch()` 取消机制：`cancel_event` 不再通过 `data` 传递，改为 submit LOGIN 后拿 cmd_id，再 submit CMD_CANCEL(cmd_id) |
-| `app/services/task_executor.py` | `_execute_browser` 中 `handle.result()` 改 `await handle.result()`（若该方法是同步则改 async） |
-| `app/container.py` | `_get_worker()` 仍返回 `get_worker()`；新增将 `engine` 引用注入 worker proxy（用于 `can_shutdown_worker`）；`startup()` 中删除 `cleanup_orphan_browsers()` 调用（移到子进程）；`startup()` 末尾新增 `await worker.start()` 预热；`shutdown()` 中 `shutdown_worker` 改 `await` |
-| `app/utils/cancel_token.py` | `CompositeCancelEvent` 保留（主进程侧取消联动仍需要），但 `LoginHandle.cancel()` 现在是 async，调用方需 await |
+| `app/services/login_orchestrator.py` | 阶段一：`_dispatch()` 取消机制改为 submit LOGIN 后拿 cmd_id，再 submit CMD_CANCEL(cmd_id)；`cancel_event` 不再通过 `data` 传递。阶段二：**全面 async 化**——`submit()`/`_dispatch()`/`_run()` 改 async；`_slot_lock` 从 `threading.Condition` 改 `asyncio.Lock`+`asyncio.Event`；`LoginHandle.future` 改 `asyncio.Future`；`LoginHandle.result()` 改 `async def`；`LoginHandle.cancel()` 改 `async def cancel(worker_proxy)`；删除 `ThreadPoolExecutor`/`BoundedExecutor`，改用 `asyncio.Task`+`asyncio.Semaphore` |
+| `app/services/task_executor.py` | 阶段二：`_execute_browser` 中 `handle.result()` 改 `await handle.result()`（若该方法是同步则改 async） |
+| `app/container.py` | `_get_worker()` 仍返回 `get_worker()`（即 WorkerFacade）；新增将 `engine` 引用注入 WorkerManager（用于 `can_shutdown_worker`）；`startup()` 中删除 `cleanup_orphan_browsers()` 调用（移到子进程）；`startup()` 末尾新增 `await worker.start()` 预热；`shutdown()` 中 `shutdown_worker` 改 `await` |
 | `frontend/partials/pages/settings/settings-monitor.html` | `max_retries`：`min="1" max="5"` → `min="0" max="10"`；重试间隔提示文案更新为「固定间隔」 |
 
 ### 7.3 不动的文件（关键）
@@ -639,8 +835,9 @@ for attempt in range(1, max_retries + 1):
 | cancel_event 跨进程序列化失败 | 子进程内 `_handle_login` 创建本地 `threading.Event`，LoginAttemptHandler / BrowserContextManager / BrowserRunner 零改动仍接收 threading.Event；父进程发 CMD_CANCEL 时 set 对应 cmd_id 的本地 Event |
 | 主进程 import psutil 破坏内存优化 | `cleanup_orphan_browsers()` 移到子进程 `worker_proc.main()` 执行；主进程 `container.startup()` 和 `get_worker()` 删除该调用 |
 | `worker_proc.py` 模块体 import 业务模块导致角色判断时机错误 | `main()` 第一行设置 `CAMPUS_AUTH_ROLE=worker`，所有业务 import 放到 main() 函数体内；模块体只 import 标准库 |
-| Proxy 接口不完整导致 `shutdown_worker` / `get_worker` 异常 | Proxy 完整实现 `start()` / `stop()` / `is_alive()` / `submit()` 四个方法，签名与 PlaywrightWorker 一致 |
+| Proxy 接口不完整导致 `shutdown_worker` / `get_worker` 异常 | WorkerFacade 完整实现 `start()` / `stop()` / `is_alive()` / `submit()` / `submit_login()` / `submit_cancel()` / `acquire_keepalive_lock()` / `release_keepalive_lock()` / `on_restart()`，签名与 PlaywrightWorker 公共接口一致；职责拆分到 ProcessController / RpcClient / LifecycleManager，单文件不超过 ~200 行 |
 | BrowserContextManager 读取 worker 属性跨进程失败 | `get_worker()` 进程角色判断正确时，BrowserContextManager 在子进程内拿到真正的 PlaywrightWorker 单例，属性访问同进程；实现时必须验证角色判断时机 |
+| async 化与进程隔离同时改导致回归难定位 | 拆分两阶段实施（§11）：阶段一仅进程隔离 + 同步 submit 接口，阶段二才 async 化；每阶段独立验证后再进入下一阶段 |
 
 ## 10. 预期效果
 
@@ -676,3 +873,56 @@ OCR 用户额外收益:
 - OcrHandler 代码简化：删除 ~40 行定时清理逻辑
 - 调试会话失效有准确提示（keepalive 锁 + on_restart 回调）
 - 重试策略三个 bug 修复（间隔生效、max_retries=0 可达、前后端范围一致）
+
+## 11. 实施阶段划分
+
+Worker 进程隔离与 LoginOrchestrator 全链路 async 化是两个独立的改造目标，风险来源不同。拆分为两个阶段实施，每个阶段独立提交、独立验证，出问题时能精确定位。
+
+### 11.1 阶段一：Worker 进程隔离（核心目标）
+
+**目标**：主进程不 import playwright/ddddocr，Worker 子进程化，内存地板降低。
+
+**范围**：
+- 新增全部 9 个文件（worker_protocol / worker_commands / worker_proc / manager/ 下 6 个）
+- 修改 `playwright_worker.py`（`get_worker()` 返回 WorkerFacade）
+- 修改 `engine.py`（`can_shutdown_worker()`）
+- 修改 `debug_service.py`（keepalive 锁 + on_restart + is_alive 短路）
+- 修改 `step_handlers.py`（OcrHandler 简化）
+- 修改 `container.py`（删除 cleanup 调用 + 预热）
+- 重试策略修复（`retry_policy.py` / `login_runner.py` / 前端）
+
+**不包含**：
+- LoginOrchestrator async 化
+- `LoginHandle.result()` 改 async
+- 调用方 `handle.result()` 改 await
+- `task_executor._execute_browser` async 传播
+
+**阶段一的接口策略**：WorkerFacade 对外提供**同步** `submit()` 接口（内部用 asyncio 事件循环线程桥接 asyncio.subprocess）。消费方零改动，仍用 `worker.submit()` 同步调用。`asyncio.to_thread(lambda: worker.submit())` 包装保持不变。
+
+这样阶段一的 blast radius 最小：只有进程隔离和内存优化，不动并发模型。验证通过后再进入阶段二。
+
+**阶段一验证标准**：
+1. 主进程内存地板降至 ~48MB
+2. OCR 触发后子进程内存尖峰，3 分钟后自杀、主进程内存回落
+3. 登录/调试/取消/重试全部功能正常
+4. 调试会话期间 worker 不被误杀
+5. `python -m app.workers.worker_proc` 可独立运行
+
+### 11.2 阶段二：LoginOrchestrator 全链路 async 化（架构改进）
+
+**目标**：消除线程/协程边界，全链路 async 化。
+
+**范围**：
+- 修改 `login_orchestrator.py`（ThreadPoolExecutor → asyncio.Task + Semaphore）
+- 修改 `LoginHandle`（future 改 asyncio.Future，result/cancel 改 async）
+- 修改 `engine.py`（`_do_async_login` 中 `await handle.result()`）
+- 修改 `task_executor.py`（`_execute_browser` 中 `await handle.result()`）
+- 修改 `login_runner.py`（`login_once` 改 async）
+- WorkerFacade 的 `submit()` 从同步改 async（移除阶段一的桥接层）
+
+**前置条件**：阶段一已验证通过、稳定运行。
+
+**阶段二验证标准**：
+1. 登录/重试/调试/取消全部功能正常
+2. 无线程/协程边界 bug（竞态、死锁、Future 未 resolve）
+3. 性能不退化（asyncio.Task 调度开销可忽略）
