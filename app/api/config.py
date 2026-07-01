@@ -81,6 +81,7 @@ def get_config(
         # 凭据平铺（与 ConfigSaveRequest 对齐）
         "username": cfg.credentials.username,
         "password": "",  # 始终返回空串，前端以空串表示"未修改"
+        "has_password": bool(profile.password),  # 密码是否已设置（前端用于掩码回显）
         "auth_url": cfg.credentials.auth_url,
         "isp": isp,
         "carrier_custom": cfg.credentials.carrier_custom,

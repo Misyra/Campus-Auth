@@ -1,4 +1,4 @@
-﻿<div v-if="currentSettingsTab === 'monitor'" class="settings-panel-grid">
+<div v-if="currentSettingsTab === 'monitor'" class="settings-panel-grid">
   <section class="card settings-panel">
     <div class="card-header">
       <h2>检测设置</h2>
@@ -10,7 +10,7 @@
             <label for="settings-interval">检测间隔（秒）</label>
             <span class="field-help" tabindex="0" role="note" data-tip="每隔多久检测一次网络连通性。检测到断网时自动触发浏览器登录流程。建议 180~600 秒，过短会增加资源占用。">?</span>
           </div>
-          <input id="settings-interval" v-model.number="config.monitor.check_interval_seconds" type="number" min="10" max="86400" @input="onConfigChange()" />
+          <input id="settings-interval" v-model.number="config.monitor.check_interval_seconds" type="number" min="10" max="86400" />
         </div>
         <div class="form-group">
           <div class="field-label-row">
@@ -23,14 +23,13 @@
             type="number"
             min="1"
             max="30"
-            @input="onConfigChange()"
           />
         </div>
       </div>
       <div class="toggle-group">
         <div class="toggle-with-help">
           <label class="toggle toggle-help-inline">
-            <input type="checkbox" v-model="config.app_settings.block_proxy" @change="onConfigChange()" />
+            <input type="checkbox" v-model="config.app_settings.block_proxy" />
             <span class="toggle-slider"></span>
             <span class="toggle-label">屏蔽系统代理</span>
             <span class="field-help" tabindex="0" role="note" data-tip="开启后网络检测时忽略系统代理设置，直接连接检测目标。适用于系统开启代理但校园网认证需要直连检测的场景。关闭后则使用系统代理进行网络检测。">?</span>
@@ -75,7 +74,7 @@
           <input
             id="settings-network-targets"
             :value="config.monitor.ping_targets.join(',')"
-            @input="config.monitor.ping_targets = $event.target.value.split(',').map(s => s.trim()).filter(Boolean); onConfigChange()"
+            @input="config.monitor.ping_targets = $event.target.value.split(',').map(s => s.trim()).filter(Boolean)"
             type="text"
             placeholder="8.8.8.8:53,114.114.114.114:53,www.baidu.com:443"
           />
@@ -105,7 +104,7 @@
           <input
             id="settings-http-targets"
             :value="config.monitor.test_urls.join(',')"
-            @input="config.monitor.test_urls = $event.target.value.split(',').map(s => s.trim()).filter(Boolean); onConfigChange()"
+            @input="config.monitor.test_urls = $event.target.value.split(',').map(s => s.trim()).filter(Boolean)"
             type="text"
             placeholder="https://www.baidu.com,https://www.qq.com"
           />
@@ -130,7 +129,7 @@
           <textarea
             id="settings-url-check-urls"
             :value="config.monitor.url_check_urls.join('\n')"
-            @input="config.monitor.url_check_urls = $event.target.value.split('\n').map(s => s.trim()).filter(Boolean); onConfigChange()"
+            @input="config.monitor.url_check_urls = $event.target.value.split('\n').map(s => s.trim()).filter(Boolean)"
             rows="3"
             placeholder="http://captive.apple.com/hotspot-detect.html|Success"
             class="monospace-textarea"
@@ -146,7 +145,7 @@
         <div class="toggle-group">
           <div class="toggle-with-help">
             <label class="toggle toggle-help-inline">
-              <input type="checkbox" v-model="config.monitor.enable_local_check" @change="onConfigChange()" />
+              <input type="checkbox" v-model="config.monitor.enable_local_check" />
               <span class="toggle-slider"></span>
               <span class="toggle-label">物理网络连接检查</span>
               <span class="field-help" tabindex="0" role="note" data-tip="检测本机是否连接 WiFi 或网线。未连接时跳过后续登录，避免无意义的尝试。如果已连接网络但显示无连接，可能是误判，请关闭此选项。">?</span>
@@ -158,7 +157,7 @@
         <div class="toggle-group" style="margin-top: 12px;">
           <div class="toggle-with-help">
             <label class="toggle toggle-help-inline">
-              <input type="checkbox" v-model="config.monitor.check_auth_url" @change="onConfigChange()" />
+              <input type="checkbox" v-model="config.monitor.check_auth_url" />
               <span class="toggle-slider"></span>
               <span class="toggle-label">登录网址可达性检测</span>
               <span class="field-help" tabindex="0" role="note" data-tip="自动登录前检测登录网址是否可达，不可达则跳过本次登录。手动登录不受此限制。如果校园网通过重定向方式跳转到认证页面（无法直接 ping 通），请关闭此选项。">?</span>
@@ -178,7 +177,7 @@
           <input
             id="settings-auth-url-targets"
             :value="config.monitor.auth_url_targets.join(',')"
-            @input="config.monitor.auth_url_targets = $event.target.value.split(',').map(s => s.trim()).filter(Boolean); onConfigChange()"
+            @input="config.monitor.auth_url_targets = $event.target.value.split(',').map(s => s.trim()).filter(Boolean)"
             type="text"
             :placeholder="config.monitor.auth_url_targets.length ? '' : (config.credentials.auth_url || '留空则检测认证地址')"
           />
@@ -199,14 +198,14 @@
             <label for="settings-login-timeout">登录请求超时（秒）</label>
             <span class="field-help" tabindex="0" role="note" data-tip="点击「手动登录」后，前端等待后端完成登录流程的最长时间。超时后前端会提示失败，但后端可能仍在执行。自动登录不受此限制。">?</span>
           </div>
-          <input id="settings-login-timeout" v-model.number="config.browser.login_timeout" type="number" min="10" max="600" @input="onConfigChange()" />
+          <input id="settings-login-timeout" v-model.number="config.browser.login_timeout" type="number" min="10" max="600" />
         </div>
         <div class="form-group">
           <div class="field-label-row">
             <label for="settings-max-retries">最大登录重试次数</label>
             <span class="field-help" tabindex="0" role="note" data-tip="登录失败后最多重试几次，超出后等待下次网络检测周期再试。监控模式上限 5 次，自动登录成功后退出模式上限 3 次。">?</span>
           </div>
-          <input id="settings-max-retries" v-model.number="config.retry.max_retries" type="number" min="1" max="5" @input="onConfigChange()" />
+          <input id="settings-max-retries" v-model.number="config.retry.max_retries" type="number" min="1" max="5" />
         </div>
       </div>
       <div class="form-group">
@@ -214,7 +213,7 @@
           <label for="settings-retry-interval">重试间隔（秒）</label>
           <span class="field-help" tabindex="0" role="note" data-tip="登录失败后等待的基础秒数。实际等待时间按指数退避计算：首次 0 秒，第二次以此间隔 ×1，第三次 ×2，以此类推。">?</span>
         </div>
-        <input id="settings-retry-interval" v-model.number="config.retry.retry_interval" type="number" min="1" max="300" @input="onConfigChange()" />
+        <input id="settings-retry-interval" v-model.number="config.retry.retry_interval" type="number" min="1" max="300" />
       </div>
     </div>
   </section>
@@ -227,7 +226,7 @@
       <div class="toggle-group">
         <div class="toggle-with-help">
           <label class="toggle toggle-help-inline">
-            <input type="checkbox" v-model="config.pause.enabled" @change="onConfigChange()" />
+            <input type="checkbox" v-model="config.pause.enabled" />
             <span class="toggle-slider"></span>
             <span class="toggle-label">启用暂停时段</span>
             <span
@@ -245,14 +244,14 @@
             <label for="settings-pause-start">暂停开始（小时）</label>
             <span class="field-help" tabindex="0" role="note" data-tip="从该时刻起停止自动登录。例如设为 0 表示从 0:00 开始暂停检测和登录。">?</span>
           </div>
-          <input id="settings-pause-start" v-model.number="config.pause.start_hour" type="number" min="0" max="23" @input="onConfigChange()" />
+          <input id="settings-pause-start" v-model.number="config.pause.start_hour" type="number" min="0" max="23" />
         </div>
         <div class="form-group">
           <div class="field-label-row">
             <label for="settings-pause-end">暂停结束（小时）</label>
             <span class="field-help" tabindex="0" role="note" data-tip="到该时刻恢复自动登录。例如设为 6 表示 6:00 后恢复检测。支持跨越午夜（如暂停 23:00~5:00）。若与开始时间相同，则全天暂停。">?</span>
           </div>
-          <input id="settings-pause-end" v-model.number="config.pause.end_hour" type="number" min="0" max="23" @input="onConfigChange()" />
+          <input id="settings-pause-end" v-model.number="config.pause.end_hour" type="number" min="0" max="23" />
         </div>
       </div>
     </div>
