@@ -1722,11 +1722,13 @@ class LifecycleManager:
         rpc_client: RpcClient,
         engine: ScheduleEngine,
         idle_timeout: float = 180.0,
+        worker_manager: "WorkerManager | None" = None,
     ) -> None:
         self._pc = process_controller
         self._rpc = rpc_client
         self._engine = engine
         self._idle_timeout = idle_timeout
+        self._worker_manager = worker_manager  # 用于崩溃后重启（调 restart + _send_init）
         self._policy: LifecyclePolicy = IdleShutdown(idle_timeout=idle_timeout)
         self._keepalive_lock_count: int = 0
         self._lock = threading.Lock()
@@ -1866,17 +1868,21 @@ class LifecycleManager:
         await self._pc.stop(timeout=5)
 
     async def _handle_crash_and_restart(self) -> None:
-        """崩溃后重启：触发回调 → 停止旧进程 → 重启。"""
+        """崩溃后重启：触发回调 → 委托 WorkerManager.restart（含 _send_init）→ 恢复心跳。"""
         self._trigger_restart_callbacks()
         try:
-            await self._pc.stop(timeout=2)
-        except Exception:
-            pass
-        try:
-            await self._pc.start(timeout=30)
-            self._rpc.start_read_loop()
-            self._rpc.start_stderr_forward()
-            logger.info("Worker 子进程已重启")
+            if self._worker_manager is not None:
+                # 委托给 WorkerManager.restart()：包含 rpc.stop + pc.stop + pc.start + rpc.start + _send_init
+                await self._worker_manager.restart()
+            else:
+                # 兜底（测试环境无 worker_manager 注入）
+                await self._pc.stop(timeout=2)
+                await self._pc.start(timeout=30)
+                self._rpc.start_read_loop()
+                self._rpc.start_stderr_forward()
+            # 恢复心跳监控（重启后新进程需要持续监控）
+            self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
+            logger.info("Worker 子进程已重启，心跳监控已恢复")
         except Exception as exc:
             logger.error("Worker 子进程重启失败: {}", exc)
 ```
@@ -2151,6 +2157,7 @@ class WorkerManager:
             rpc_client=self.rpc,
             engine=engine,
             idle_timeout=WORKER_IDLE_TIMEOUT,
+            worker_manager=self,  # 注入自身引用，供崩溃后 restart + _send_init
         )
         self._facade: WorkerFacade | None = None
         self._started: bool = False
@@ -2186,9 +2193,11 @@ class WorkerManager:
         self.lifecycle.start()
         self._started = True
 
-        # 注入事件循环到 Facade（Python 3.12+ 兼容）
-        if self._facade is not None:
-            self._facade.set_loop(asyncio.get_running_loop())
+        # 无条件创建 Facade 并注入事件循环（Python 3.12+ 兼容）
+        # 确保 start() 后 facade 可用，避免测试中 get_facade() 在 start() 前调用的死锁
+        if self._facade is None:
+            self._facade = WorkerFacade(self)
+        self._facade.set_loop(asyncio.get_running_loop())
 
         # 发送 init 消息（传递 project_root 和 rss_threshold）
         await self._send_init()
@@ -2464,12 +2473,14 @@ async def shutdown(self):
 
 ```python
         # 预热 Worker 子进程（失败不阻塞启动，首次 submit 会兜底启动）
+        # 注意：startup() 是 async，在事件循环线程执行；WorkerFacade.start() 是同步方法，
+        # 内部用 run_coroutine_threadsafe + future.result() 会阻塞事件循环导致死锁。
+        # 因此必须用 asyncio.to_thread 将同步 start 调用移到工作线程。
         try:
             from app.workers.playwright_worker import get_worker
             worker = get_worker()
             if hasattr(worker, 'start'):
-                # WorkerFacade 同步 start 方法
-                worker.start(timeout=30)
+                await asyncio.to_thread(worker.start, timeout=30)
                 container_logger.info("Worker 子进程预热完成")
         except Exception as e:
             container_logger.warning("Worker 预热失败（将在首次使用时启动）: {}", e)
@@ -2477,7 +2488,7 @@ async def shutdown(self):
 
 同时在 `WorkerFacade.submit` 中保留兜底自动启动逻辑（预热失败时首次 submit 触发 start）：
 
-修改 `app/workers/manager/worker_facade.py` 的 `submit` 方法，在发送前确保子进程已启动：
+**以下完整替换 Task 8 中的 `WorkerFacade.submit` 方法**（在原方法基础上新增兜底自动启动逻辑）：
 
 ```python
     def submit(
@@ -3422,6 +3433,15 @@ python -m app.workers.worker_proc
 - P3-15: asyncio 兼容性（set_loop 注入 running loop）
 - P3-17: WorkerManager.start() 幂等
 - C4: RpcClient 新增 on_eof 回调，EOF 触发 LifecycleManager.handle_worker_death
+
+### 7. 第二轮复查修复
+
+经独立复查发现并修复以下问题：
+- HIGH-1: Task 10 container.startup 预热死锁（async startup 内调同步 start）→ 改用 `await asyncio.to_thread(worker.start)`
+- MEDIUM-1: Task 7 崩溃重启不发 init（子进程配置丢失 + 首条命令被吞）→ `_handle_crash_and_restart` 委托 `WorkerManager.restart()`（含 `_send_init`）
+- MEDIUM-2: Task 7 崩溃重启不恢复心跳（僵死检测失效）→ `_handle_crash_and_restart` 末尾重建 `_heartbeat_task`
+- MEDIUM-3: Task 8 测试因 Facade loop 未注入失败 → `WorkerManager.start()` 无条件创建 Facade 并注入 running loop
+- LOW-1: Task 10 与 Task 8 的 submit 方法重复定义 → Task 10 标注"完整替换 Task 8 的 submit"
 
 ---
 
