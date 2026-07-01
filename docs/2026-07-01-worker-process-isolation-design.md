@@ -281,11 +281,111 @@ worker 进程化后：**子进程闲置自杀 = OCR 模型 + native 扩展全部
 
 ### 5.3 优化 2：调试会话跨进程状态一致性
 
-当前 `DebugSessionManager._session` 在主进程持有 `_browser_active` 等状态。worker 子进程被杀时：
-- 子进程内的 debug_page / debug_executor 随进程退出销毁
-- 主进程的 `_session._browser_active` 仍为 True → 用户点「下一步」会得到错误「调试会话未启动」
+**核心挑战**：调试会话是多次 submit 的有状态序列（`CMD_DEBUG_START → CMD_DEBUG_STEP × N → CMD_DEBUG_STOP`），子进程内缓存 `debug_page` + `debug_executor`。worker 自杀会导致状态丢失，破坏调试流程。
 
-**改造**：代理层在检测到子进程死亡/重启时，广播「worker 重启」事件，DebugSessionManager 监听后重置 `_session = DebugSession()`，让用户下次操作得到准确的「会话已失效，请重新启动」提示。新增一个轻量事件订阅机制（`worker.on_restart(callback)`）。
+**三处必须处理的问题**：
+
+1. **调试期间 worker 不能被 keepalive 杀**：调试会话预期持续 30 分钟（`_debug_timeout_watcher` 默认 1800s），远大于 `WORKER_IDLE_TIMEOUT=180s`。step 之间的空闲间隙会被 keepalive 误判。
+2. **worker 自杀后 `_close_debug_browser` 会白启动新子进程**：当前 `submit(CMD_DEBUG_STOP)` 在 worker dead 时自动重启，但新子进程没有 debug_page，CMD_DEBUG_STOP 是无意义操作。
+3. **`run_all` 循环中 worker 自杀的并发 race**：单步执行耗时长时，keepalive 在期间判定活跃=0 触发自杀。
+
+**改造方案**：
+
+#### 5.3.1 代理层新增 keepalive 锁（引用计数）
+
+```python
+class PlaywrightWorkerProxy:
+    def __init__(self):
+        self._keepalive_lock_count = 0
+        self._keepalive_lock = threading.Lock()
+    
+    def acquire_keepalive_lock(self):
+        """调试/长任务期间锁定，keepalive 不再判定可关闭。"""
+        with self._keepalive_lock:
+            self._keepalive_lock_count += 1
+    
+    def release_keepalive_lock(self):
+        with self._keepalive_lock:
+            self._keepalive_lock_count = max(0, self._keepalive_lock_count - 1)
+    
+    def is_alive(self) -> bool:
+        """子进程是否存活（供调用方判断状态是否还有效）。"""
+        return self._proc is not None and self._proc.poll() is None
+```
+
+`_keepalive_loop` 增加判断：
+
+```python
+async def _keepalive_loop(self):
+    while not self._stop_event.is_set():
+        await asyncio.sleep(KEEPALIVE_CHECK_INTERVAL)
+        if self._active_count == 0 and self._keepalive_lock_count == 0:
+            # 仅在无活跃命令且无 keepalive 锁时才判定 idle
+            ...
+```
+
+#### 5.3.2 DebugSessionManager 在 start 时 acquire，stop/close/on_restart 时 release
+
+```python
+async def start(self, ...):
+    ...
+    get_worker().acquire_keepalive_lock()  # 调试期间锁定 worker
+    try:
+        response = await asyncio.to_thread(
+            lambda: get_worker().submit(CMD_DEBUG_START, data=worker_data)
+        )
+    except:
+        get_worker().release_keepalive_lock()
+        raise
+    if not response.success:
+        get_worker().release_keepalive_lock()
+        ...
+    ...
+
+async def stop(self) -> dict:
+    async with self._exec_sem, self._lock:
+        await self._cancel_debug_timer()
+        if self._session._browser_active:
+            await self._close_debug_browser()
+        get_worker().release_keepalive_lock()
+        self._session = DebugSession()
+    ...
+```
+
+#### 5.3.3 `on_restart` 回调兜底 release
+
+```python
+def _on_worker_restart(self):
+    """worker 重启回调（在代理读线程中调用）。"""
+    if self._session._browser_active:
+        get_worker().release_keepalive_lock()
+    self._session = DebugSession()
+```
+
+并发安全：`on_restart` 在代理读线程触发，`acquire/release` 在 asyncio 线程触发。两者都受 `_keepalive_lock` 保护，线程安全。
+
+#### 5.3.4 `_close_debug_browser` 容错（避免白启动）
+
+```python
+async def _close_debug_browser(self) -> None:
+    worker = get_worker()
+    # 仅在 worker 存活时才发送 CMD_DEBUG_STOP，避免白启动新子进程
+    if not worker.is_alive():
+        debug_logger.debug("worker 已不存活，跳过 CMD_DEBUG_STOP")
+        self._session._browser_active = False
+        return
+    try:
+        await asyncio.to_thread(
+            lambda: worker.submit(CMD_DEBUG_STOP, timeout=10)
+        )
+    except Exception:
+        debug_logger.warning("关闭调试会话失败: Worker 提交失败", exc_info=True)
+    self._session._browser_active = False
+```
+
+#### 5.3.5 代理层暴露 `is_alive()` 方法
+
+`PlaywrightWorkerProxy.is_alive()` 返回子进程是否存活。供 `_close_debug_browser` 短路判断，避免在 worker 已死时自动重启并发无意义的 CMD_DEBUG_STOP。
 
 ### 5.4 不做的优化
 
@@ -379,7 +479,7 @@ for attempt in range(1, max_retries + 1):
 | 文件 | 职责 |
 |---|---|
 | `app/workers/worker_protocol.py` | Pydantic 协议模型：`WorkerRequest` / `WorkerResponse` / `WorkerEvent`，及命令常量 |
-| `app/workers/worker_proxy.py` | `PlaywrightWorkerProxy`：Popen 管理、stdin 写、stdout 读线程、id→Future 派发、keepalive、心跳、`on_restart` 回调注册 |
+| `app/workers/worker_proxy.py` | `PlaywrightWorkerProxy`：Popen 管理、stdin 写、stdout 读线程、id→Future 派发、keepalive、心跳、`on_restart` 回调注册、`acquire/release_keepalive_lock` 引用计数、`is_alive()` 查询 |
 | `app/workers/worker_proc.py` | 子进程入口 `main()`：stdin 读循环 → `_dispatch` → stdout 写响应；`python -m app.workers.worker_proc` 可独立运行调试 |
 
 ### 7.2 修改文件（9 个）
@@ -390,7 +490,7 @@ for attempt in range(1, max_retries + 1):
 | `app/services/engine.py` | 新增 `can_shutdown_worker() -> bool`；`_reload_config_internal` 重载时同步更新 retry_policy 参数 |
 | `app/services/retry_policy.py` | 删除 `_DELAYS` 硬编码表；构造函数接收 `retry_interval`；`delay_before()` 返回 `retry_interval`；`max_retries=0` 直接生效（删除 `max(1, ...)`） |
 | `app/services/login_runner.py` | 删除 `max(1, ...)`，允许 `max_retries=0`（直接 return TEMPORARY_FAILURE） |
-| `app/services/debug_service.py` | 启动时注册 `worker.on_restart()` 回调，重置 `_session = DebugSession()` |
+| `app/services/debug_service.py` | 启动时注册 `worker.on_restart()` 回调（兜底 release keepalive 锁 + 重置 `_session`）；`start` 时 `acquire_keepalive_lock()`，`stop`/`close`/失败路径时 `release_keepalive_lock()`；`_close_debug_browser` 增加 `is_alive()` 短路判断避免白启动新子进程 |
 | `app/tasks/step_handlers.py` | `OcrHandler`：删除 `schedule_cleanup` / `_cancel_cleanup` / `_do_cleanup` / `_cleanup_timers` / `_IDLE_TIMEOUT`（~40 行） |
 | `app/services/login_orchestrator.py` | `_dispatch()` 取消机制：`cancel_event` 不再通过 `data` 传递，改为 submit LOGIN 后拿 cmd_id，再 submit CMD_CANCEL(cmd_id) |
 | `app/container.py` | `_get_worker()` 仍返回 `get_worker()`；新增将 `engine` 引用注入 worker proxy（用于 `can_shutdown_worker`） |
@@ -424,7 +524,7 @@ for attempt in range(1, max_retries + 1):
 | 测试文件 | 覆盖点 |
 |---|---|
 | `tests/test_workers/test_worker_protocol.py` | 协议模型序列化/反序列化、id 分配、命令常量 |
-| `tests/test_workers/test_worker_proxy.py` | 代理状态机转换、id→Future 派发、EOF 检测、keepalive 判定、on_restart 回调 |
+| `tests/test_workers/test_worker_proxy.py` | 代理状态机转换、id→Future 派发、EOF 检测、keepalive 判定、keepalive 锁引用计数、`is_alive()`、on_restart 回调 |
 | `tests/test_workers/test_worker_proc.py` | 子进程入口独立运行（`python -m app.workers.worker_proc` 喂 JSON 验证） |
 | `tests/test_services/test_retry_policy.py` | `max_retries=0` 永不重试、`retry_interval` 生效、`retries_exhausted` 边界 |
 
@@ -434,7 +534,7 @@ for attempt in range(1, max_retries + 1):
 |---|---|
 | `tests/test_integration/test_login_flow.py` | 验证登录走子进程、OCR 后子进程自杀、内存回落 |
 | `tests/test_services/test_engine.py` | 新增 `can_shutdown_worker()` 各场景测试（监控中/重试中/定时任务临近） |
-| `tests/test_services/test_debug_session_manager.py` | 新增 worker 重启后会话重置测试 |
+| `tests/test_services/test_debug_session_manager.py` | 新增 worker 重启后会话重置测试、keepalive 锁 acquire/release 配对测试、`_close_debug_browser` 在 worker dead 时短路测试、调试期间 worker 不被 keepalive 杀测试 |
 
 ### 8.3 手动验证清单
 
@@ -445,6 +545,9 @@ for attempt in range(1, max_retries + 1):
 5. max_retries=0 时登录失败立即返回，不重试
 6. 前端设置 max_retries=10 能保存且生效
 7. 调试会话期间 worker 崩溃 → 用户得到「会话已失效」提示
+8. 调试会话持续 30 分钟期间 worker 不被 keepalive 杀（keepalive 锁生效）
+9. 调试会话正常 stop 后，worker 恢复可被 keepalive 杀（锁已 release）
+10. 调试会话中 worker 自杀后，再次点击「停止」不白启动新子进程（`is_alive()` 短路）
 
 ## 9. 风险与缓解
 
@@ -456,6 +559,10 @@ for attempt in range(1, max_retries + 1):
 | `cancel_event` 跨进程 | 重构为 CMD_CANCEL 命令，子进程维护 cmd_id→Event 映射 |
 | 子进程入口 pickle 兼容 | `python -m app.workers.worker_proc` 是独立入口，不依赖 multiprocessing spawn 的父模块重执行 |
 | 配置重载后 retry_policy 不同步 | `_reload_config_internal` 新增 `_sync_retry_policy()` 调用 |
+| 调试期间 worker 被 keepalive 误杀 | keepalive 锁（引用计数）在调试 start 时 acquire、stop/close/on_restart 时 release；keepalive 判定增加 `_keepalive_lock_count == 0` 条件 |
+| 调试期间 worker 崩溃后 `_close_debug_browser` 白启动新子进程 | `_close_debug_browser` 增加 `is_alive()` 短路判断；`on_restart` 回调兜底 release 锁并重置 session |
+| `on_restart` 回调与 asyncio 线程并发 release 锁 | `_keepalive_lock` 是 `threading.Lock`，acquire/release 均在其保护下，线程安全 |
+| keepalive 锁泄漏（acquire 后异常未 release） | `start` 失败路径、`stop`、`close`、`on_restart` 四处均有 release；用 try/finally 保证 |
 
 ## 10. 预期效果
 
