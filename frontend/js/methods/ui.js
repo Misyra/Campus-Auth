@@ -133,19 +133,11 @@ export const uiMethods = {
   selectBrowser(channel) {
     this.selectedBrowser = channel;
     this.config.browser.browser_channel = channel;
-    this.onConfigChange();
   },
   // 浏览器选择共享 partial 辅助：返回当前活跃的浏览器 channel
   getActiveBrowserChannel() {
     // wizard 模式用 selectedBrowser，settings 模式用 config.browser.browser_channel
     return this.selectedBrowser || this.config.browser.browser_channel;
-  },
-  // 浏览器选择共享 partial 辅助：自定义路径输入处理
-  onBrowserCustomPathInput() {
-    // settings 模式下需要触发配置保存
-    if (this.onConfigChange) {
-      this.onConfigChange();
-    }
   },
   // 处理浏览器点击
   handleBrowserClick(browser) {
@@ -216,6 +208,8 @@ export const uiMethods = {
       });
   },
   setSettingsTab(tabId) {
+    if (this.currentSettingsTab === tabId) return;
+    if (this.configDirty && !confirm('当前设置有未保存的修改，确定要离开吗？')) return;
     this.currentSettingsTab = tabId;
   },
   // 编辑器关闭确认
@@ -233,6 +227,9 @@ export const uiMethods = {
   },
   // 导航到指定页面
   navigateTo(page) {
+    if (this.currentPage === 'settings' && page !== 'settings' && this.configDirty) {
+      if (!confirm('当前设置有未保存的修改，确定要离开吗？')) return;
+    }
     this.currentPage = page;
     this.showMoreNav = false;
   },
@@ -249,14 +246,12 @@ export const uiMethods = {
       key = `var_${index}`;
     }
     this.config.app_settings.custom_variables[key] = '';
-    this.onConfigChange();
   },
   removeCustomVar(key) {
     if (this.config.app_settings.custom_variables && key in this.config.app_settings.custom_variables) {
       const newVars = { ...this.config.app_settings.custom_variables };
       delete newVars[key];
       this.config.app_settings.custom_variables = newVars;
-      this.onConfigChange();
     }
   },
   updateCustomVarKey(oldKey, newKey) {
@@ -289,7 +284,6 @@ export const uiMethods = {
       }
     }
     this.config.app_settings.custom_variables = newVars;
-    this.onConfigChange();
   },
   _isViewerAtBottom() {
     const logViewer = this.$refs?.logViewer;

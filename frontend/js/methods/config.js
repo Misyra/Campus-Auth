@@ -6,25 +6,6 @@ import { extractApiError } from './utils.js';
 const CREDENTIAL_FIELDS = ['username', 'password', 'auth_url', 'isp', 'carrier_custom'];
 
 export const configMethods = {
-  // 自动保存相关属性
-  _isConfigLoaded: false,
-  _saveConfigTimer: null,
-  _saveAbortController: null,
-
-  // 防抖保存
-  _debounceSave(delay = 500) {
-    if (this._saveConfigTimer) clearTimeout(this._saveConfigTimer);
-    this._saveConfigTimer = setTimeout(() => {
-      this.saveConfig();
-    }, delay);
-  },
-
-  // 配置变更时调用（统一 1 秒防抖）
-  onConfigChange() {
-    if (!this._isConfigLoaded) return;
-    this._debounceSave(1000);
-  },
-
   async fetchConfig(updateSnapshot = false) {
     try {
       const data = await this.$apiService.config.fetch();
@@ -40,23 +21,17 @@ export const configMethods = {
         active_task: data.active_task ?? '',
         app_settings: { ...DEFAULT_CONFIG.app_settings, ...(data.app_settings || {}) },
       };
-      this._passwordChanged = false;
-      this._credentialsChanged = false;
       // 同步浏览器选择状态
       if (data.browser?.browser_channel) {
         this.selectedBrowser = data.browser.browser_channel;
       }
+      // 密码掩码回显：记录后端是否已保存密码
+      this.passwordSaved = !!data.has_password;
+      this.editingPassword = false;
       if (updateSnapshot) {
         this._lastSavedConfig = JSON.stringify(this.config);
       }
       this.frontendLogger.info('config', '配置已加载');
-
-      // 首次加载完成后启用自动保存
-      if (!this._isConfigLoaded) {
-        this.$nextTick(() => {
-          this._isConfigLoaded = true;
-        });
-      }
     } catch (error) {
       this.frontendLogger.error('config', '获取配置失败', error);
       this._recordInitError('加载配置失败');
@@ -102,21 +77,26 @@ export const configMethods = {
       });
       return;
     }
-    this.onConfigChange();
+  },
+
+  // 密码字段聚焦：已保存密码时进入编辑态（清空掩码占位）
+  onPasswordFocus() {
+    if (this.passwordSaved) {
+      this.editingPassword = true;
+    }
+  },
+  // 密码字段失焦：未输入内容则恢复掩码显示
+  onPasswordBlur() {
+    if (!this.config.credentials.password) {
+      this.editingPassword = false;
+    }
   },
 
   async saveConfig() {
     // 脏值检测
-    const current = JSON.stringify(this.config);
-    if (this._lastSavedConfig && current === this._lastSavedConfig) {
+    if (this._lastSavedConfig && JSON.stringify(this.config) === this._lastSavedConfig) {
       return;
     }
-
-    // 捕获保存开始时的标志位状态
-    // 用于区分"本次保存包含的变更"与"保存期间用户的新输入"，
-    // 防止保存完成后无条件重置标志位导致竞态期间用户输入的凭据丢失
-    const credsChangedAtStart = this._credentialsChanged;
-    const pwdChangedAtStart = this._passwordChanged;
 
     // 前端校验（仅警告，不阻塞保存）
     const warnings = this._validateConfig();
@@ -146,6 +126,8 @@ export const configMethods = {
     this.saveFailed = false;
     try {
       const c = this.config;
+      // 记录本次是否提交了明文密码（用于成功后更新 passwordSaved 标记）
+      const submittedPassword = !!c.credentials.password;
       const payload = {
         browser: c.browser,
         monitor: c.monitor,
@@ -155,40 +137,25 @@ export const configMethods = {
         app_settings: c.app_settings,
         active_task: c.active_task || '',
       };
-      // 凭据：仅发送本次保存开始时已标记为变更的项
-      if (pwdChangedAtStart) {
-        payload.password = c.credentials.password || '';
-      }
-      if (credsChangedAtStart) {
-        CREDENTIAL_FIELDS.forEach(f => {
-          if (f === 'password') return;
-          payload[f] = c.credentials[f] || '';
-        });
-      }
+      // 始终发送完整凭据；password 为空串时后端 save_password_field 保留原密码不修改
+      CREDENTIAL_FIELDS.forEach(f => {
+        payload[f] = c.credentials[f] || '';
+      });
 
       const data = await this.$apiService.config.patch(payload, {
         signal: this._saveAbortController.signal,
       });
       if (data.success) {
-        // 仅重置本次保存包含的标志位；
-        // 保存期间用户新输入的变更（标志位从 false→true）不会被重置，避免竞态丢失
-        if (credsChangedAtStart) {
-          this._credentialsChanged = false;
+        // 若本次提交了明文密码，标记密码已保存（驱动掩码回显）
+        if (submittedPassword) {
+          this.passwordSaved = true;
         }
-        if (pwdChangedAtStart) {
-          this._passwordChanged = false;
-          // 密码已加密存储到服务端，前端清空显示
-          // （与服务端 GET /api/config 始终返回空串的行为一致）
-          this.config.credentials.password = '';
-        }
-        // 快照基于保存开始时的状态（与服务端已保存内容一致），
-        // 同步 password 清空以避免 configDirty 误报。
-        // 不调用 fetchConfig(true) —— 那会用服务端旧值覆盖保存期间用户的新输入。
-        const snapshot = JSON.parse(current);
-        if (snapshot.credentials) {
-          snapshot.credentials.password = '';
-        }
-        this._lastSavedConfig = JSON.stringify(snapshot);
+        // 密码已加密存储到服务端，前端清空明文显示并退出编辑态
+        // （与服务端 GET /api/config 始终返回空串的行为一致）
+        this.config.credentials.password = '';
+        this.editingPassword = false;
+        // 重建快照（password 已清空，与当前状态一致）
+        this._lastSavedConfig = JSON.stringify(this.config);
         this.frontendLogger.info('config', '配置保存成功');
       } else {
         this.frontendLogger.warn('config', '保存配置被拒绝: ' + data.message);

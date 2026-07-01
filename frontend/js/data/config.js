@@ -18,6 +18,10 @@ function cloneConfig(src) {
 export function configData() {
   return {
     config: cloneConfig(DEFAULT_CONFIG),
+    // 密码掩码回显：后端 has_password 标记，前端展示 •••••• 占位
+    passwordSaved: false,
+    // inline edit 模式：是否处于密码编辑态
+    editingPassword: false,
     defaultUrlCheckUrls: DEFAULT_CONFIG.monitor.url_check_urls,
     dangerConfirm: null,
     dangerCountdown: 0,
@@ -27,10 +31,6 @@ export function configData() {
     ocrStatus: { installed: false, size_mb: 0 },
     // 并发锁（防止重复请求）
     _autostartInFlight: false,
-    // 密码字段是否被用户修改过
-    _passwordChanged: false,
-    // 凭据字段（username/auth_url/isp/carrier_custom）是否被用户修改过
-    _credentialsChanged: false,
     // 用于 configDirty computed 的快照（响应式，使 dirty 指示器及时更新）
     _lastSavedConfig: null,
   };
