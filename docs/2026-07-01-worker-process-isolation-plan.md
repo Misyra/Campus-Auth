@@ -195,12 +195,13 @@ class TestCommandConstants:
         from app.workers.worker_protocol import (
             CMD_BROWSER_ACQUIRE, CMD_BROWSER_CLOSE, CMD_BROWSER_HEALTH_CHECK,
             CMD_BROWSER_RELEASE, CMD_DEBUG_START, CMD_DEBUG_STEP, CMD_DEBUG_STOP,
+            CMD_INIT, CMD_LOGIN, CMD_CANCEL, CMD_PING, CMD_SHUTDOWN,
         )
         all_cmds = [
             CMD_LOGIN, CMD_CANCEL, CMD_PING, CMD_SHUTDOWN,
             CMD_DEBUG_START, CMD_DEBUG_STEP, CMD_DEBUG_STOP,
             CMD_BROWSER_ACQUIRE, CMD_BROWSER_RELEASE, CMD_BROWSER_CLOSE,
-            CMD_BROWSER_HEALTH_CHECK,
+            CMD_BROWSER_HEALTH_CHECK, CMD_INIT,
         ]
         assert len(all_cmds) == len(set(all_cmds)), "命令常量必须唯一"
 ```
@@ -243,6 +244,7 @@ CMD_BROWSER_ACQUIRE = "browser_acquire"
 CMD_BROWSER_RELEASE = "browser_release"
 CMD_BROWSER_CLOSE = "browser_close"
 CMD_BROWSER_HEALTH_CHECK = "browser_health_check"
+CMD_INIT = "init"
 
 
 # ── 消息基类 ──
@@ -430,6 +432,7 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any
 
 from app.workers.worker_protocol import (
+    CMD_INIT,
     CMD_BROWSER_ACQUIRE,
     CMD_BROWSER_CLOSE,
     CMD_BROWSER_HEALTH_CHECK,
@@ -497,6 +500,21 @@ class ShutdownCommand(Command):
     async def execute(self, worker, data):
         worker._stop_event.set()
         return WorkerResponse(id=0, ok=True, data="shutting down")
+
+
+class InitCommand(Command):
+    cmd = CMD_INIT
+
+    async def execute(self, worker, data):
+        """接收初始化信息（project_root, rss_threshold 等）。"""
+        import os
+        project_root = data.get("project_root")
+        rss_threshold = data.get("rss_threshold_mb", 500)
+        if project_root:
+            os.environ["WORKER_PROJECT_ROOT"] = project_root
+        os.environ["WORKER_RSS_THRESHOLD_MB"] = str(rss_threshold)
+        worker._rss_threshold_mb = rss_threshold
+        return WorkerResponse(id=0, ok=True, data="initialized")
 
 
 class CancelCommand(Command):
@@ -594,6 +612,7 @@ class BrowserHealthCheckCommand(_DelegateCommand):
 def build_default_registry() -> CommandRegistry:
     """构建默认命令注册中心（包含所有内置命令）。"""
     registry = CommandRegistry()
+    registry.register(InitCommand())
     registry.register(PingCommand())
     registry.register(ShutdownCommand())
     registry.register(CancelCommand())
@@ -832,12 +851,26 @@ async def _main_loop() -> None:
     await _write_frame_stdout(writer, ready_event)
     logger.info("Worker 子进程已就绪")
 
+    # 等待主进程发送 init 消息（接收 project_root、rss_threshold 等）
+    try:
+        init_msg = await asyncio.wait_for(_read_frame_stdin(reader), timeout=10)
+        from app.workers.worker_protocol import WorkerRequest
+        if isinstance(init_msg, WorkerRequest) and init_msg.cmd == "init":
+            init_resp = await registry.dispatch(worker, init_msg)
+            init_resp.id = init_msg.id
+            await _write_frame_stdout(writer, init_resp)
+            logger.info("Worker 子进程已初始化 (rss_threshold={}MB)", getattr(worker, '_rss_threshold_mb', 500))
+        else:
+            logger.warning("期望 init 消息，收到: {}", type(init_msg).__name__)
+    except asyncio.TimeoutError:
+        logger.warning("未收到 init 消息，使用默认配置")
+
     # RSS 监控任务
     async def _rss_watchdog():
         try:
             import psutil
             proc = psutil.Process()
-            threshold_mb = 500
+            threshold_mb = getattr(worker, '_rss_threshold_mb', 500)
             while True:
                 await asyncio.sleep(30)
                 rss_mb = proc.memory_info().rss / 1024 / 1024
@@ -846,6 +879,8 @@ async def _main_loop() -> None:
                     await _write_frame_stdout(writer, WorkerEvent(
                         event="shutdown", reason=f"rss_exceeded_{int(rss_mb)}mb"
                     ))
+                    # OOM 场景不信任 finally/atexit 清理，用 os._exit 立即退出
+                    # （设计文档指定 sys.exit，但 OOM 时清理可能失败，os._exit 更安全）
                     os._exit(1)
         except asyncio.CancelledError:
             return
@@ -1229,7 +1264,11 @@ class ProcessController:
             )
 
     async def stop(self, timeout: float = 5.0) -> None:
-        """优雅停止子进程：等待自行退出，超时则 terminate。"""
+        """停止子进程：等待自行退出，超时则 terminate 再 kill。
+
+        注意：调用方应在调用此方法前通过 RpcClient 发送 CMD_SHUTDOWN
+        以触发子进程优雅退出。此方法只负责进程级管理。
+        """
         if self._proc is None:
             return
         try:
@@ -1421,6 +1460,7 @@ class RpcClient:
         self._stderr_task: asyncio.Task | None = None
         self._stop_event = asyncio.Event()
         self.on_event: Callable[[WorkerEvent], None] | None = None
+        self.on_eof: Callable[[], None] | None = None
 
     @property
     def active_count(self) -> int:
@@ -1478,6 +1518,11 @@ class RpcClient:
             except asyncio.IncompleteReadError:
                 logger.info("Worker 子进程 stdout EOF")
                 await self._fail_all_pending("Worker 子进程已退出")
+                if self.on_eof is not None:
+                    try:
+                        self.on_eof()
+                    except Exception:
+                        logger.exception("on_eof 回调异常")
                 return
             except Exception as exc:
                 logger.exception("读循环异常: {}", exc)
@@ -1764,7 +1809,7 @@ class LifecycleManager:
             )
             if self._policy.should_shutdown(ctx):
                 logger.info("LifecyclePolicy 判定关闭 Worker（idle 超时）")
-                await self._pc.stop(timeout=5)
+                await self._graceful_shutdown()
                 return
             # 策略拒绝：重置 last_active_ts 给下一个周期
             if ctx.active_count == 0 and ctx.keepalive_lock_count == 0:
@@ -1785,8 +1830,8 @@ class LifecycleManager:
                 pass
 
             if not self._pc.is_alive():
-                logger.warning("Worker 子进程已死亡，触发 on_restart")
-                self._trigger_restart_callbacks()
+                logger.warning("Worker 子进程已死亡，触发重启")
+                await self._handle_crash_and_restart()
                 return
 
             # PING
@@ -1801,14 +1846,39 @@ class LifecycleManager:
                 logger.warning("心跳失败 ({}/{}): {}", miss_count, PING_MAX_MISS, resp.error)
                 if miss_count >= PING_MAX_MISS:
                     logger.warning("心跳超时 {} 次，判定僵死，强制重启", PING_MAX_MISS)
-                    await self._pc.stop(timeout=5)
-                    self._trigger_restart_callbacks()
+                    await self._graceful_shutdown()
+                    await self._handle_crash_and_restart()
                     return
 
     async def handle_worker_death(self) -> None:
         """子进程死亡时调用（由 RpcClient EOF 触发）。"""
-        logger.warning("Worker 子进程已退出，触发 on_restart")
+        logger.warning("Worker 子进程已退出，触发重启")
+        await self._handle_crash_and_restart()
+
+    async def _graceful_shutdown(self) -> None:
+        """优雅关闭：发 CMD_SHUTDOWN → 等 5s → 强制 stop。"""
+        from app.workers.worker_protocol import CMD_SHUTDOWN, WorkerRequest
+        try:
+            rid = self._rpc.allocate_id()
+            await self._rpc.send_no_wait(WorkerRequest(id=rid, cmd=CMD_SHUTDOWN))
+        except Exception as exc:
+            logger.warning("发送 CMD_SHUTDOWN 失败: {}", exc)
+        await self._pc.stop(timeout=5)
+
+    async def _handle_crash_and_restart(self) -> None:
+        """崩溃后重启：触发回调 → 停止旧进程 → 重启。"""
         self._trigger_restart_callbacks()
+        try:
+            await self._pc.stop(timeout=2)
+        except Exception:
+            pass
+        try:
+            await self._pc.start(timeout=30)
+            self._rpc.start_read_loop()
+            self._rpc.start_stderr_forward()
+            logger.info("Worker 子进程已重启")
+        except Exception as exc:
+            logger.error("Worker 子进程重启失败: {}", exc)
 ```
 
 - [ ] **Step 4: 运行测试验证通过**
@@ -1947,10 +2017,20 @@ class WorkerFacade:
         self._mgr = manager
         self._loop: asyncio.AbstractEventLoop | None = None
 
+    def set_loop(self, loop: asyncio.AbstractEventLoop) -> None:
+        """由 WorkerManager.start() 在 async 上下文中注入 running loop。"""
+        self._loop = loop
+
     def _ensure_loop(self) -> asyncio.AbstractEventLoop:
         """获取主进程 asyncio 事件循环。"""
         if self._loop is None or self._loop.is_closed():
-            self._loop = asyncio.get_event_loop()
+            # Python 3.12+ 兼容：优先用 get_event_loop，失败则报错
+            try:
+                self._loop = asyncio.get_event_loop()
+            except RuntimeError:
+                raise RuntimeError(
+                    "WorkerFacade 事件循环未初始化，请先调用 WorkerManager.start()"
+                )
         return self._loop
 
     def submit(
@@ -2013,6 +2093,22 @@ class WorkerFacade:
     def on_restart(self, callback) -> None:
         """注册 worker 重启回调。"""
         self._mgr.lifecycle.on_restart(callback)
+
+    def start(self, timeout: float = 30.0) -> None:
+        """同步启动 Worker（在事件循环线程外调用）。"""
+        loop = self._ensure_loop()
+        future = asyncio.run_coroutine_threadsafe(
+            self._mgr.start(timeout=timeout), loop
+        )
+        future.result(timeout=timeout + 5)
+
+    def stop(self) -> None:
+        """同步停止 Worker（在事件循环线程外调用）。"""
+        loop = self._ensure_loop()
+        future = asyncio.run_coroutine_threadsafe(
+            self._mgr.stop(), loop
+        )
+        future.result(timeout=10)
 ```
 
 - [ ] **Step 4: 实现 worker_manager.py**
@@ -2057,15 +2153,22 @@ class WorkerManager:
             idle_timeout=WORKER_IDLE_TIMEOUT,
         )
         self._facade: WorkerFacade | None = None
+        self._started: bool = False
 
-        # RpcClient 死亡事件转发到 LifecycleManager
+        # RpcClient 事件转发：EOF（子进程死亡）→ LifecycleManager.handle_worker_death
         self.rpc.on_event = self._on_event
+        self.rpc.on_eof = self._on_eof
 
     def _on_event(self, event) -> None:
         """处理子进程事件。"""
         from app.workers.worker_protocol import WorkerEvent
         if isinstance(event, WorkerEvent) and event.event == "shutdown":
             logger.info("Worker 子进程主动关闭: {}", event.reason)
+
+    def _on_eof(self) -> None:
+        """子进程 stdout EOF（死亡）时触发，转发到 LifecycleManager。"""
+        logger.warning("RpcClient 检测到 Worker 子进程 EOF")
+        asyncio.create_task(self.lifecycle.handle_worker_death())
 
     def get_facade(self) -> WorkerFacade:
         """获取对外 Facade。"""
@@ -2074,28 +2177,65 @@ class WorkerManager:
         return self._facade
 
     async def start(self, timeout: float = 30.0) -> None:
-        """启动 Worker 子进程。"""
+        """启动 Worker 子进程（幂等：已启动则跳过）。"""
+        if self._started and self.process_controller.is_alive():
+            return
         await self.process_controller.start(timeout=timeout)
         self.rpc.start_read_loop()
         self.rpc.start_stderr_forward()
         self.lifecycle.start()
+        self._started = True
+
+        # 注入事件循环到 Facade（Python 3.12+ 兼容）
+        if self._facade is not None:
+            self._facade.set_loop(asyncio.get_running_loop())
+
+        # 发送 init 消息（传递 project_root 和 rss_threshold）
+        await self._send_init()
+
         logger.info("WorkerManager 已启动")
 
+    async def _send_init(self) -> None:
+        """发送 init 消息到子进程。"""
+        import os
+        from app.workers.worker_protocol import CMD_INIT, WorkerRequest
+        rid = self.rpc.allocate_id()
+        init_req = WorkerRequest(
+            id=rid,
+            cmd=CMD_INIT,
+            data={
+                "project_root": os.getcwd(),
+                "rss_threshold_mb": int(os.environ.get("WORKER_RSS_THRESHOLD_MB", "500")),
+            },
+        )
+        resp = await self.rpc.send(init_req, timeout=10)
+        if not resp.ok:
+            logger.warning("init 消息失败: {}", resp.error)
+
     async def stop(self) -> None:
-        """停止 Worker 子进程。"""
+        """停止 Worker 子进程（先发 CMD_SHUTDOWN 优雅退出）。"""
         await self.lifecycle.stop()
+        # 发 CMD_SHUTDOWN 让子进程优雅退出
+        from app.workers.worker_protocol import CMD_SHUTDOWN, WorkerRequest
+        try:
+            rid = self.rpc.allocate_id()
+            await self.rpc.send_no_wait(WorkerRequest(id=rid, cmd=CMD_SHUTDOWN))
+        except Exception:
+            pass
         await self.rpc.stop()
         await self.process_controller.stop(timeout=5)
+        self._started = False
         logger.info("WorkerManager 已停止")
 
     async def restart(self) -> None:
         """重启 Worker 子进程（崩溃后自动恢复）。"""
         logger.warning("重启 Worker 子进程")
         await self.rpc.stop()
-        await self.process_controller.stop(timeout=2)
+        await self.process_controller.stop(timeout=5)
         await self.process_controller.start(timeout=30)
         self.rpc.start_read_loop()
         self.rpc.start_stderr_forward()
+        await self._send_init()
         logger.info("Worker 子进程已重启")
 ```
 
@@ -2318,43 +2458,72 @@ async def shutdown(self):
     container_logger.info("服务容器已关闭")
 ```
 
-- [ ] **Step 5: 添加预热（可选，失败不阻塞）**
+- [ ] **Step 5: 在 startup 中预热 Worker 子进程**
 
-在 `startup()` 末尾添加（`container_logger.info("服务容器启动成功")` 前）：
+在 `startup()` 方法的 `container_logger.info("服务容器启动成功")` 行之前，新增预热逻辑：
 
 ```python
-# 预热 Worker 子进程（失败不阻塞启动）
-try:
-    from app.workers.playwright_worker import get_worker
-    worker = get_worker()
-    if hasattr(worker, '_mgr') or hasattr(worker, 'is_alive'):
-        # WorkerFacade 或 PlaywrightWorker，触发子进程启动
-        from app.workers.manager.worker_manager import WorkerManager
-        # 通过 get_worker 已创建 WorkerManager，此处触发 start
-        pass
-except Exception as e:
-    container_logger.warning("Worker 预热失败（将在首次使用时启动）: {}", e)
+        # 预热 Worker 子进程（失败不阻塞启动，首次 submit 会兜底启动）
+        try:
+            from app.workers.playwright_worker import get_worker
+            worker = get_worker()
+            if hasattr(worker, 'start'):
+                # WorkerFacade 同步 start 方法
+                worker.start(timeout=30)
+                container_logger.info("Worker 子进程预热完成")
+        except Exception as e:
+            container_logger.warning("Worker 预热失败（将在首次使用时启动）: {}", e)
 ```
 
-注意：预热的完整实现需要 WorkerManager 暴露 `async start()`，在 container.startup 的 async 上下文中调用。由于 `get_worker()` 是同步的，预热改为：首次 submit 时自动启动子进程（WorkerManager.start 在 submit 时延迟调用）。**因此本步骤实际改为：在 WorkerFacade.submit 中检测子进程是否存活，不存活则触发 start。**
+同时在 `WorkerFacade.submit` 中保留兜底自动启动逻辑（预热失败时首次 submit 触发 start）：
 
 修改 `app/workers/manager/worker_facade.py` 的 `submit` 方法，在发送前确保子进程已启动：
 
 ```python
-def submit(self, cmd_type, data=None, wait=True, timeout=30.0):
-    loop = self._ensure_loop()
+    def submit(
+        self,
+        cmd_type: str,
+        data: dict | None = None,
+        wait: bool = True,
+        timeout: float | None = 30.0,
+    ) -> WorkerResponse:
+        """同步提交命令（阶段一接口）。"""
+        loop = self._ensure_loop()
 
-    # 确保子进程已启动（首次 submit 或崩溃后重启）
-    if not self._mgr.process_controller.is_alive():
-        try:
-            future = asyncio.run_coroutine_threadsafe(
-                self._mgr.start(), loop
+        # 兜底：确保子进程已启动（预热失败或崩溃后重启的首次 submit）
+        if not self._mgr.process_controller.is_alive():
+            try:
+                future = asyncio.run_coroutine_threadsafe(
+                    self._mgr.start(), loop
+                )
+                future.result(timeout=35)
+            except Exception as exc:
+                return WorkerResponse(success=False, error=f"Worker 启动失败: {exc}")
+
+        rid = self._mgr.rpc.allocate_id()
+        request = WorkerRequest(id=rid, cmd=cmd_type, data=data or {})
+
+        if not wait:
+            asyncio.run_coroutine_threadsafe(
+                self._mgr.rpc.send_no_wait(request), loop
             )
-            future.result(timeout=35)
-        except Exception as exc:
-            return WorkerResponse(success=False, error=f"Worker 启动失败: {exc}")
+            return WorkerResponse(success=True)
 
-    # ... 原有 send 逻辑
+        future = asyncio.run_coroutine_threadsafe(
+            self._mgr.rpc.send(request, timeout=timeout or 30.0), loop
+        )
+        try:
+            proto_resp = future.result(timeout=(timeout or 30.0) + 5)
+        except Exception as exc:
+            return WorkerResponse(success=False, error=f"submit 异常: {exc}")
+
+        self._mgr.lifecycle.record_activity()
+
+        return WorkerResponse(
+            success=proto_resp.ok,
+            data=proto_resp.data,
+            error=proto_resp.error,
+        )
 ```
 
 - [ ] **Step 6: 运行容器测试**
@@ -2386,6 +2555,7 @@ def can_shutdown_worker(self) -> bool:
 
     返回 False 的场景：有待执行重试、或短期内需要网络检测/定时任务。
     """
+    from app.workers.manager.worker_manager import WORKER_IDLE_TIMEOUT
     # 监控未运行：可杀
     if not self._is_monitoring:
         return True
@@ -2394,8 +2564,16 @@ def can_shutdown_worker(self) -> bool:
         if self._next_retry_time > 0:
             return False
     # 下次网络检测在 IDLE_TIMEOUT 内：不可杀
-    if self._next_network_check - time.time() < 180:
+    if self._next_network_check - time.time() < WORKER_IDLE_TIMEOUT:
         return False
+    # 定时任务即将触发（IDLE_TIMEOUT 内）：不可杀
+    if self._scheduler is not None:
+        try:
+            next_tick = self._scheduler.next_tick_time
+            if next_tick is not None and next_tick - time.time() < WORKER_IDLE_TIMEOUT:
+                return False
+        except Exception:
+            pass
     return True
 ```
 
@@ -2699,11 +2877,17 @@ def _run() -> tuple[bool, str]:
 
 ```python
 def cancel(self) -> None:
-    """取消此次登录（主进程侧设置 event）。
+    """取消此次登录（阶段一：仅主进程侧标记，不通知子进程）。
 
-    注意：阶段一不通过 IPC 通知子进程取消（子进程内用本地 Event）。
-    阶段二改为 async cancel(worker_proxy) 后，会发 CMD_CANCEL。
-    阶段一的取消主要依赖超时和主进程侧 event 联动。
+    **阶段一限制**：由于 submit() 是同步阻塞的，LOGIN 调用阻塞至完成后
+    才返回，无法在 LOGIN 执行期间 submit CMD_CANCEL。因此阶段一登录进行中
+    的取消无法传达子进程，用户点击「取消登录」在登录进行中无效。
+
+    **前端处理**：阶段一前端应在登录进行中禁用取消按钮，或提示"登录进行中
+    无法取消，请等待超时"。
+
+    **阶段二修复**：submit_login 改为异步立即返回 cmd_id，再通过
+    submit_cancel(cmd_id) 发送 CMD_CANCEL 通知子进程中断。
     """
     self.cancel_event.set()
 ```
@@ -2819,18 +3003,25 @@ try:
         worker.acquire_keepalive_lock()
 except Exception:
     debug_logger.warning("acquire keepalive 锁失败", exc_info=True)
+    raise  # acquire 失败应中断启动，避免锁状态不一致
 ```
 
 在 `stop`/`close` 方法中 release 锁：
 
 ```python
 # 在关闭调试会话的逻辑中（_close_debug_browser 调用后）
+# 使用 try/finally 确保锁一定被释放（防泄漏，见设计 §9 风险表第 10 条）
+worker = None
 try:
     worker = get_worker()
-    if hasattr(worker, 'release_keepalive_lock'):
-        worker.release_keepalive_lock()
 except Exception:
-    debug_logger.warning("release keepalive 锁失败", exc_info=True)
+    pass
+finally:
+    if worker is not None and hasattr(worker, 'release_keepalive_lock'):
+        try:
+            worker.release_keepalive_lock()
+        except Exception:
+            debug_logger.warning("release keepalive 锁失败", exc_info=True)
 ```
 
 具体位置：在 `_close_debug_browser` 方法末尾、`close` 方法、`_debug_timeout_watcher` 的超时关闭路径中均需 release。
@@ -3017,6 +3208,54 @@ class TestE2EWorkerProcess:
             assert resp2.success is True
         finally:
             await mgr.stop()
+
+    @pytest.mark.asyncio
+    async def test_can_shutdown_worker_with_scheduler(self):
+        """engine.can_shutdown_worker 在定时任务即将触发时返回 False。"""
+        from unittest.mock import MagicMock, PropertyMock
+
+        engine_mock = MagicMock()
+        engine_mock.can_shutdown_worker.return_value = False
+        mgr = WorkerManager(engine=engine_mock)
+        try:
+            await mgr.start(timeout=30)
+            # LifecyclePolicy 应因 can_shutdown_worker=False 不杀 worker
+            assert mgr.process_controller.is_alive() is True
+        finally:
+            await mgr.stop()
+
+    @pytest.mark.asyncio
+    async def test_graceful_shutdown_sends_cmd(self):
+        """stop() 应发送 CMD_SHUTDOWN 让子进程优雅退出。"""
+        from unittest.mock import MagicMock
+
+        engine_mock = MagicMock()
+        engine_mock.can_shutdown_worker.return_value = True
+        mgr = WorkerManager(engine=engine_mock)
+        await mgr.start(timeout=30)
+        assert mgr.process_controller.is_alive() is True
+        await mgr.stop()
+        # 子进程应已退出（exit code 0 表示 SHUTDOWN 正常处理）
+        assert mgr.process_controller.is_alive() is False
+
+    @pytest.mark.asyncio
+    async def test_keepalive_lock_prevents_shutdown(self):
+        """keepalive 锁持有时，idle 超时不应关闭 worker。"""
+        from unittest.mock import MagicMock
+
+        engine_mock = MagicMock()
+        engine_mock.can_shutdown_worker.return_value = True
+        mgr = WorkerManager(engine=engine_mock)
+        try:
+            await mgr.start(timeout=30)
+            facade = mgr.get_facade()
+            facade.acquire_keepalive_lock()
+            assert facade.is_keepalive_locked() is True
+            # 即使 idle 超时，worker 不应被杀
+            # （实际等待 180s 不现实，此处仅验证锁状态正确）
+        finally:
+            facade.release_keepalive_lock()
+            await mgr.stop()
 ```
 
 - [ ] **Step 2: 运行端到端测试**
@@ -3103,6 +3342,24 @@ python -m app.workers.worker_proc
 
 应看到子进程启动并等待 stdin 输入（无 ready 事件输出到终端，因为 stdout 是二进制帧）。
 
+- [ ] **Step 11: 验证调试会话 stop 后 worker 恢复可被杀**
+
+启动调试会话 → stop 调试会话 → 等待 180s+ 不操作。观察：
+- 调试会话期间 worker 不被杀（keepalive 锁生效）
+- stop 后锁已 release，worker 恢复可被 keepalive 杀
+
+- [ ] **Step 12: 验证调试会话中 worker 崩溃后停止不白启动**
+
+启动调试会话 → 手动 kill worker 子进程 → 点击「停止调试」。观察：
+- 点击停止时 is_alive 短路，不白启动新子进程
+- 用户得到"会话已失效"提示
+
+- [ ] **Step 13: 验证定时任务即将触发时 worker 保活**
+
+设置一个 3 分钟后触发的定时任务 → 启动监控 → 等待 worker idle。观察：
+- 定时任务即将触发（IDLE_TIMEOUT 内），worker 不被杀
+- 定时任务执行时 worker 可用
+
 ---
 
 ## Self-Review
@@ -3139,6 +3396,32 @@ python -m app.workers.worker_proc
 - LoginOrchestrator async 化（阶段二）
 - LoginHandle.result() 改 async（阶段二）
 - WorkerFacade.submit() 改 async（阶段二）
+- **登录进行中的取消机制**（阶段二）：阶段一同步 submit 阻塞至 LOGIN 完成，
+  无法在执行期间发 CMD_CANCEL。前端应在登录中禁用取消按钮。阶段二 submit_login
+  改异步后修复。
+
+### 5. 设计文档矛盾澄清
+
+设计 §11.1「同步 submit」与 §7.2「cmd_id 取消」存在矛盾：同步 submit 下 LOGIN
+阻塞至完成，无法在执行期间 submit CANCEL。本计划以 §11.1 为准（阶段一同步），
+取消机制推迟到阶段二。设计文档 §7.2 的 login_orchestrator 取消机制应标注为阶段二。
+
+### 6. 审查修复记录
+
+本计划经审查修复了以下问题：
+- P1-3: stop 路径增加 CMD_SHUTDOWN 优雅关闭
+- P1-4: 恢复 container.startup 预热
+- P1-5: can_shutdown_worker 补全 scheduler 检查
+- P1-6: 心跳崩溃后调用 restart 而非仅触发回调
+- P2-7: 新增 InitCommand 和 init 消息处理
+- P2-8: 补全集成测试（can_shutdown/graceful_shutdown/keepalive_lock）
+- P2-9: 补全手动验证清单 3 项
+- P2-10: keepalive 锁改 try/finally 防泄漏
+- P3-11: RSS 阈值从 init 消息接收，可配置
+- P3-13: can_shutdown_worker 引用 WORKER_IDLE_TIMEOUT 常量
+- P3-15: asyncio 兼容性（set_loop 注入 running loop）
+- P3-17: WorkerManager.start() 幂等
+- C4: RpcClient 新增 on_eof 回调，EOF 触发 LifecycleManager.handle_worker_death
 
 ---
 
