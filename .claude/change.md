@@ -2,6 +2,18 @@
 
 ## 2026-07-03
 
+### fix: 优化容器 shutdown 顺序，避免回调触及已关闭组件
+
+- `app/services/task_executor.py`：新增 `wait_for_callbacks()` 异步方法，等待所有 `_running_tasks` 中的 pending futures 完成
+- `app/container.py`：`shutdown()` 在 `engine.shutdown()` 之后、`task_executor.shutdown()` 之前调用 `wait_for_callbacks()`，超时 10 秒后放弃等待继续关闭
+- `tests/test_config/test_container.py`：新增 `TestWaitForCallbacks`（4 个用例）和 `TestShutdownOrder`（2 个用例）
+- `tests/test_services/test_container_cleanup_fix.py`：同步 mock `wait_for_callbacks` 为 `AsyncMock`
+
+### fix: cancel_login 透传返回值并记录失败
+
+- `app/services/engine.py`：`ScheduleEngine.cancel_login()` 捕获 `_login_bridge.cancel_login()` 返回值，失败时记录 warning 日志
+- `tests/test_services/test_engine.py`：新增 `TestCancelLogin` 测试类（3 个用例：成功时不记录日志、失败时记录警告日志、委托给 bridge）
+
 ### fix: toggle_pure_mode 同步更新运行时配置
 
 - `app/services/engine.py`：`toggle_pure_mode` 方法新增 `_runtime_config` 同步更新，切换纯净模式时同步更新 `_runtime_config.browser.pure_mode`
