@@ -391,42 +391,78 @@
   text-decoration: underline;
 }
 
-/* ---- 悬浮保存按钮 ---- */
-.settings-float-save {
+/* ---- 保存按钮（右下角浮动） ---- */
+.save-bar {
   position: sticky;
   bottom: 20px;
-  z-index: var(--z-sticky);
   display: flex;
   justify-content: flex-end;
-  gap: 12px;
   margin-top: 24px;
+  z-index: var(--z-sticky);
 }
 
-.settings-float-save .btn {
-  min-width: 150px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
-  transition: transform 0.25s ease, box-shadow 0.25s ease;
+.save-btn {
+  min-width: 108px;
+  background: linear-gradient(135deg, var(--accent), var(--accent-hover)) !important;
+  color: var(--bg-primary) !important;
+  border: none !important;
+  font-weight: 600;
+  box-shadow: 0 4px 16px rgba(34, 211, 238, 0.25);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease, border-color 0.2s ease !important;
 }
 
-.settings-float-save .btn:hover {
+.save-btn svg {
+  width: 15px;
+  height: 15px;
+}
+
+.save-btn:hover:not(:disabled) {
   transform: translateY(-1px);
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 6px 20px rgba(34, 211, 238, 0.4);
 }
 
-/* 未保存时按钮变为警告色 */
-.settings-float-save .btn-warning {
-  background: linear-gradient(135deg, #f59e0b, #d97706);
-  color: #0f172a;
-  border-color: transparent;
+/* 未保存：黄色高亮 */
+.save-btn-dirty {
+  background: linear-gradient(135deg, #f59e0b, #d97706) !important;
+  color: #0f172a !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
   animation: save-pulse 2s ease-in-out infinite;
 }
 
-@keyframes save-pulse {
-  0%, 100% { box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25); }
-  50% { box-shadow: 0 4px 28px rgba(245, 158, 11, 0.45); }
+.save-btn-dirty:hover:not(:disabled) {
+  background: linear-gradient(135deg, #fbbf24, #f59e0b) !important;
+  box-shadow: 0 6px 24px rgba(245, 158, 11, 0.45);
 }
 
-/* 底部留白已合并到上方 .settings-form */
+@keyframes save-pulse {
+  0%, 100% { box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25); }
+  50% { box-shadow: 0 4px 24px rgba(245, 158, 11, 0.4); }
+}
+
+/* 保存中 */
+.save-btn-saving {
+  cursor: not-allowed;
+}
+
+/* 保存失败 */
+.save-btn-failed {
+  background: var(--error-bg) !important;
+  color: var(--error) !important;
+  border-color: var(--error-border) !important;
+}
+
+.save-btn-failed:hover:not(:disabled) {
+  box-shadow: 0 6px 20px rgba(239, 68, 68, 0.3);
+}
+
+@media (max-width: 560px) {
+  .save-bar {
+    justify-content: stretch;
+  }
+  .save-btn {
+    width: 100%;
+  }
+}
 
 .settings-panel .card-body p {
   margin: 0;
@@ -945,87 +981,5 @@
   border-radius: var(--radius-md, 6px);
   color: var(--danger, #ef4444);
   font-size: 0.875rem;
-}
-
-/* ---- 保存状态栏 ---- */
-.save-status-bar {
-  position: sticky;
-  bottom: 20px;
-  z-index: var(--z-sticky);
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 12px;
-  margin-top: 24px;
-  font-size: 13px;
-}
-
-.save-status {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.save-status.saving {
-  color: var(--text-secondary);
-}
-
-.save-status.saved {
-  color: var(--success);
-}
-
-.save-status.failed {
-  color: var(--error);
-}
-
-/* 保存按钮状态 */
-.save-btn {
-  min-width: 100px;
-  padding: 8px 20px;
-  border: none;
-  border-radius: var(--radius-md, 8px);
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.save-btn-idle {
-  background: var(--accent);
-  color: #fff;
-  box-shadow: 0 2px 8px rgba(6, 182, 212, 0.3);
-}
-
-.save-btn-idle:hover {
-  background: var(--accent-hover, #06b6d4);
-  box-shadow: 0 4px 12px rgba(6, 182, 212, 0.4);
-  transform: translateY(-1px);
-}
-
-.save-btn-saving {
-  background: var(--bg-secondary);
-  color: var(--text-secondary);
-  cursor: not-allowed;
-}
-
-.save-btn-saved {
-  background: var(--success-bg, rgba(34, 197, 94, 0.15));
-  color: var(--success);
-  border: 1px solid var(--success-border, rgba(34, 197, 94, 0.3));
-}
-
-.save-btn-failed {
-  background: var(--error-bg, rgba(239, 68, 68, 0.15));
-  color: var(--error);
-  border: 1px solid var(--error-border, rgba(239, 68, 68, 0.3));
-}
-
-/* 浅色主题 */
-[data-theme="light"] .save-btn-idle {
-  box-shadow: 0 2px 8px rgba(6, 182, 212, 0.2);
-}
-
-[data-theme="light"] .save-btn-idle:hover {
-  box-shadow: 0 4px 12px rgba(6, 182, 212, 0.3);
 }
 
