@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import ipaddress
+import json
 import locale
 import re
 import subprocess
@@ -345,6 +346,42 @@ def _detect_gateway_darwin() -> str | None:
     return None
 
 
+def _get_ssid_macos_modern() -> str | None:
+    """macOS 14+: 使用 system_profiler SPAirPortDataType 获取当前 WiFi SSID。
+
+    airport 工具在 macOS 14+ 上可能不可用或受限，
+    system_profiler 提供 JSON 格式的结构化输出作为可靠回退。
+    """
+    try:
+        result = subprocess.run(
+            ["system_profiler", "SPAirPortDataType", "-json"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if result.returncode != 0:
+            return None
+        data = json.loads(result.stdout)
+        for info in data.get("SPAirPortDataType", []):
+            for key in (
+                "spairport_current_wireless_information",
+                "current_wireless_information",
+            ):
+                wireless = info.get(key, {})
+                ssid = wireless.get("spairport_current_ssid") or wireless.get(
+                    "current_ssid"
+                )
+                if ssid:
+                    return ssid
+    except (json.JSONDecodeError, KeyError, TypeError) as exc:
+        logger.debug("system_profiler JSON 解析失败: {}", exc)
+    except FileNotFoundError:
+        logger.debug("system_profiler 命令不存在")
+    except Exception as exc:
+        logger.debug("macOS SSID 检测失败 (system_profiler): {}", exc)
+    return None
+
+
 def _detect_ssid_darwin() -> str | None:
     """macOS: 获取当前 WiFi SSID。"""
     # 方式 1：airport 命令（较旧 macOS）
@@ -400,5 +437,10 @@ def _detect_ssid_darwin() -> str | None:
                         return ssid
     except Exception as exc:
         logger.debug("macOS SSID 检测失败 (networksetup): {}", exc)
+
+    # 方式 3：system_profiler（macOS 14+ 回退）
+    ssid = _get_ssid_macos_modern()
+    if ssid:
+        return ssid
 
     return None
