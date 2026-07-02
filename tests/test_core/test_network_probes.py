@@ -274,13 +274,13 @@ class TestIsNetworkAvailableUrl:
 
 
 class TestCheckPause:
-    @patch("app.network.decision.is_in_pause_period", return_value=True)
+    @patch("app.network.decision.is_pause_enabled", return_value=True)
     def test_in_pause_period(self, *mocks):
         is_paused, reason = check_pause(PauseSettings(enabled=True))
         assert is_paused is True
         assert reason == "pause_period"
 
-    @patch("app.network.decision.is_in_pause_period", return_value=False)
+    @patch("app.network.decision.is_pause_enabled", return_value=False)
     def test_not_in_pause_period(self, *mocks):
         is_paused, reason = check_pause(PauseSettings(enabled=False))
         assert is_paused is False

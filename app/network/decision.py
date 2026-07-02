@@ -10,7 +10,7 @@ from urllib.parse import urlparse
 from app.schemas import MonitorSettings, PauseSettings
 from app.utils.concurrent import cancel_pending
 from app.utils.logging import get_logger
-from app.utils.time_utils import is_in_pause_period
+from app.utils.time_utils import is_pause_enabled
 
 from .probes import (
     is_local_network_connected,
@@ -45,7 +45,7 @@ logger = get_logger("network_decision", source="backend")
 
 def check_pause(pause: PauseSettings) -> tuple[bool, str]:
     """暂停时段检查。"""
-    if is_in_pause_period(pause):
+    if is_pause_enabled(pause):
         logger.debug("暂停时段，跳过检测")
         logger.debug(
             "暂停配置: enabled={}, start={}, end={}",
