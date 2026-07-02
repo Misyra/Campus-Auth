@@ -1,5 +1,12 @@
 # 修改日志
 
+## 2026-07-03
+
+### fix: 登录去重命中时回调 on_complete，避免手动登录挂起
+
+- `app/services/engine.py`：LoginBridge.submit_login 去重分支（handle.future in _registered_futures）补调 on_complete(False, msg)
+- `tests/test_services/test_engine.py`：新增 TestLoginBridgeDuplicateCallback 测试类（2 个用例）
+
 ## 2026-07-02
 
 ### docs: 文档目录重构与索引补全
