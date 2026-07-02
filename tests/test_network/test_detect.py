@@ -6,6 +6,7 @@ import json
 from unittest.mock import MagicMock, patch
 
 from app.network.detect import (
+    _detect_ssid_windows,
     _get_ssid_macos_modern,
     _get_windows_gateway_powershell,
     _get_windows_gateway_route_print,
@@ -391,3 +392,200 @@ class TestParseLinuxGateway:
         """/proc/net/route 常见格式：tab 分隔。"""
         line = "wlan0\t00000000\t0201A8C0\t0003\t0\t0\t600\t00000000\t0\t0"
         assert _parse_linux_gateway(line) == "192.168.1.2"
+
+
+class TestDetectSsidWindowsEncodingFallback:
+    """Windows SSID 编码回退链测试。"""
+
+    def _make_netsh_output(self, raw_bytes: bytes) -> bytes:
+        """构造 netsh wlan show interfaces 输出，SSID 为原始字节。"""
+        # netsh 输出格式：每行前面有缩进，SSID 在 "SSID" 标签后
+        header = b"    State                   : connected\r\n"
+        ssid_line = b"    SSID                    : " + raw_bytes + b"\r\n"
+        return header + ssid_line
+
+    @patch("app.network.detect.is_macos", return_value=False)
+    @patch("app.network.detect.is_linux", return_value=False)
+    @patch("app.network.detect.is_windows", return_value=True)
+    @patch("app.network.detect.subprocess.run")
+    def test_utf8_ssid(
+        self,
+        mock_run: MagicMock,
+        mock_is_windows: MagicMock,
+        mock_is_linux: MagicMock,
+        mock_is_macos: MagicMock,
+    ):
+        """UTF-8 编码的 SSID（现代 Windows 常见）。"""
+        ssid_text = "MyWiFi_5G"
+        raw = ssid_text.encode("utf-8")
+        mock_run.return_value = MagicMock(
+            returncode=0, stdout=self._make_netsh_output(raw)
+        )
+        result = _detect_ssid_windows()
+        assert result == ssid_text
+
+    @patch("app.network.detect.is_macos", return_value=False)
+    @patch("app.network.detect.is_linux", return_value=False)
+    @patch("app.network.detect.is_windows", return_value=True)
+    @patch("app.network.detect.subprocess.run")
+    def test_utf16le_ssid(
+        self,
+        mock_run: MagicMock,
+        mock_is_windows: MagicMock,
+        mock_is_linux: MagicMock,
+        mock_is_macos: MagicMock,
+    ):
+        """UTF-16-LE 编码的 SSID（部分 Windows 系统输出）。"""
+        ssid_text = "TestNetwork"
+        raw = ssid_text.encode("utf-16-le")
+        mock_run.return_value = MagicMock(
+            returncode=0, stdout=self._make_netsh_output(raw)
+        )
+        result = _detect_ssid_windows()
+        assert result == ssid_text
+
+    @patch("app.network.detect.is_macos", return_value=False)
+    @patch("app.network.detect.is_linux", return_value=False)
+    @patch("app.network.detect.is_windows", return_value=True)
+    @patch("app.network.detect.subprocess.run")
+    def test_gbk_ssid(
+        self,
+        mock_run: MagicMock,
+        mock_is_windows: MagicMock,
+        mock_is_linux: MagicMock,
+        mock_is_macos: MagicMock,
+    ):
+        """GBK 编码的中文 SSID（旧版中文 Windows）。"""
+        ssid_text = "校园网"
+        raw = ssid_text.encode("gbk")
+        mock_run.return_value = MagicMock(
+            returncode=0, stdout=self._make_netsh_output(raw)
+        )
+        result = _detect_ssid_windows()
+        assert result == ssid_text
+
+    @patch("app.network.detect.is_macos", return_value=False)
+    @patch("app.network.detect.is_linux", return_value=False)
+    @patch("app.network.detect.is_windows", return_value=True)
+    @patch("app.network.detect.subprocess.run")
+    @patch("app.network.detect.locale.getpreferredencoding", return_value="cp936")
+    def test_locale_encoding_fallback(
+        self,
+        mock_locale: MagicMock,
+        mock_run: MagicMock,
+        mock_is_windows: MagicMock,
+        mock_is_linux: MagicMock,
+        mock_is_macos: MagicMock,
+    ):
+        """当 UTF-8 和 UTF-16-LE 都失败时，回退到 locale 编码。"""
+        # cp936 编码的中文 SSID
+        ssid_text = "测试网络"
+        raw = ssid_text.encode("cp936")
+        mock_run.return_value = MagicMock(
+            returncode=0, stdout=self._make_netsh_output(raw)
+        )
+        result = _detect_ssid_windows()
+        assert result == ssid_text
+
+    @patch("app.network.detect.is_macos", return_value=False)
+    @patch("app.network.detect.is_linux", return_value=False)
+    @patch("app.network.detect.is_windows", return_value=True)
+    @patch("app.network.detect.subprocess.run")
+    @patch("app.network.detect.locale.getpreferredencoding", return_value="cp1252")
+    def test_fallback_chain_order(
+        self,
+        mock_locale: MagicMock,
+        mock_run: MagicMock,
+        mock_is_windows: MagicMock,
+        mock_is_linux: MagicMock,
+        mock_is_macos: MagicMock,
+    ):
+        """验证回退链顺序：UTF-8 -> UTF-16-LE -> locale -> GBK。"""
+        # 使用 UTF-8 编码，应该在第一次尝试就成功
+        ssid_text = "FirstTry"
+        raw = ssid_text.encode("utf-8")
+        mock_run.return_value = MagicMock(
+            returncode=0, stdout=self._make_netsh_output(raw)
+        )
+        result = _detect_ssid_windows()
+        assert result == ssid_text
+        # locale 用于构建编码链（函数启动时调用），但 UTF-8 优先成功
+        mock_locale.assert_called_once_with(False)
+
+    @patch("app.network.detect.is_macos", return_value=False)
+    @patch("app.network.detect.is_linux", return_value=False)
+    @patch("app.network.detect.is_windows", return_value=True)
+    @patch("app.network.detect.subprocess.run")
+    def test_ssid_with_null_bytes(
+        self,
+        mock_run: MagicMock,
+        mock_is_windows: MagicMock,
+        mock_is_linux: MagicMock,
+        mock_is_macos: MagicMock,
+    ):
+        """SSID 包含 null 字节时应被清理。"""
+        ssid_text = "MyWiFi"
+        # 添加 null 字节（某些编码可能产生）
+        raw = ssid_text.encode("utf-8") + b"\x00\x00"
+        mock_run.return_value = MagicMock(
+            returncode=0, stdout=self._make_netsh_output(raw)
+        )
+        result = _detect_ssid_windows()
+        assert result == ssid_text
+
+    @patch("app.network.detect.is_macos", return_value=False)
+    @patch("app.network.detect.is_linux", return_value=False)
+    @patch("app.network.detect.is_windows", return_value=True)
+    @patch("app.network.detect.subprocess.run")
+    def test_hex_encoded_ssid(
+        self,
+        mock_run: MagicMock,
+        mock_is_windows: MagicMock,
+        mock_is_linux: MagicMock,
+        mock_is_macos: MagicMock,
+    ):
+        """十六进制编码的 SSID（netsh 输出格式）。"""
+        # "ABC" 的十六进制表示
+        ssid_text = "ABC"
+        raw = ssid_text.encode("ascii").hex().upper().encode("ascii")
+        mock_run.return_value = MagicMock(
+            returncode=0, stdout=self._make_netsh_output(raw)
+        )
+        result = _detect_ssid_windows()
+        assert result == ssid_text
+
+    @patch("app.network.detect.is_macos", return_value=False)
+    @patch("app.network.detect.is_linux", return_value=False)
+    @patch("app.network.detect.is_windows", return_value=True)
+    @patch("app.network.detect.subprocess.run")
+    def test_no_ssid_in_output(
+        self,
+        mock_run: MagicMock,
+        mock_is_windows: MagicMock,
+        mock_is_linux: MagicMock,
+        mock_is_macos: MagicMock,
+    ):
+        """输出中无 SSID 时返回 None。"""
+        mock_run.return_value = MagicMock(
+            returncode=0, stdout=b"    State                   : disconnected\r\n"
+        )
+        result = _detect_ssid_windows()
+        assert result is None
+
+    @patch("app.network.detect.is_macos", return_value=False)
+    @patch("app.network.detect.is_linux", return_value=False)
+    @patch("app.network.detect.is_windows", return_value=True)
+    @patch("app.network.detect.subprocess.run")
+    def test_empty_ssid(
+        self,
+        mock_run: MagicMock,
+        mock_is_windows: MagicMock,
+        mock_is_linux: MagicMock,
+        mock_is_macos: MagicMock,
+    ):
+        """空 SSID 返回 None。"""
+        mock_run.return_value = MagicMock(
+            returncode=0, stdout=b"    SSID                    : \r\n"
+        )
+        result = _detect_ssid_windows()
+        assert result is None

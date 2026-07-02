@@ -231,7 +231,14 @@ def _detect_ssid_windows() -> str | None:
         )
         output = result.stdout
 
-        encoding = locale.getpreferredencoding(False) or "utf-8"
+        # 编码回退链：UTF-8 → UTF-16-LE → locale 编码 → GBK（去重）
+        locale_enc = locale.getpreferredencoding(False) or "utf-8"
+        seen: set[str] = set()
+        encodings: list[str] = []
+        for enc in ("utf-8", "utf-16-le", locale_enc, "gbk"):
+            if enc not in seen:
+                seen.add(enc)
+                encodings.append(enc)
 
         pattern = re.compile(rb"^\s*SSID\s*:\s*(.+)$", re.MULTILINE)
         match = pattern.search(output)
@@ -252,13 +259,17 @@ def _detect_ssid_windows() -> str | None:
             except (ValueError, UnicodeDecodeError):
                 pass
 
-            # 正常解码
-            try:
-                ssid = raw.decode(encoding)
-            except (UnicodeDecodeError, LookupError):
-                ssid = raw.decode("utf-8", errors="replace")
-            if ssid:
-                return ssid
+            # 编码回退链：优先 UTF-8/UTF-16-LE（现代 Windows 常见），
+            # 再尝试 locale 编码和 GBK（兼容旧系统）
+            for enc in encodings:
+                try:
+                    ssid = raw.decode(enc).strip("\x00").strip()
+                    # 基本校验：非空、无可打印性异常字符
+                    # （UTF-16-LE 解码非 UTF-16 数据时会产生不可打印字符如 PUA）
+                    if ssid and all(c.isprintable() for c in ssid):
+                        return ssid
+                except (UnicodeDecodeError, LookupError):
+                    continue
     except Exception as exc:
         logger.debug("Windows SSID 检测失败: {}", exc)
 
