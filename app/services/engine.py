@@ -671,7 +671,10 @@ class ScheduleEngine:
 
     def cancel_login(self) -> tuple[bool, str]:
         """取消当前正在执行的登录。"""
-        return self._login_bridge.cancel_login()
+        ok, msg = self._login_bridge.cancel_login()
+        if not ok:
+            logger.warning("取消登录失败: {}", msg)
+        return ok, msg
 
     def _handle_reload(self, cmd: EngineCommand) -> None:
         """重载配置并重启监控（仅在引擎线程中调用）。"""
