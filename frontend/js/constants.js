@@ -31,7 +31,8 @@ api.interceptors.response.use(
     if (!isRetryable) return Promise.reject(error);
 
     config.__retryCount = (config.__retryCount || 0) + 1;
-    const delay = RETRY_CONFIG.retryDelay * Math.pow(2, config.__retryCount - 1);
+    const jitter = Math.random() * 1000;
+    const delay = RETRY_CONFIG.retryDelay * Math.pow(2, config.__retryCount - 1) + jitter;
     await new Promise(r => setTimeout(r, delay));
     return api(config);
   }
