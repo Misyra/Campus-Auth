@@ -80,13 +80,8 @@ _download_uv() {
         if ! curl -fsSL --connect-timeout 10 --max-time 120 -o "$archive" "$url" 2>&1; then
             continue
         fi
-        if ! tar -tzf "$archive" &>/dev/null; then
-            echo "  [!] 文件无效，尝试下一个源..." >&2
-            rm -f "$archive"
-            continue
-        fi
 
-        # SHA256 校验
+        # SHA256 校验（先验证完整性再检查 tar 格式，避免浪费时间解压损坏的文件）
         echo -n "  校验 SHA256..." >&2
         local actual
         if command -v sha256sum &>/dev/null; then
@@ -100,6 +95,12 @@ _download_uv() {
             continue
         fi
         echo " 通过" >&2
+
+        if ! tar -tzf "$archive" &>/dev/null; then
+            echo "  [!] 文件无效，尝试下一个源..." >&2
+            rm -f "$archive"
+            continue
+        fi
 
         success=1
         break
