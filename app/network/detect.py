@@ -87,15 +87,39 @@ def detect_wifi_ssid() -> str | None:
 # ── Windows 实现 ──
 
 
-def _detect_gateway_windows() -> str | None:
-    """Windows: 检测默认网关 IP。
+def _parse_windows_route_print(output: str) -> str | None:
+    """解析 route print 输出，提取默认网关 IP。"""
+    for line in output.splitlines():
+        parts = line.split()
+        # 路由行格式：Network Destination  Netmask  Gateway  Interface  Metric
+        if len(parts) >= 3 and parts[0] == "0.0.0.0" and parts[1] == "0.0.0.0":
+            gateway = parts[2]
+            if _is_valid_ipv4(gateway) and gateway != "0.0.0.0":
+                return gateway
+    return None
 
-    优先使用 PowerShell Get-NetRoute（结构化输出，不受系统语言影响），
-    失败时回退到 ipconfig + 多语言字节匹配。
-    """
-    creationflags = CREATE_NO_WINDOW_FLAG
 
-    # 优先使用 PowerShell（结构化输出，不受语言影响）
+def _get_windows_gateway_route_print() -> str | None:
+    """使用 route print 0.0.0.0 检测默认网关（快速，无冷启动）。"""
+    try:
+        result = subprocess.run(
+            ["route", "print", "0.0.0.0"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            creationflags=CREATE_NO_WINDOW_FLAG,
+        )
+        if result.returncode == 0:
+            return _parse_windows_route_print(result.stdout)
+    except FileNotFoundError:
+        logger.debug("route 命令不可用")
+    except Exception as exc:
+        logger.debug("route print 检测失败: {}", exc)
+    return None
+
+
+def _get_windows_gateway_powershell() -> str | None:
+    """使用 PowerShell Get-NetRoute 检测默认网关。"""
     try:
         result = subprocess.run(
             [
@@ -108,17 +132,38 @@ def _detect_gateway_windows() -> str | None:
             capture_output=True,
             text=True,
             timeout=5,
-            creationflags=creationflags,
+            creationflags=CREATE_NO_WINDOW_FLAG,
         )
         if result.returncode == 0:
             ip = result.stdout.strip()
             if ip and _is_valid_ipv4(ip) and ip != "0.0.0.0":
-                logger.info("检测网关 IP 成功 (PowerShell): {}", ip)
                 return ip
     except FileNotFoundError:
-        logger.debug("PowerShell 不可用，回退到 ipconfig")
+        logger.debug("PowerShell 不可用")
     except Exception as exc:
         logger.debug("PowerShell 网关检测失败: {}", exc)
+    return None
+
+
+def _detect_gateway_windows() -> str | None:
+    """Windows: 检测默认网关 IP。
+
+    优先使用 route print（快速，无 PowerShell 冷启动），
+    失败时回退 PowerShell，最后回退到 ipconfig + 多语言字节匹配。
+    """
+    creationflags = CREATE_NO_WINDOW_FLAG
+
+    # 方式 1：route print（最快，无冷启动）
+    gw = _get_windows_gateway_route_print()
+    if gw:
+        logger.info("检测网关 IP 成功 (route print): {}", gw)
+        return gw
+
+    # 方式 2：PowerShell Get-NetRoute（结构化输出，不受语言影响）
+    gw = _get_windows_gateway_powershell()
+    if gw:
+        logger.info("检测网关 IP 成功 (PowerShell): {}", gw)
+        return gw
 
     # 回退：ipconfig + 多语言字节匹配
     try:
@@ -154,7 +199,9 @@ def _detect_gateway_windows() -> str | None:
                 return ip
 
         # 回退：查找网关标签后缩进的 IPv4 地址（通常在下一行）
-        gateway_line_pattern = re.compile(combined + rb"[^\n]*\n\s+(\d+\.\d+\.\d+\.\d+)")
+        gateway_line_pattern = re.compile(
+            combined + rb"[^\n]*\n\s+(\d+\.\d+\.\d+\.\d+)"
+        )
         for match in gateway_line_pattern.finditer(output):
             ip = match.group(1).decode("ascii")
             if ip != "0.0.0.0" and _is_valid_ipv4(ip):
