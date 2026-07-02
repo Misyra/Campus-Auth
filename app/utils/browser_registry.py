@@ -26,12 +26,12 @@ def _get_icon_url(filename: str) -> str:
 class BrowserInfo:
     """浏览器信息。"""
 
-    channel: str          # "playwright" | "msedge" | "chrome" | "firefox" | "custom"
-    name: str             # 显示名称
-    icon: str             # SVG 图标内容
-    installed: bool       # 系统是否已安装
+    channel: str  # "playwright" | "msedge" | "chrome" | "firefox" | "custom"
+    name: str  # 显示名称
+    icon: str  # SVG 图标内容
+    installed: bool  # 系统是否已安装
     needs_download: bool  # 是否需要下载驱动
-    description: str      # 状态描述
+    description: str  # 状态描述
 
 
 # detect_browsers TTL 缓存（30 秒）
@@ -73,16 +73,37 @@ def _detect_playwright_chromium() -> BrowserInfo:
         icon=_get_icon_url("chromium.svg"),
         installed=installed,
         needs_download=not installed,
-        description="推荐选项，内置浏览器" if installed else "需下载约 150MB"
+        description="推荐选项，内置浏览器" if installed else "需下载约 150MB",
     )
+
+
+def _edge_path() -> Path | None:
+    """返回 Windows 上 Edge 可执行文件路径，不存在则返回 None。"""
+    candidates = [
+        Path(os.environ.get("PROGRAMFILES(X86)", ""))
+        / "Microsoft"
+        / "Edge"
+        / "Application"
+        / "msedge.exe",
+        Path(os.environ.get("PROGRAMFILES", ""))
+        / "Microsoft"
+        / "Edge"
+        / "Application"
+        / "msedge.exe",
+    ]
+    for c in candidates:
+        if c.exists():
+            return c
+    return None
 
 
 def _detect_edge() -> BrowserInfo:
     """检测系统是否安装 Microsoft Edge。"""
-    installed = _check_command_exists("microsoft-edge") or _check_command_exists("msedge")
+    installed = _check_command_exists("microsoft-edge") or _check_command_exists(
+        "msedge"
+    )
     if PLATFORM == "windows":
-        # Windows 必有 Edge
-        installed = True
+        installed = installed or _edge_path() is not None
     elif PLATFORM == "darwin":
         installed = installed or Path("/Applications/Microsoft Edge.app").exists()
     return BrowserInfo(
@@ -91,7 +112,7 @@ def _detect_edge() -> BrowserInfo:
         icon=_get_icon_url("edge.svg"),
         installed=installed,
         needs_download=False,
-        description="系统浏览器，无需下载" if installed else "未检测到 Edge 浏览器"
+        description="系统浏览器，无需下载" if installed else "未检测到 Edge 浏览器",
     )
 
 
@@ -99,7 +120,13 @@ def _detect_chrome() -> BrowserInfo:
     """检测系统是否安装 Google Chrome。"""
     installed = any(
         _check_command_exists(cmd)
-        for cmd in ("google-chrome", "google-chrome-stable", "chrome", "chromium", "chromium-browser")
+        for cmd in (
+            "google-chrome",
+            "google-chrome-stable",
+            "chrome",
+            "chromium",
+            "chromium-browser",
+        )
     )
     if PLATFORM == "darwin":
         installed = installed or Path("/Applications/Google Chrome.app").exists()
@@ -108,7 +135,7 @@ def _detect_chrome() -> BrowserInfo:
         program_files = [
             Path(os.environ.get("PROGRAMFILES", "C:\\Program Files")),
             Path(os.environ.get("PROGRAMFILES(X86)", "C:\\Program Files (x86)")),
-            *( [Path(p)] if (p := os.environ.get("LOCALAPPDATA")) else [] ),
+            *([Path(p)] if (p := os.environ.get("LOCALAPPDATA")) else []),
         ]
         for base in program_files:
             chrome_path = base / "Google" / "Chrome" / "Application" / "chrome.exe"
@@ -121,7 +148,7 @@ def _detect_chrome() -> BrowserInfo:
         icon=_get_icon_url("google-chrome.svg"),
         installed=installed,
         needs_download=False,
-        description="系统浏览器，无需下载" if installed else "未检测到 Chrome 浏览器"
+        description="系统浏览器，无需下载" if installed else "未检测到 Chrome 浏览器",
     )
 
 
@@ -135,7 +162,7 @@ def _detect_firefox() -> BrowserInfo:
         program_files = [
             Path(os.environ.get("PROGRAMFILES", "C:\\Program Files")),
             Path(os.environ.get("PROGRAMFILES(X86)", "C:\\Program Files (x86)")),
-            *( [Path(p)] if (p := os.environ.get("LOCALAPPDATA")) else [] ),
+            *([Path(p)] if (p := os.environ.get("LOCALAPPDATA")) else []),
         ]
         for base in program_files:
             firefox_path = base / "Mozilla Firefox" / "firefox.exe"
@@ -148,7 +175,7 @@ def _detect_firefox() -> BrowserInfo:
         icon=_get_icon_url("firefox.svg"),
         installed=installed,
         needs_download=not installed,
-        description="系统浏览器，无需下载" if installed else "未安装 Firefox 浏览器"
+        description="系统浏览器，无需下载" if installed else "未安装 Firefox 浏览器",
     )
 
 
@@ -160,7 +187,7 @@ def _detect_custom() -> BrowserInfo:
         icon=_get_icon_url("custom.svg"),
         installed=True,  # 始终可用，由用户自行确保路径有效
         needs_download=False,
-        description="手动指定浏览器可执行文件路径"
+        description="手动指定浏览器可执行文件路径",
     )
 
 
@@ -178,10 +205,14 @@ def has_playwright_chromium() -> bool:
     # 添加包内 .local-browsers 备用路径
     try:
         import importlib.util as _ilu
+
         _spec = _ilu.find_spec("playwright")
         if _spec and _spec.submodule_search_locations:
             search_dirs.append(
-                Path(_spec.submodule_search_locations[0]) / "driver" / "package" / ".local-browsers"
+                Path(_spec.submodule_search_locations[0])
+                / "driver"
+                / "package"
+                / ".local-browsers"
             )
     except Exception:
         pass
