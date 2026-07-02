@@ -164,7 +164,7 @@ class TestStartTemplateVarReplacement:
                 return_value={"domain": "example.com"},
             ),
             patch(
-                "app.services.debug_service._runtime_config_to_worker_dict",
+                "app.services.debug_service.runtime_config_to_worker_dict",
                 return_value={},
             ),
         ):
