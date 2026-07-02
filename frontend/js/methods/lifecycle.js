@@ -45,7 +45,9 @@ export const lifecycleMethods = {
         if (this._statusPolling) return;
         if (this.ws && this.ws.readyState === WebSocket.OPEN) return;
         this._statusPolling = true;
-        this.fetchStatus().finally(() => { this._statusPolling = false; });
+        this.fetchStatus()
+          .catch(err => this.frontendLogger.warn('status_poll', err))
+          .finally(() => { this._statusPolling = false; });
     }, TIMING.STATUS_POLL_INTERVAL));  // 30s fallback, WS 实时推送
     this.timers.push(setInterval(() => this.fetchAutostart(), TIMING.AUTOSTART_POLL_INTERVAL));
     this.frontendLogger.info('app.init', '初始化完成');
