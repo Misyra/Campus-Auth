@@ -1,5 +1,13 @@
 # 修改日志
 
+## 2026-07-02
+
+### refactor: 迁移 background 目录到 resources
+
+- `frontend/background/` → `resources/background/`：移动背景图片存储目录
+- `app/api/tools.py`：更新 `BG_DIR` 路径为 `PROJECT_ROOT / "resources" / "background"`
+- `.gitignore`：更新忽略路径为 `resources/background/`
+
 ## 2026-06-29
 
 ### refactor: 移动 DecryptionError 到 crypto.py 作为 _DecryptionError + 内联 safe_decrypt()

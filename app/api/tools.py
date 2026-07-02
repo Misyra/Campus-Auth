@@ -19,7 +19,7 @@ router = APIRouter()
 api_logger = get_logger("api")
 
 # 背景图片目录
-BG_DIR = PROJECT_ROOT / "frontend" / "background"
+BG_DIR = PROJECT_ROOT / "resources" / "background"
 BG_DIR.mkdir(parents=True, exist_ok=True)
 
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg"}

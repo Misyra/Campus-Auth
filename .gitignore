@@ -66,7 +66,7 @@ Thumbs.db
 temp/
 
 # User background images
-frontend/background/
+resources/background/
 
 # 审计报告和实施计划（本地参考）
 docs/superpowers/
