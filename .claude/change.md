@@ -4214,3 +4214,13 @@
 - `app/services/uninstall.py`：`detect()` 提取 `.size_mb`
 - `tests/test_utils/test_files.py`：新增 `TestDirSizeMb` 测试类（7 个用例：不存在路径、空目录、文件路径、目录含文件、嵌套目录、OSError 标记、字符串路径）
 - `tests/test_services/test_system_services.py`：`TestDirSizeMb` 更新为使用 `DirSizeResult` 断言
+
+## 2026-07-03: debug_service Windows 文件占用重试删除 (Task 7.5)
+
+- `app/services/debug_service.py`：新增 `_rm(path: Path)` 函数，Windows 下文件被占用时自动重试删除（最多 5 次，间隔 0.1s），重试耗尽抛出 OSError；`stop()` 方法中 `item.unlink(missing_ok=True)` 替换为 `_rm(item)`
+- `tests/test_services/test_debug_service.py`：新增 `TestRmRetryDelete` 测试类（4 个用例：首次成功、重试后成功、重试耗尽抛 OSError、FileNotFoundError 不重试）
+
+## 2026-07-03: Windows Edge 安装检测 (Task 7.6)
+
+- pp/utils/browser_registry.py：新增 _edge_path() 函数，检查 PROGRAMFILES(X86) 和 PROGRAMFILES 下 msedge.exe 是否存在；_detect_edge() Windows 分支从盲定 installed = True 改为调用 _edge_path() 进行实际文件存在性校验
+- 	ests/test_utils/test_browser_registry.py：新增 4 个测试（_edge_path 优先返回 x86 路径、路径不存在返回 None、Windows 有 Edge 时 installed=True、Windows 无 Edge 时 installed=False）
