@@ -4142,3 +4142,14 @@
 - app/api/config.py: `set_log_level` 在更新 profile_service 后同步更新 `engine._runtime_config` 的 logging.level，使用 `model_copy(update=...)` 确保 frozen 模型的不可变性
 - tests/test_api/test_api_config_routes.py: 新增 `TestSetLogLevel` 测试类（3 个用例：同步运行时配置、无效级别拒绝、更新 profile_service）
 
+## 2026-07-03: retry_policy delay_before 处理 attempt <= 0 越界 (Task 4.14)
+
+- app/services/retry_policy.py: delay_before 增加 attempt <= 0 前置检查，返回 _delays[0] 防止负索引越界
+- tests/test_services/test_retry_policy.py: 新增 test_delay_before_zero（attempt=0）和 test_delay_before_negative（attempt=-1, -100）测试
+
+## 2026-07-03: 检测方式切换守卫改为 watcher (Task 5.1)
+
+- frontend/js/methods/config.js: 移除 `onCheckToggle` 和 `_getActiveCheckCount`，新增 `_ensureAtLeastOneCheckMethod` 直接检查三个检测字段状态
+- frontend/js/app-options.js: 新增三个 watcher 监听 `enable_tcp_check`、`enable_http_check`、`urlCheckEnabled`，触发守卫逻辑
+- frontend/partials/pages/settings/settings-monitor.html: 移除三个 checkbox 的 `@change` 处理器，保留 `v-model` 绑定
+
