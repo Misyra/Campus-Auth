@@ -4101,3 +4101,8 @@
 - tests/test_tasks/test_manager.py: 新建，8 个测试覆盖 get_script_path（JSON/PY/优先级/不存在/无效ID/仅搜索scripts）及 _safe_task_path
 - tests/test_api/test_api_scripts_routes.py: 3 处 mock 从 _safe_task_path 更新为 get_script_path
 
+## 2026-07-03: WebSocket frontend_log 复用模块级 logger 实例 (Task 4.5)
+
+- app/api/ws.py: 新增模块级 `_fe_logger = get_logger("frontend", source="frontend")`，替代 handler 内每次调用 `get_logger` 的开销
+- tests/test_api/test_ws.py: 新增 8 个 frontend_log 测试（单例验证、默认级别、显式级别、无效级别降级、空消息、缺失 data、消息截断、scope 截断）
+
