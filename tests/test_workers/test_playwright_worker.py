@@ -304,3 +304,78 @@ class TestStopJoinsOnQueueFull:
             worker.stop(timeout=1)
 
         mock_logger.warning.assert_any_call("Worker 命令队列已满，强制停止事件循环")
+
+
+# ── _cleanup_debug_session ──
+
+
+class TestCleanupDebugSession:
+    """_cleanup_debug_session 清理调试会话资源。"""
+
+    def test_clears_page_reference(self):
+        """清理调试会话时同步释放 _page 引用。"""
+        from app.workers.playwright_worker import PlaywrightWorker
+
+        worker = PlaywrightWorker()
+        fake_page = MagicMock()
+        fake_page.is_closed.return_value = False
+        worker._page = fake_page
+        worker._debug_page = fake_page
+        worker._debug_executor = MagicMock()
+
+        import asyncio
+
+        asyncio.run(worker._cleanup_debug_session())
+
+        assert worker._page is None
+        assert worker._debug_page is None
+        assert worker._debug_executor is None
+
+    def test_clears_page_even_when_debug_page_is_none(self):
+        """_debug_page 为 None 时仍清理 _page。"""
+        from app.workers.playwright_worker import PlaywrightWorker
+
+        worker = PlaywrightWorker()
+        fake_page = MagicMock()
+        worker._page = fake_page
+        worker._debug_page = None
+
+        import asyncio
+
+        asyncio.run(worker._cleanup_debug_session())
+
+        assert worker._page is None
+
+    def test_closes_debug_page_before_clearing(self):
+        """清理时关闭 _debug_page（若未关闭）。"""
+        from app.workers.playwright_worker import PlaywrightWorker
+
+        worker = PlaywrightWorker()
+        fake_page = MagicMock()
+        fake_page.is_closed.return_value = False
+        worker._debug_page = fake_page
+        worker._page = MagicMock()
+
+        import asyncio
+
+        asyncio.run(worker._cleanup_debug_session())
+
+        fake_page.close.assert_called_once()
+        assert worker._page is None
+
+    def test_skips_close_when_debug_page_already_closed(self):
+        """_debug_page 已关闭时不再调用 close。"""
+        from app.workers.playwright_worker import PlaywrightWorker
+
+        worker = PlaywrightWorker()
+        fake_page = MagicMock()
+        fake_page.is_closed.return_value = True
+        worker._debug_page = fake_page
+        worker._page = MagicMock()
+
+        import asyncio
+
+        asyncio.run(worker._cleanup_debug_session())
+
+        fake_page.close.assert_not_called()
+        assert worker._page is None
