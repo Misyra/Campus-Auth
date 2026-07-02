@@ -74,8 +74,8 @@ class TestCompositeCancelEvent:
 
         assert len(cce._sources) == 1
 
-    def test_clear_resets_self_keeps_sources(self) -> None:
-        """clear() 清除自身标志但保留源列表。"""
+    def test_clear_resets_self_and_sources(self) -> None:
+        """clear() 清除自身标志并复位所有源事件。"""
         cce = CompositeCancelEvent()
         source = threading.Event()
         source.set()
@@ -83,12 +83,12 @@ class TestCompositeCancelEvent:
         cce.add_source(source)
         assert cce.is_set()
 
-        # clear 自身标志
+        # clear 同时复位自身和源
         cce.clear()
-        # 但源仍然 set，惰性扫描会再次发现
-        assert cce.is_set()
-        # 源列表仍保留
+        assert not cce.is_set()
+        # 源列表仍保留（仅复位，不清除引用）
         assert len(cce._sources) == 1
+        assert not source.is_set()
 
     def test_is_set_caches_result(self) -> None:
         """is_set() 发现源 set 后会缓存结果（后续不再扫描）。"""
@@ -162,6 +162,16 @@ class TestCompositeCancelEvent:
         cce.add_source(src2)
         src2.set()
         assert cce.is_set()
+
+    def test_clear_resets_all_sources(self) -> None:
+        """clear() 应同时复位自身标志和所有源事件。"""
+        cce = CompositeCancelEvent()
+        src = threading.Event()
+        cce.add_source(src)
+        src.set()
+        assert cce.is_set()
+        cce.clear()
+        assert not cce.is_set()
 
     def test_no_sources_is_set_false(self) -> None:
         """无任何源时，clear 后 is_set() 应为 False。"""
