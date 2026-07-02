@@ -191,12 +191,9 @@ class PlaywrightWorker:
         try:
             self._cmd_queue.put_nowait(WorkerCommand(type=CMD_SHUTDOWN))
         except queue.Full:
-            logger.warning(
-                "Worker 命令队列已满 (maxsize={})，强制停止", self._cmd_queue.maxsize
-            )
+            logger.warning("Worker 命令队列已满，强制停止事件循环")
             if self._loop is not None and self._loop.is_running():
                 self._loop.call_soon_threadsafe(self._loop.stop)
-            return
 
         # 通过 run_coroutine_threadsafe 唤醒 Worker 的事件循环
         # 这是唯一允许的跨线程 asyncio 调用
