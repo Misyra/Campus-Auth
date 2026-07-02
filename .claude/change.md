@@ -102,6 +102,11 @@
 - `app/api/tools.py`：更新 `BG_DIR` 路径为 `PROJECT_ROOT / "resources" / "background"`
 - `.gitignore`：更新忽略路径为 `resources/background/`
 
+### fix: 移除 detect.py 中不可达的 KeyError 捕获，补充测试中对 mock_run 调用链的断言
+
+- `app/network/detect.py`：从 `_get_ssid_macos_modern()` 的 except 元组中移除 `KeyError`（所有 `.get()` 调用已提供默认值，该异常不可达）
+- `tests/test_network/test_detect.py`：`test_system_profiler_fallback` 新增 `mock_run.call_count == 2` 断言及 `assert_any_call` 验证 airport 和 networksetup 的调用参数
+
 ## 2026-06-29
 
 ### refactor: 移动 DecryptionError 到 crypto.py 作为 _DecryptionError + 内联 safe_decrypt()
