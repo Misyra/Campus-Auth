@@ -54,7 +54,7 @@ def detect() -> list[CleanupItem]:
     # Playwright 缓存
     pw_cache = get_playwright_cache_dir()
     if pw_cache and pw_cache.exists():
-        size = dir_size_mb(pw_cache)
+        size = dir_size_mb(pw_cache).size_mb
         items.append(
             CleanupItem(
                 "playwright", "Playwright 浏览器缓存", True, str(pw_cache), size
