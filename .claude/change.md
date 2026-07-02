@@ -4106,3 +4106,8 @@
 - app/api/ws.py: 新增模块级 `_fe_logger = get_logger("frontend", source="frontend")`，替代 handler 内每次调用 `get_logger` 的开销
 - tests/test_api/test_ws.py: 新增 8 个 frontend_log 测试（单例验证、默认级别、显式级别、无效级别降级、空消息、缺失 data、消息截断、scope 截断）
 
+## 2026-07-03: WebSocket 未知消息类型记录警告日志 (Task 4.6)
+
+- app/api/ws.py: 在 `websocket_logs_handler` 的 `if/elif` 链末尾新增 `else` 分支，对未知消息类型记录 `warning` 日志
+- tests/test_api/test_ws.py: 新增 4 个测试（未知类型、None 类型、缺少 type 字段、已知类型不触发警告）
+

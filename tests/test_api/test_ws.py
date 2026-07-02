@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi import WebSocketDisconnect
 
-from app.api.ws import _fe_logger, websocket_logs_handler
+from app.api.ws import _fe_logger, websocket_logs_handler, ws_logger
 
 
 def _make_ws(messages: list[str]) -> MagicMock:
@@ -222,3 +222,62 @@ class TestFrontendLog:
             call_args = mock_info.call_args
             # scope 被截断为 200 字符
             assert len(call_args[0][1]) == 200
+
+
+class TestUnknownMessageType:
+    """未知 WebSocket 消息类型记录警告日志。"""
+
+    @pytest.mark.asyncio
+    async def test_unknown_type_logs_warning(self):
+        """未知消息类型触发 warning 日志。"""
+        msg = json.dumps({"type": "unknown_type"})
+        ws = _make_ws([msg])
+        mgr = _make_manager()
+
+        with patch.object(ws_logger, "warning") as mock_warning:
+            await websocket_logs_handler(ws, mgr)
+            mock_warning.assert_called_once_with(
+                "收到未知 WebSocket 消息类型: {}", "unknown_type"
+            )
+
+    @pytest.mark.asyncio
+    async def test_none_type_logs_warning(self):
+        """type 为 null 时记录警告。"""
+        msg = json.dumps({"type": None})
+        ws = _make_ws([msg])
+        mgr = _make_manager()
+
+        with patch.object(ws_logger, "warning") as mock_warning:
+            await websocket_logs_handler(ws, mgr)
+            mock_warning.assert_called_once_with(
+                "收到未知 WebSocket 消息类型: {}", None
+            )
+
+    @pytest.mark.asyncio
+    async def test_missing_type_logs_warning(self):
+        """缺少 type 字段时记录警告。"""
+        msg = json.dumps({"data": "something"})
+        ws = _make_ws([msg])
+        mgr = _make_manager()
+
+        with patch.object(ws_logger, "warning") as mock_warning:
+            await websocket_logs_handler(ws, mgr)
+            mock_warning.assert_called_once_with(
+                "收到未知 WebSocket 消息类型: {}", None
+            )
+
+    @pytest.mark.asyncio
+    async def test_known_types_do_not_log_warning(self):
+        """已知消息类型不触发未知类型警告。"""
+        ping_msg = json.dumps({"type": "ping"})
+        log_msg = json.dumps({
+            "type": "frontend_log",
+            "data": {"message": "test", "scope": "s"},
+        })
+        ws = _make_ws([ping_msg, log_msg])
+        mgr = _make_manager()
+
+        with patch.object(ws_logger, "warning") as mock_warning:
+            await websocket_logs_handler(ws, mgr)
+            # warning 不应被调用（ping 和 frontend_log 是已知类型）
+            mock_warning.assert_not_called()
