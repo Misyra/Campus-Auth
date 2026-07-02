@@ -8,6 +8,7 @@ from app.utils.browser_registry import (
     _detect_edge,
     _edge_path,
     detect_browsers,
+    has_playwright_chromium,
 )
 
 
@@ -100,3 +101,48 @@ def test_detect_edge_windows_without_executable(mock_edge_path):
     with patch("app.utils.browser_registry._check_command_exists", return_value=False):
         info = _detect_edge()
         assert info.installed is False
+
+
+# --- ARM64 Chromium 路径检测测试 ---
+
+
+def test_has_playwright_chromium_arm64_linux(tmp_path):
+    """ARM64 Linux 上应检测 chrome-linux-arm64 路径。"""
+    chrome_file = tmp_path / "chromium-120" / "chrome-linux-arm64" / "chrome"
+    chrome_file.parent.mkdir(parents=True)
+    chrome_file.touch()
+
+    with (
+        patch("app.utils.browser_registry.platform.machine", return_value="arm64"),
+        patch("app.utils.browser_registry.get_playwright_cache_dir", return_value=tmp_path),
+    ):
+        assert has_playwright_chromium() is True
+
+
+def test_has_playwright_chromium_arm64_mac(tmp_path):
+    """ARM64 macOS 上应检测 chrome-mac-arm64 路径。"""
+    chrome_file = tmp_path / "chromium-120" / "chrome-mac-arm64" / "chrome"
+    chrome_file.parent.mkdir(parents=True)
+    chrome_file.touch()
+
+    with (
+        patch("app.utils.browser_registry.platform.machine", return_value="arm64"),
+        patch("app.utils.browser_registry.get_playwright_cache_dir", return_value=tmp_path),
+    ):
+        assert has_playwright_chromium() is True
+
+
+def test_has_playwright_chromium_non_arm64_no_arm64_paths(tmp_path):
+    """非 ARM64 架构不应检测 chrome-linux-arm64 或 chrome-mac-arm64 路径。
+
+    x86_64 上只创建 ARM64 专用路径的文件，不应被发现。
+    """
+    arm64_linux = tmp_path / "chromium-120" / "chrome-linux-arm64" / "chrome"
+    arm64_linux.parent.mkdir(parents=True)
+    arm64_linux.touch()
+
+    with (
+        patch("app.utils.browser_registry.platform.machine", return_value="x86_64"),
+        patch("app.utils.browser_registry.get_playwright_cache_dir", return_value=tmp_path),
+    ):
+        assert has_playwright_chromium() is False

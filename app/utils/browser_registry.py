@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import platform
 import shutil
 import threading
 import time
@@ -217,18 +218,28 @@ def has_playwright_chromium() -> bool:
     except Exception:
         pass
 
+    is_arm64 = platform.machine() == "arm64"
+
     for base_dir in search_dirs:
         if not base_dir.is_dir():
             continue
         for d in base_dir.glob("chromium-*"):
             if not d.is_dir():
                 continue
-            for candidate in [
+            candidates = [
                 d / "chrome-win64" / "chrome.exe",
                 d / "chrome-win" / "chrome.exe",
                 d / "chrome-linux" / "chrome",
                 d / "chrome-mac" / "Chromium.app" / "Contents" / "MacOS" / "Chromium",
-            ]:
+            ]
+            if is_arm64:
+                candidates.extend(
+                    [
+                        d / "chrome-linux-arm64" / "chrome",
+                        d / "chrome-mac-arm64" / "chrome",
+                    ]
+                )
+            for candidate in candidates:
                 if candidate.exists():
                     return True
     return False
