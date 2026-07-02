@@ -198,6 +198,8 @@ export const lifecycleMethods = {
       if (this.frontendLogger) {
         this.frontendLogger.setWebSocket(null);
       }
+      oldWs.onopen = null;
+      oldWs.onmessage = null;
       oldWs.onclose = null;
       oldWs.onerror = null;
       oldWs.close();
