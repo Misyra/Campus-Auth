@@ -43,6 +43,8 @@ class MonitoredPolicy:
 
     def delay_before(self, attempt: int) -> float:
         """返回第 attempt 次登录失败后的延迟（查表）。"""
+        if attempt <= 0:
+            return self._DELAYS[0]
         idx = min(attempt - 1, len(self._DELAYS) - 1)
         return self._DELAYS[idx]
 
