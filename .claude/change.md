@@ -2,6 +2,18 @@
 
 ## 2026-07-03
 
+### refactor: start.go 重命名 path 变量避免遮蔽包名
+
+- `start.go`：`findUv()` 函数中将局部变量 `path` 重命名为 `filePath`，避免遮蔽包名
+
+### fix: 重新下载 uv 前清理旧二进制与 version.txt
+
+- `start.sh`：在 `_download_uv()` 中 `mkdir` 之后、下载循环之前添加 `rm -f "$UV_DIR/uv" "$UV_DIR/version.txt"`，避免残留的旧版本文件干扰新下载
+
+### fix: API 重试策略增加 jitter，缓解雪崩
+
+- `frontend/js/constants.js`：GET 重试响应拦截器的退避延迟中新增 0-1000ms 随机 jitter，防止多客户端同时重试造成雪崩
+
 ### fix: WS 连接正常时跳过 HTTP 状态轮询
 
 - `frontend/js/methods/lifecycle.js`：状态轮询定时器中新增 WebSocket 连接状态检查，当 `ws.readyState === WebSocket.OPEN` 时跳过 HTTP `fetchStatus()` 调用，避免 WS 已实时推送状态时的冗余轮询
@@ -4165,3 +4177,14 @@
 
 - frontend/js/data/config.js: `defaultUrlCheckUrls` 改为使用 `[...DEFAULT_CONFIG.monitor.url_check_urls]` 创建独立副本，防止数组突变污染全局默认配置
 
+## 2026-07-03: 前端日志批量发送失败时保留缓冲区 (Task 5.8)
+
+- frontend/js/logger.js: `_flushBuffer` 发送失败时将整个批次 `unshift` 回缓冲区，避免日志静默丢失
+
+## 2026-07-03: 状态轮询 Promise rejection 捕获 (Task 5.6)
+
+- frontend/js/methods/lifecycle.js: 状态轮询定时器中 fetchStatus() 增加 .catch() 处理，防止未捕获的 Promise rejection
+
+## 2026-07-03: start.go 透传子进程退出码 (Task 6.2)
+
+- start.go: `runCommand` 函数增加 `*exec.ExitError` 类型断言，子进程非零退出时透传实际退出码而非固定返回 1
