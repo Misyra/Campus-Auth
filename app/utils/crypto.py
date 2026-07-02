@@ -38,6 +38,18 @@ _crypto_missing_warned = False
 _crypto_missing_decrypt_warned = False
 
 
+def _backup_key_file() -> None:
+    """备份密钥文件（密钥损坏或长度异常时调用）"""
+    backup_path = _KEY_FILE.with_suffix(f".bak.{int(time.time())}")
+    try:
+        _KEY_FILE.rename(backup_path)
+        logger.info("备份密钥文件成功: {}", backup_path)
+    except FileNotFoundError:
+        pass
+    except OSError as backup_err:
+        logger.warning("备份密钥文件失败: {}", backup_err)
+
+
 def _get_or_create_key() -> bytes:
     """获取或创建加密密钥（Fernet 要求 32 字节 base64 编码的密钥）"""
     global _cached_raw_key
@@ -60,17 +72,10 @@ def _get_or_create_key() -> bytes:
                     return key
                 else:
                     logger.warning("密钥文件长度异常: 期望 32 字节，实际 {} 字节", len(key))
+                    _backup_key_file()
             except Exception as exc:
                 logger.warning("读取加密密钥失败: {}", exc)
-                # 备份损坏的密钥文件
-                backup_path = _KEY_FILE.with_suffix(f".bak.{int(time.time())}")
-                try:
-                    _KEY_FILE.rename(backup_path)
-                    logger.info("备份密钥文件成功: {}", backup_path)
-                except FileNotFoundError:
-                    pass  # 文件不存在，无需备份
-                except OSError as backup_err:
-                    logger.warning("备份密钥文件失败: {}", backup_err)
+                _backup_key_file()
                 logger.warning(
                     "将生成新密钥，此前保存的密码将无法自动恢复，请重新输入密码"
                 )

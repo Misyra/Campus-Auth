@@ -92,7 +92,7 @@ class TestCorruptedKeyFile:
         assert len(backups) == 1
 
     def test_corrupted_key_file_wrong_length(self, _reset_crypto_cache):
-        """base64 解码后长度不是 32 字节时也应重新生成。"""
+        """base64 解码后长度不是 32 字节时应备份并重新生成。"""
         crypto_mod = _reset_crypto_cache
         import base64
 
@@ -105,6 +105,9 @@ class TestCorruptedKeyFile:
             key = crypto_mod._get_or_create_key()
 
         assert len(key) == 32
+        # 长度异常时也应备份原文件
+        backups = list(crypto_mod._KEY_DIR.glob(".enc_key.bak.*"))
+        assert len(backups) == 1
 
     def test_backup_rename_file_not_found(self, _reset_crypto_cache):
         """备份时文件已不存在（竞态），应静默处理。"""
