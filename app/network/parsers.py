@@ -157,7 +157,11 @@ def parse_ping_targets(raw: str | list | None) -> list[tuple[str, int]]:
         else:
             # 无冒号：IPv4 或域名
             parts = item.split(".")
-            is_ipv4 = len(parts) == 4 and all(p.isdigit() for p in parts)
+            is_ipv4 = (
+                len(parts) == 4
+                and all(p.isdigit() for p in parts)
+                and all(0 <= int(p) <= 255 for p in parts)
+            )
             targets.append(f"{item}:{53 if is_ipv4 else 443}")
 
     return parse_host_port(targets)
