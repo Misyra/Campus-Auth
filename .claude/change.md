@@ -2,6 +2,11 @@
 
 ## 2026-07-03
 
+### fix: 密钥长度异常时备份原文件再生成新密钥
+
+- `app/utils/crypto.py`：提取 `_backup_key_file()` 函数，密钥长度异常（`len(key) != 32`）时调用备份，替换原 except 分支中的内联备份代码
+- `tests/test_utils/test_crypto.py`：`test_corrupted_key_file_wrong_length` 增加断言验证长度异常时创建 `.bak.*` 备份文件
+
 ### refactor: start.go 重命名 path 变量避免遮蔽包名
 
 - `start.go`：`findUv()` 函数中将局部变量 `path` 重命名为 `filePath`，避免遮蔽包名
@@ -4188,3 +4193,11 @@
 ## 2026-07-03: start.go 透传子进程退出码 (Task 6.2)
 
 - start.go: `runCommand` 函数增加 `*exec.ExitError` 类型断言，子进程非零退出时透传实际退出码而非固定返回 1
+
+## 2026-07-03: ����ģʽע�� SIGINT ������ (Task 6.6)
+
+- app/services/launcher.py:  ����  ע�ᣬʹ Ctrl+C ���������� finally ����·������ֱ����ֹ
+
+## 2026-07-03: 轻量模式注册 SIGINT 处理器 (Task 6.6)
+
+- app/services/launcher.py: launch_lightweight 增加 signal.signal(signal.SIGINT, _signal_handler) 注册，使 Ctrl+C 触发正常的 finally 清理路径而非直接终止
