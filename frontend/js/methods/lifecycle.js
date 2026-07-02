@@ -43,6 +43,7 @@ export const lifecycleMethods = {
     this.autoCheckUpdateOnStartup();
     this.timers.push(setInterval(() => {
         if (this._statusPolling) return;
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) return;
         this._statusPolling = true;
         this.fetchStatus().finally(() => { this._statusPolling = false; });
     }, TIMING.STATUS_POLL_INTERVAL));  // 30s fallback, WS 实时推送
