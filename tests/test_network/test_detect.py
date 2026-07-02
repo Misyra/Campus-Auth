@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import json
 from unittest.mock import MagicMock, patch
 
 from app.network.detect import (
+    _get_ssid_macos_modern,
     _get_windows_gateway_powershell,
     _get_windows_gateway_route_print,
     _is_valid_ipv4,
@@ -158,3 +160,149 @@ class TestDetectGatewayWindowsIntegration:
         assert result == "10.0.0.1"
         mock_route.assert_called_once()
         mock_ps.assert_called_once()
+
+
+class TestGetSsidMacosModern:
+    """system_profiler SPAirPortDataType JSON 解析测试。"""
+
+    @patch("app.network.detect.subprocess.run")
+    def test_success_sairport_key(self, mock_run: MagicMock):
+        """正常解析 spairport_current_wireless_information 键。"""
+        json_data = {
+            "SPAirPortDataType": [
+                {
+                    "spairport_current_wireless_information": {
+                        "spairport_current_ssid": "MyWiFi"
+                    }
+                }
+            ]
+        }
+        mock_run.return_value = MagicMock(
+            returncode=0, stdout=json.dumps(json_data), stderr=""
+        )
+        result = _get_ssid_macos_modern()
+        assert result == "MyWiFi"
+
+    @patch("app.network.detect.subprocess.run")
+    def test_success_current_key(self, mock_run: MagicMock):
+        """回退解析 current_wireless_information 键。"""
+        json_data = {
+            "SPAirPortDataType": [
+                {"current_wireless_information": {"current_ssid": "OfficeNet"}}
+            ]
+        }
+        mock_run.return_value = MagicMock(
+            returncode=0, stdout=json.dumps(json_data), stderr=""
+        )
+        result = _get_ssid_macos_modern()
+        assert result == "OfficeNet"
+
+    @patch("app.network.detect.subprocess.run")
+    def test_nonzero_returncode(self, mock_run: MagicMock):
+        """命令返回非零时返回 None。"""
+        mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="error")
+        result = _get_ssid_macos_modern()
+        assert result is None
+
+    @patch("app.network.detect.subprocess.run")
+    def test_invalid_json(self, mock_run: MagicMock):
+        """JSON 格式无效时返回 None。"""
+        mock_run.return_value = MagicMock(returncode=0, stdout="not json", stderr="")
+        result = _get_ssid_macos_modern()
+        assert result is None
+
+    @patch("app.network.detect.subprocess.run")
+    def test_empty_sspairport_data_type(self, mock_run: MagicMock):
+        """SPAirPortDataType 为空列表时返回 None。"""
+        json_data = {"SPAirPortDataType": []}
+        mock_run.return_value = MagicMock(
+            returncode=0, stdout=json.dumps(json_data), stderr=""
+        )
+        result = _get_ssid_macos_modern()
+        assert result is None
+
+    @patch("app.network.detect.subprocess.run")
+    def test_no_ssid_field(self, mock_run: MagicMock):
+        """无线信息中无 SSID 字段时返回 None。"""
+        json_data = {
+            "SPAirPortDataType": [
+                {
+                    "spairport_current_wireless_information": {
+                        "spairport_current_bssid": "aa:bb:cc:dd:ee:ff"
+                    }
+                }
+            ]
+        }
+        mock_run.return_value = MagicMock(
+            returncode=0, stdout=json.dumps(json_data), stderr=""
+        )
+        result = _get_ssid_macos_modern()
+        assert result is None
+
+    @patch("app.network.detect.subprocess.run")
+    def test_file_not_found(self, mock_run: MagicMock):
+        """system_profiler 命令不存在时返回 None。"""
+        mock_run.side_effect = FileNotFoundError
+        result = _get_ssid_macos_modern()
+        assert result is None
+
+    @patch("app.network.detect.subprocess.run")
+    def test_empty_json_data(self, mock_run: MagicMock):
+        """JSON 为空字典时返回 None。"""
+        mock_run.return_value = MagicMock(returncode=0, stdout="{}", stderr="")
+        result = _get_ssid_macos_modern()
+        assert result is None
+
+
+class TestDetectSsidDarwinFallbackOrder:
+    """macOS SSID 检测回退顺序测试。"""
+
+    @patch("app.network.detect._get_ssid_macos_modern")
+    @patch("app.network.detect.subprocess.run")
+    @patch("app.network.detect.is_windows", return_value=False)
+    @patch("app.network.detect.is_linux", return_value=False)
+    @patch("app.network.detect.is_macos", return_value=True)
+    def test_airport_preferred(
+        self,
+        mock_is_macos: MagicMock,
+        mock_is_linux: MagicMock,
+        mock_is_windows: MagicMock,
+        mock_run: MagicMock,
+        mock_modern: MagicMock,
+    ):
+        """airport 成功时不再调用后续方法。"""
+        mock_run.return_value = MagicMock(returncode=0, stdout="     SSID: HomeWiFi\n")
+        mock_modern.return_value = None
+        from app.network.detect import detect_wifi_ssid
+
+        result = detect_wifi_ssid()
+        assert result == "HomeWiFi"
+        mock_modern.assert_not_called()
+
+    @patch("app.network.detect._get_ssid_macos_modern")
+    @patch("app.network.detect.subprocess.run")
+    @patch("app.network.detect.is_windows", return_value=False)
+    @patch("app.network.detect.is_linux", return_value=False)
+    @patch("app.network.detect.is_macos", return_value=True)
+    def test_system_profiler_fallback(
+        self,
+        mock_is_macos: MagicMock,
+        mock_is_linux: MagicMock,
+        mock_is_windows: MagicMock,
+        mock_run: MagicMock,
+        mock_modern: MagicMock,
+    ):
+        """airport 和 networksetup 都失败时，回退到 system_profiler。"""
+        # airport 返回失败
+        airport_result = MagicMock(returncode=1, stdout="")
+        # networksetup -listallhardwareports 返回无 Wi-Fi 设备
+        networksetup_list = MagicMock(
+            returncode=0, stdout="Hardware Port: Ethernet\nDevice: en0\n"
+        )
+        mock_run.side_effect = [airport_result, networksetup_list]
+        mock_modern.return_value = "SystemProfilerSSID"
+        from app.network.detect import detect_wifi_ssid
+
+        result = detect_wifi_ssid()
+        assert result == "SystemProfilerSSID"
+        mock_modern.assert_called_once()
