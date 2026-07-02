@@ -465,6 +465,9 @@ class PlaywrightWorker:
         2. 导航到任务 URL
         3. 创建 TaskExecutor（线程安全 — 所有 Playwright 操作在 Worker 线程内执行）
         4. 初始截图并返回 URL
+
+        注意：_debug_page 与 _page 共享同一 page 对象引用（别名），
+        调试会话结束后 _cleanup_debug_session 会将 _debug_page 置 None。
         """
         from app.constants import DEFAULT_STEP_TIMEOUT_MS
         from app.tasks import TaskConfig, TaskExecutor
@@ -504,7 +507,8 @@ class PlaywrightWorker:
                 )
                 return WorkerResponse(success=False, error=f"浏览器页面初始化失败: {e}")
 
-        # 保存调试页面引用
+        # _debug_page 是当前调试会话的页面；_page 保持为普通任务页面，二者不应混用
+        # 此处共享同一底层 page 对象引用，调试会话结束后由 _cleanup_debug_session 置 None
         self._debug_page = self._page
         self._debug_executor = None
 
