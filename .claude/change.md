@@ -2,6 +2,11 @@
 
 ## 2026-07-03
 
+### fix: 浏览器注册增加 ARM64 Chromium 路径检测
+
+- `app/utils/browser_registry.py`：`has_playwright_chromium()` 中 `import platform` 移至模块顶层，新增 `platform.machine() == "arm64"` 检测，ARM64 架构下额外搜索 `chrome-linux-arm64/chrome` 和 `chrome-mac-arm64/chrome` 路径
+- `tests/test_utils/test_browser_registry.py`：新增 3 个测试用例（ARM64 Linux、ARM64 macOS、非 ARM64 不搜索 ARM64 路径）
+
 ### fix: Windows icacls 用户名处理域环境格式
 
 - `app/utils/crypto.py`：`_get_or_create_key()` 中 icacls 命令执行前，对用户名执行 `split("\\")[-1]` 提取，兼容域环境 `DOMAIN\user` 格式
