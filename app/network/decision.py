@@ -249,11 +249,7 @@ def _is_auth_url_reachable(
     if extra_targets:
         from app.network.parsers import parse_host_port
 
-        try:
-            targets = parse_host_port(list(extra_targets))
-        except ValueError:
-            logger.warning("认证地址附加目标格式错误，跳过检测")
-            targets = []
+        targets = parse_host_port(list(extra_targets))
         if targets:
             for host, port in targets:
                 if _check_host_port(host, port, f"{host}:{port}"):
