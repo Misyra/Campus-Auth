@@ -301,7 +301,7 @@ class TestDebugSessionManagerStart:
                 "app.services.debug_service.build_login_template_vars", return_value={}
             ),
             patch(
-                "app.services.debug_service._runtime_config_to_worker_dict",
+                "app.services.debug_service.runtime_config_to_worker_dict",
                 return_value={},
             ),
         ):
@@ -347,7 +347,7 @@ class TestDebugSessionManagerStart:
                 "app.services.debug_service.build_login_template_vars", return_value={}
             ),
             patch(
-                "app.services.debug_service._runtime_config_to_worker_dict",
+                "app.services.debug_service.runtime_config_to_worker_dict",
                 return_value={},
             ),
         ):
@@ -391,7 +391,7 @@ class TestDebugSessionManagerStart:
                 "app.services.debug_service.build_login_template_vars", return_value={}
             ),
             patch(
-                "app.services.debug_service._runtime_config_to_worker_dict",
+                "app.services.debug_service.runtime_config_to_worker_dict",
                 return_value={},
             ),
         ):
