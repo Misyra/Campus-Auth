@@ -272,6 +272,11 @@ func runCommand(name string, args ...string) error {
 	err := cmd.Wait()
 	signal.Stop(sigChan)
 	close(sigChan)
+
+	// 透传子进程退出码
+	if exitErr, ok := err.(*exec.ExitError); ok {
+		os.Exit(exitErr.ExitCode())
+	}
 	return err
 }
 
