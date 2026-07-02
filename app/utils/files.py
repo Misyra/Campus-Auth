@@ -85,6 +85,7 @@ async def save_screenshot(
     返回:
         截图文件的本地路径，失败时返回 None
     """
+    local_path = ""
     try:
         out_dir = Path(output_dir)
         out_dir.mkdir(parents=True, exist_ok=True)
