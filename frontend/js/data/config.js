@@ -22,7 +22,7 @@ export function configData() {
     passwordSaved: false,
     // inline edit 模式：是否处于密码编辑态
     editingPassword: false,
-    defaultUrlCheckUrls: DEFAULT_CONFIG.monitor.url_check_urls,
+    defaultUrlCheckUrls: [...DEFAULT_CONFIG.monitor.url_check_urls],
     dangerConfirm: null,
     dangerCountdown: 0,
     availableShells: [],
