@@ -2,6 +2,11 @@
 
 ## 2026-07-03
 
+### fix: websocket_manager zip 启用 strict 检测连接/队列长度不一致
+
+- `app/services/websocket_manager.py`：第 93 行 `zip(connections, results, strict=False)` 改为 `strict=True`，connections 与 results 长度不一致时抛出 ValueError
+- `tests/test_services/test_websocket_manager.py`：新增 `TestBroadcastStrictZip` 测试类（2 个用例：长度不一致时抛 ValueError、长度一致时正常工作）
+
 ### fix: WebSocket 消息大小限制按 UTF-8 字节数计算
 
 - `app/api/ws.py`：消息大小预检从 `len(raw)`（字符数）改为 `len(raw.encode("utf-8"))`（字节数），确保中文等多字节字符按实际传输大小计算
