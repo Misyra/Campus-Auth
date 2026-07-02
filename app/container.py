@@ -175,6 +175,12 @@ class ServiceContainer:
         # BUG-013 修复：先关闭引擎（停止提交任务），再关闭线程池
         self.engine.shutdown()
 
+        # 等待进行中的任务完成回调，避免回调触及已关闭的组件
+        try:
+            await asyncio.wait_for(self.task_executor.wait_for_callbacks(), timeout=10)
+        except TimeoutError:
+            container_logger.warning("等待任务回调超时，继续关闭")
+
         # 关闭网络探测模块（停止接收新任务，等待 in-flight 请求完成）
         from app.network.probes import shutdown_probes
 
