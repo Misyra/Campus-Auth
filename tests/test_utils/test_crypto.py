@@ -203,6 +203,65 @@ class TestIcaclsErrors:
         assert len(key) == 32
 
 
+# ── icacls 域用户名处理 ──
+
+
+class TestIcaclsDomainUsername:
+    """验证 Windows icacls 域环境用户名格式处理。"""
+
+    def test_domain_username_extracted(self, _reset_crypto_cache):
+        """域环境格式 DOMAIN\\user 应提取用户名部分。"""
+        crypto_mod = _reset_crypto_cache
+
+        mock_run = MagicMock(return_value=MagicMock(returncode=0))
+
+        with (
+            patch.object(crypto_mod, "is_windows", return_value=True),
+            patch("subprocess.run", mock_run),
+            patch.dict("os.environ", {"USERNAME": "CORP\\john.doe"}, clear=True),
+        ):
+            crypto_mod._get_or_create_key()
+
+        # 验证 icacls 命令中使用的是提取后的用户名
+        call_args = mock_run.call_args[0][0]
+        assert call_args[4] == "john.doe:F"
+
+    def test_normal_username_unchanged(self, _reset_crypto_cache):
+        """普通用户名（无反斜杠）应保持不变。"""
+        crypto_mod = _reset_crypto_cache
+
+        mock_run = MagicMock(return_value=MagicMock(returncode=0))
+
+        with (
+            patch.object(crypto_mod, "is_windows", return_value=True),
+            patch("subprocess.run", mock_run),
+            patch.dict("os.environ", {"USERNAME": "TestUser"}, clear=True),
+        ):
+            crypto_mod._get_or_create_key()
+
+        # 验证 icacls 命令中使用的是原始用户名
+        call_args = mock_run.call_args[0][0]
+        assert call_args[4] == "TestUser:F"
+
+    def test_fallback_getuser_domain_format(self, _reset_crypto_cache):
+        """getpass.getuser() 返回域格式 DOMAIN\\admin 时也应正确处理。"""
+        crypto_mod = _reset_crypto_cache
+
+        mock_run = MagicMock(return_value=MagicMock(returncode=0))
+
+        with (
+            patch.object(crypto_mod, "is_windows", return_value=True),
+            patch("subprocess.run", mock_run),
+            patch.dict("os.environ", {}, clear=True),  # 清除 USERNAME
+            patch("getpass.getuser", return_value="DOMAIN\\admin"),
+        ):
+            crypto_mod._get_or_create_key()
+
+        # 验证 icacls 命令中使用的是提取后的用户名
+        call_args = mock_run.call_args[0][0]
+        assert call_args[4] == "admin:F"
+
+
 # ── _derive_fernet_key 缓存命中（116行）──
 
 

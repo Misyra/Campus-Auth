@@ -96,6 +96,8 @@ def _get_or_create_key() -> bytes:
                 import subprocess
 
                 username = os.environ.get("USERNAME") or getpass.getuser()
+                # 域环境用户名格式为 DOMAIN\user，icacls 只需用户名部分
+                username = username.split("\\")[-1]
                 subprocess.run(
                     [
                         "icacls",
