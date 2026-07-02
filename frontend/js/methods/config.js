@@ -51,31 +51,14 @@ export const configMethods = {
     return warnings;
   },
 
-  // 检查网络检测方式数量
-  _getActiveCheckCount() {
-    let count = 0;
-    if (this.config.monitor.enable_tcp_check) count++;
-    if (this.config.monitor.enable_http_check) count++;
-    if (this.config.monitor.url_check_urls && this.config.monitor.url_check_urls.length > 0) count++;
-    return count;
-  },
-
-  // 切换网络检测方式前检查
-  onCheckToggle(field, value) {
-    // 如果是关闭操作，检查是否是最后一种检测方式
-    if (!value && this._getActiveCheckCount() === 0) {
+  // 确保至少保留一种网络检测方式
+  _ensureAtLeastOneCheckMethod() {
+    const { enable_tcp_check, enable_http_check, url_check_urls } = this.config.monitor;
+    if (!enable_tcp_check && !enable_http_check && !(url_check_urls && url_check_urls.length)) {
       this.toastOnly(false, '至少需要保留一种网络检测方式');
-      // 恢复为开启状态
       this.$nextTick(() => {
-        if (field === 'tcp') this.config.monitor.enable_tcp_check = true;
-        if (field === 'http') this.config.monitor.enable_http_check = true;
-        if (field === 'url') {
-          this.config.monitor.url_check_urls = this.defaultUrlCheckUrls?.length
-            ? [...this.defaultUrlCheckUrls]
-            : ['http://captive.apple.com/hotspot-detect.html|Success'];
-        }
+        this.config.monitor.enable_tcp_check = true;
       });
-      return;
     }
   },
 

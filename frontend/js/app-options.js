@@ -234,6 +234,15 @@ export const appOptions = {
       },
       deep: true,
     },
+    'config.monitor.enable_tcp_check'() {
+      this._ensureAtLeastOneCheckMethod();
+    },
+    'config.monitor.enable_http_check'() {
+      this._ensureAtLeastOneCheckMethod();
+    },
+    urlCheckEnabled() {
+      this._ensureAtLeastOneCheckMethod();
+    },
     currentPage(newPage) {
       if (this._dangerResolve) {
         this.closeModal();
