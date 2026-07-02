@@ -2,6 +2,11 @@
 
 ## 2026-07-03
 
+### fix: toggle_pure_mode 同步更新运行时配置
+
+- `app/services/engine.py`：`toggle_pure_mode` 方法新增 `_runtime_config` 同步更新，切换纯净模式时同步更新 `_runtime_config.browser.pure_mode`
+- `tests/test_services/test_engine.py`：新增 `test_toggle_pure_mode_syncs_runtime_config` 测试用例，验证切换纯净模式后 `_runtime_config.browser.pure_mode` 正确同步
+
 ### fix: websocket_manager zip 启用 strict 检测连接/队列长度不一致
 
 - `app/services/websocket_manager.py`：第 93 行 `zip(connections, results, strict=False)` 改为 `strict=True`，connections 与 results 长度不一致时抛出 ValueError
