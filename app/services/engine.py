@@ -257,6 +257,9 @@ class LoginBridge:
         # 防止去重命中时重复注册回调
         with self._futures_lock:
             if handle.future in self._registered_futures:
+                msg = "登录任务已在执行中，请稍后再试"
+                if on_complete is not None:
+                    on_complete(False, msg)
                 return False
 
         def _on_done(f: Future) -> None:
