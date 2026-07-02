@@ -60,6 +60,8 @@ _download_uv() {
     local github_url="https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/${filename}"
 
     mkdir -p "$UV_DIR"
+    # 清理旧二进制与版本标记，避免残留文件干扰
+    rm -f "$UV_DIR/uv" "$UV_DIR/version.txt"
     local archive="$UV_DIR/uv.tar.gz"
     local success=0
 
