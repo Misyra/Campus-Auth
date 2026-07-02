@@ -157,13 +157,13 @@ cd "$PROJECT_ROOT"
 echo "[1/2] 安装依赖..."
 "$UV_CMD" sync
 
-# 检查 --install-only 参数
-for arg in "$@"; do
-    if [[ "$arg" == "--install-only" ]]; then
-        echo "[OK] 环境准备完成"
-        exit 0
+# 过滤 --install-only 参数，不传递给 main.py
+EXTRA_ARGS=("$@")
+for i in "${!EXTRA_ARGS[@]}"; do
+    if [[ "${EXTRA_ARGS[$i]}" == "--install-only" ]]; then
+        unset 'EXTRA_ARGS[$i]'
     fi
 done
 
 echo "[2/2] 启动 Campus-Auth..."
-exec "$UV_CMD" run main.py --browser "$@"
+exec "$UV_CMD" run main.py --browser "${EXTRA_ARGS[@]}"
