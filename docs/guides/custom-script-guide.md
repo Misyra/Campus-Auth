@@ -214,5 +214,5 @@ curl http://localhost:50721/api/logs
 ## 相关文档
 
 - [任务编写指南](task-writing-guide.md) — 浏览器任务 JSON 编写指南
-- [API 文档](api-doc.md) — 后端 API 接口说明
-- [开发文档](task-manual.md) — 系统架构和内部实现
+- [API 文档](../dev/api-reference.md) — 后端 API 接口说明
+- [开发文档](../dev/architecture.md) — 系统架构和内部实现

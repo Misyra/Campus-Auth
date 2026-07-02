@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Any
 
 from app.utils.env import build_login_template_vars
 from app.utils.logging import get_logger
-from app.services.login_orchestrator import _runtime_config_to_worker_dict
+from app.services.login_orchestrator import runtime_config_to_worker_dict
 
 if TYPE_CHECKING:
     from starlette.requests import Request
@@ -135,7 +135,7 @@ class DebugSessionManager:
 
         # 构建 Worker 启动数据
         worker_data = {
-            "config": _runtime_config_to_worker_dict(runtime_config),
+            "config": runtime_config_to_worker_dict(runtime_config),
             "task_url": url if url else "",
             "task_data": task.to_dict(),
             "template_vars": template_vars,

@@ -135,7 +135,6 @@ class ServiceContainer:
                 dashboard_sink.write,
                 format="{message}",
                 level="DEBUG",
-                filter=lambda record: record["extra"].get("source") != "frontend",
             )
             self.engine.set_dashboard_sink(dashboard_sink)  # for list_logs
             self.ws_manager.set_dashboard_sink(dashboard_sink)  # for broadcast

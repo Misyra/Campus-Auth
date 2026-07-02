@@ -34,9 +34,9 @@ def validate_env_config(config: RuntimeConfig) -> tuple[bool, str]:
     if not creds.auth_url:
         return False, "缺少认证地址"
 
-    from app.schemas import _URL_PATTERN
+    from app.constants import URL_PATTERN
 
-    if not _URL_PATTERN.match(creds.auth_url):
+    if not URL_PATTERN.match(creds.auth_url):
         return False, "认证地址必须以 http:// 或 https:// 开头"
 
     from app.utils.crypto import has_decryption_error

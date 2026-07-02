@@ -34,7 +34,7 @@ uv run playwright install chromium
    git checkout -b feat/my-feature
    ```
 
-2. **编写代码**：遵循 [代码与提交规范](docs/dev/code-style-guide.md)
+2. **编写代码**：遵循 [代码与提交规范](code-style-guide.md)
 
 3. **运行测试**：确保所有测试通过
    ```bash
@@ -50,7 +50,7 @@ uv run playwright install chromium
 
 ## 代码规范
 
-详见 [docs/dev/code-style-guide.md](docs/dev/code-style-guide.md)，涵盖：
+详见 [code-style-guide.md](code-style-guide.md)，涵盖：
 
 - 代码风格（Ruff 自动格式化）
 - 注释与文档规范（中文）

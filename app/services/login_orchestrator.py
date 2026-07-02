@@ -30,7 +30,7 @@ logger = get_logger("login_orchestrator", source="backend")
 LoginSource = Literal["auto", "manual", "login_once", "browser"]
 
 
-def _runtime_config_to_worker_dict(config: RuntimeConfig) -> dict:
+def runtime_config_to_worker_dict(config: RuntimeConfig) -> dict:
     """将 RuntimeConfig 转换为 Worker 进程期望的 dict 格式。
 
     Worker 是独立进程，通过 dict 通信。
@@ -301,7 +301,7 @@ class LoginOrchestrator:
         from app.workers.playwright_worker import CMD_LOGIN
 
         # Build compatible dict for Worker process (Worker is separate process, communicates via dict)
-        worker_config = _runtime_config_to_worker_dict(config)
+        worker_config = runtime_config_to_worker_dict(config)
         worker_timeout = timeout if timeout is not None else resolve_worker_timeout(config)  # F09 单一来源
 
         def _run() -> tuple[bool, str]:

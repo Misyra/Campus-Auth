@@ -1,6 +1,6 @@
 # Campus-Auth 开发文档
 
-本文档面向开发者，详细描述 Campus-Auth 的内部架构、执行流程、API 接口及配置参考。如需编写任务 JSON，请参阅 [任务编写指南](task-writing-guide.md)。
+本文档面向开发者，详细描述 Campus-Auth 的内部架构、执行流程、API 接口及配置参考。如需编写任务 JSON，请参阅 [任务编写指南](../guides/task-writing-guide.md)。
 
 ## 目录
 
@@ -320,7 +320,7 @@ window.chrome = {
 
 ### 成功判断
 
-系统统一使用网络连通性检测判断任务成功与否（详见 [任务编写指南](task-writing-guide.md)）。原有 `success_conditions` 字段仅保留兼容性，不再参与判断。
+系统统一使用网络连通性检测判断任务成功与否（详见 [任务编写指南](../guides/task-writing-guide.md)）。原有 `success_conditions` 字段仅保留兼容性，不再参与判断。
 
 ### 危险步骤检测
 
@@ -366,7 +366,7 @@ tasks/
 
 ## API 参考
 
-详见 [api-doc.md](api-doc.md)。
+详见 [API 接口参考](api-reference.md)。
 
 ---
 
