@@ -1422,6 +1422,44 @@ class TestRunManualLogin:
 
 
 # =====================================================================
+# cancel_login
+# =====================================================================
+
+
+class TestCancelLogin:
+    def test_cancel_login_success(self, engine_factory):
+        """取消成功时返回 (True, msg)，不记录警告日志。"""
+        svc = engine_factory(raw=True)
+        svc._login_bridge = MagicMock()
+        svc._login_bridge.cancel_login.return_value = (True, "登录已取消")
+        with patch("app.services.engine.logger") as mock_logger:
+            ok, msg = svc.cancel_login()
+        assert ok is True
+        assert msg == "登录已取消"
+        mock_logger.warning.assert_not_called()
+
+    def test_cancel_login_failure(self, engine_factory):
+        """取消失败时返回 (False, msg)，并记录警告日志。"""
+        svc = engine_factory(raw=True)
+        svc._login_bridge = MagicMock()
+        svc._login_bridge.cancel_login.return_value = (False, "登录服务未初始化")
+        with patch("app.services.engine.logger") as mock_logger:
+            ok, msg = svc.cancel_login()
+        assert ok is False
+        assert msg == "登录服务未初始化"
+        mock_logger.warning.assert_called_once()
+        assert "取消登录失败" in mock_logger.warning.call_args[0][0]
+
+    def test_cancel_login_delegates_to_bridge(self, engine_factory):
+        """cancel_login 应委托给 _login_bridge.cancel_login()。"""
+        svc = engine_factory(raw=True)
+        svc._login_bridge = MagicMock()
+        svc._login_bridge.cancel_login.return_value = (True, "ok")
+        svc.cancel_login()
+        svc._login_bridge.cancel_login.assert_called_once()
+
+
+# =====================================================================
 # test_network
 # =====================================================================
 
