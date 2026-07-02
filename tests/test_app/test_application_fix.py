@@ -10,6 +10,14 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def _mock_decision_executor_shutdown(monkeypatch):
+    """避免 container.shutdown() 真正关闭模块级 _decision_executor。"""
+    monkeypatch.setattr(
+        "app.network.decision.shutdown_decision_executor", MagicMock()
+    )
+
+
 # ── 问题 1: except NameError 作为流程控制 ──
 
 

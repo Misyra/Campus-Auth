@@ -20,6 +20,14 @@ def project_root(tmp_path: Path) -> Path:
     return tmp_path
 
 
+@pytest.fixture(autouse=True)
+def _mock_decision_executor_shutdown(monkeypatch):
+    """避免 container.shutdown() 真正关闭模块级 _decision_executor。"""
+    monkeypatch.setattr(
+        "app.network.decision.shutdown_decision_executor", MagicMock()
+    )
+
+
 @pytest.fixture
 def mock_classes():
     """返回所有被 patch 的服务类 mock。"""

@@ -175,6 +175,11 @@ class ServiceContainer:
         # BUG-013 修复：先关闭引擎（停止提交任务），再关闭线程池
         self.engine.shutdown()
 
+        # 关闭网络决策层线程池（与 probes.py 内层探测池分离）
+        from app.network.decision import shutdown_decision_executor
+
+        shutdown_decision_executor(wait=True)
+
         self.task_executor.shutdown(wait=True, timeout=10)
 
         # 复用 stop_web_services — 消除重复代码并修复 _ws_drain_task = None 遗漏 bug
