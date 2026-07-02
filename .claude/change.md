@@ -2,6 +2,14 @@
 
 ## 2026-07-03
 
+### fix: WS 连接正常时跳过 HTTP 状态轮询
+
+- `frontend/js/methods/lifecycle.js`：状态轮询定时器中新增 WebSocket 连接状态检查，当 `ws.readyState === WebSocket.OPEN` 时跳过 HTTP `fetchStatus()` 调用，避免 WS 已实时推送状态时的冗余轮询
+
+### fix: WebSocket 关闭时清理 ping 定时器
+
+- `frontend/js/methods/lifecycle.js`：`this.ws.onclose` 回调中新增 ping 定时器清理逻辑，WebSocket 断开时清除 `_wsPingTimer` 并从 `timers` 数组移除，避免无意义的心跳发送尝试
+
 ### fix: 优化容器 shutdown 顺序，避免回调触及已关闭组件
 
 - `app/services/task_executor.py`：新增 `wait_for_callbacks()` 异步方法，等待所有 `_running_tasks` 中的 pending futures 完成
