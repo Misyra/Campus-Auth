@@ -52,7 +52,7 @@ class TestDecisionExecutorNoStarvation:
         # 通过检查它引用的 pool 对象来验证
         source = decision_mod.is_network_available.__code__.co_names
         # 确认不直接引用 probes.executor
-        assert "executor" not in source or "_decision_executor" in source
+        assert "_decision_executor" in source
 
     def test_inner_probe_uses_own_pool(self, monkeypatch):
         """内层探测函数使用 probes.executor 而非 decision executor。
@@ -164,6 +164,8 @@ class TestShutdownDecisionExecutor:
         tmp_executor.submit(slow_task)
 
         decision_mod.shutdown_decision_executor(wait=True)
+
+        assert completed.is_set()
 
         # shutdown 后不能再提交新任务
         with pytest.raises(RuntimeError, match="cannot schedule new futures"):
