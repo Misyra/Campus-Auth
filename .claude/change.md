@@ -19,6 +19,11 @@
 - `app/services/engine.py`：LoginBridge.submit_login 去重分支（handle.future in _registered_futures）补调 on_complete(False, msg)
 - `tests/test_services/test_engine.py`：新增 TestLoginBridgeDuplicateCallback 测试类（2 个用例）
 
+### fix: IPv4 解析增加 0-255 范围校验
+
+- `app/network/parsers.py`：`parse_ping_targets()` 中 IPv4 检测逻辑增加段值 0-255 范围校验，避免如 `999.999.999.999` 被错误识别为 IPv4 地址
+- `tests/test_network/test_parsers.py`：新增 TestParsePingTargetsIPv4Range 测试类（11 个用例），覆盖边界值、超范围、混合输入等场景
+
 ## 2026-07-02
 
 ### docs: 文档目录重构与索引补全
