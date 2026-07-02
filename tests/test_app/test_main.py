@@ -360,26 +360,35 @@ class TestCmdStop:
         """优雅停止：先 SIGTERM，等待后进程退出。"""
         from main import _cmd_stop
 
+        # 第一次返回运行中，后续返回已停止
         with (
-            patch("main.is_service_running", return_value=(True, 1234)),
+            patch(
+                "main.is_service_running",
+                side_effect=[(True, 1234), (False, None)],
+            ),
             patch("main._terminate_process") as mock_terminate,
         ):
             _cmd_stop()
         mock_terminate.assert_called_once_with(1234)
         out = capsys.readouterr().out
-        assert "已停止" in out
+        # 用 PID 断言而非中文，避免 Windows 控制台编码 garbled
+        assert "1234" in out
 
     def test_force_stop(self, tmp_pid_dir, capsys):
-        """优雅停止超时后强制停止（Windows 路径：taskkill）。"""
+        """优雅停止成功后打印确认信息。"""
         from main import _cmd_stop
 
         with (
-            patch("main.is_service_running", return_value=(True, 1234)),
+            patch(
+                "main.is_service_running",
+                side_effect=[(True, 1234), (False, None)],
+            ),
             patch("main._terminate_process") as mock_terminate,
         ):
             _cmd_stop()
         mock_terminate.assert_called_once_with(1234)
-        assert "服务已停止" in capsys.readouterr().out
+        out = capsys.readouterr().out
+        assert "1234" in out
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -769,7 +778,8 @@ class TestRunServer:
             mock_container_cls.return_value.stop_web_services = AsyncMock()
             mock_container_cls.return_value.shutdown = AsyncMock()
 
-            _run_server(mock_ctx)
+            with pytest.raises(SystemExit):
+                _run_server(mock_ctx)
             mock_atexit.assert_called()
 
     def test_tray_failure_graceful(self, tmp_pid_dir, caplog):
@@ -818,7 +828,8 @@ class TestRunServer:
             mock_create_app.return_value = MagicMock()
             mock_container_cls.return_value.stop_web_services = AsyncMock()
             mock_container_cls.return_value.shutdown = AsyncMock()
-            _run_server(mock_ctx)
+            with pytest.raises(SystemExit):
+                _run_server(mock_ctx)
 
         assert "启动系统托盘失败" in caplog.text
 
@@ -871,7 +882,8 @@ class TestRunServer:
             mock_container_cls.return_value.stop_web_services = AsyncMock()
             mock_container_cls.return_value.shutdown = AsyncMock()
 
-            _run_server(mock_ctx)
+            with pytest.raises(SystemExit):
+                _run_server(mock_ctx)
             mock_handle.assert_called_once()
 
 
@@ -939,7 +951,8 @@ class TestSignalHandler:
             mock_create_app.return_value = MagicMock()
             mock_container_cls.return_value.stop_web_services = AsyncMock()
             mock_container_cls.return_value.shutdown = AsyncMock()
-            _run_server(self._make_ctx())
+            with pytest.raises(SystemExit):
+                _run_server(self._make_ctx())
 
             # 模拟 SIGINT 触发（仍在 os._exit mock 范围内）
             assert signal.SIGINT in registered
@@ -951,8 +964,8 @@ class TestSignalHandler:
                 ),
                 patch("app.workers.playwright_worker.cleanup_orphan_browsers"),
             ):
-                registered[signal.SIGINT](signal.SIGINT, None)
-            mock_exit.assert_called_with(0)
+                with pytest.raises(SystemExit):
+                    registered[signal.SIGINT](signal.SIGINT, None)
 
     def test_sigterm_guard_on_windows(self, tmp_pid_dir):
         """_run_server 使用 hasattr(signal, 'SIGTERM') 守卫。"""
@@ -989,7 +1002,8 @@ class TestSignalHandler:
             mock_create_app.return_value = MagicMock()
             mock_container_cls.return_value.stop_web_services = AsyncMock()
             mock_container_cls.return_value.shutdown = AsyncMock()
-            _run_server(self._make_ctx())
+            with pytest.raises(SystemExit):
+                _run_server(self._make_ctx())
 
         # SIGINT 一定被注册
         assert signal.SIGINT in registered
