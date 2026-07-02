@@ -2,6 +2,11 @@
 
 ## 2026-07-03
 
+### fix: Worker stop 在队列满时仍等待消费者线程 join
+
+- `app/workers/playwright_worker.py`：移除 `stop()` 方法中 `except queue.Full` 块末尾的 `return` 语句，确保无论队列是否满都会调用 `_consumer_thread.join()` 等待消费者线程退出
+- `tests/test_workers/test_playwright_worker.py`：新增 `TestStopJoinsOnQueueFull` 测试类（5 个用例：队列满仍 join / loop.stop 后仍 join / 循环未运行仍 join / 无循环仍 join / warning 日志验证）
+
 ### fix: 孤儿浏览器清理增加父进程存活校验，避免误杀
 
 - `app/workers/playwright_worker.py`：新增 `_is_orphan()` 函数，通过 `proc.parent()` 检查父进程是否存活；`cleanup_orphan_browsers()` 条件追加 `_is_orphan(proc)` 判断，仅在父进程已退出时才终止浏览器进程
@@ -53,6 +58,11 @@
 
 - `app/services/engine.py`：LoginBridge.submit_login 去重分支（handle.future in _registered_futures）补调 on_complete(False, msg)
 - `tests/test_services/test_engine.py`：新增 TestLoginBridgeDuplicateCallback 测试类（2 个用例）
+
+### fix: script_runner 跨平台解释器名解析改用 os.path 与正则
+
+- `app/workers/script_runner.py`：移除 `import ntpath`，新增 `import re`；新增 `_EXEC_NAME_RE` 正则（匹配字母前缀 + 可选版本号）和 `_get_interpreter_name()`、`_get_temp_extension()` 辅助函数；`_build_cmd()` 和 `_content_temp_file()` 中的 `ntpath.splitext(ntpath.basename(...))` 替换为 `os.path` + 正则提取
+- `tests/test_services/test_script_runner.py`：新增 TestExecNameRe（14 个用例）、TestGetInterpreterName（8 个用例）、TestGetTempExtension（7 个用例）
 
 ### fix: IPv4 解析增加 0-255 范围校验
 
