@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import atexit
 import socket
 import ssl
 import threading
@@ -17,7 +16,9 @@ from app.utils.logging import get_logger
 logger = get_logger("network_probes", source="backend")
 
 executor = ThreadPoolExecutor(max_workers=8, thread_name_prefix="net")
-atexit.register(executor.shutdown, wait=False, cancel_futures=True)
+_shutdown_event = threading.Event()
+
+# atexit.register(executor.shutdown, wait=False, cancel_futures=True)  # 改由 container.py 调用 shutdown_probes()
 _proxy_lock = threading.Lock()
 _block_proxy = True  # 默认屏蔽系统代理，避免代理影响网络检测
 
@@ -62,7 +63,18 @@ def _close_probe_client() -> None:
             _probe_client = None
 
 
-atexit.register(_close_probe_client)
+def shutdown_probes() -> None:
+    """关闭探测模块：设置停止标志、关闭 HTTP 客户端、等待 in-flight 请求完成。
+
+    由 ServiceContainer.shutdown() 在应用关闭时调用，
+    替代原来的 atexit 注册，确保关闭顺序可控。
+    """
+    _shutdown_event.set()
+    _close_probe_client()
+    executor.shutdown(wait=True, cancel_futures=True)
+
+
+# atexit.register(_close_probe_client)  # 改由 container.py 调用 shutdown_probes()
 
 
 def set_block_proxy(enabled: bool) -> None:
@@ -88,13 +100,13 @@ def is_block_proxy() -> bool:
 
 
 _VIRTUAL_NIC_PREFIXES = (
-    "docker",   # docker0, docker-*
-    "veth",     # veth pair (Docker/K8s)
-    "br-",      # bridge (Docker)
-    "vmnet",    # VMware
+    "docker",  # docker0, docker-*
+    "veth",  # veth pair (Docker/K8s)
+    "br-",  # bridge (Docker)
+    "vmnet",  # VMware
     "vboxnet",  # VirtualBox
-    "virbr",    # libvirt
-    "tap-",     # TAP (OpenVPN 等)
+    "virbr",  # libvirt
+    "tap-",  # TAP (OpenVPN 等)
 )
 
 
@@ -125,9 +137,12 @@ def is_network_available_socket(
     test_sites: Sequence[tuple[str, int]] | None = None,
     timeout: float = 1.5,
 ) -> bool:
+    if _shutdown_event.is_set():
+        return False
     if not test_sites:
         from app.constants import DEFAULT_NETWORK_TARGETS
         from app.network.parsers import parse_ping_targets
+
         test_sites = parse_ping_targets(DEFAULT_NETWORK_TARGETS)
     targets = test_sites
 
@@ -166,9 +181,12 @@ def is_network_available_url(
 
     返回 True 表示至少有一个检测 URL 返回了预期内容（网络正常）。
     """
+    if _shutdown_event.is_set():
+        return False
     if url_checks is None:
         from app.constants import DEFAULT_URL_CHECK_URLS
         from app.network.parsers import parse_url_checks
+
         url_checks = parse_url_checks(DEFAULT_URL_CHECK_URLS)
     if not url_checks:
         return True
@@ -220,8 +238,11 @@ def is_network_available_http(
     captive portal URL（含 generate_204/connectivitycheck）：仅 204 表示正常，
     200 为门户劫持。普通 URL：200<=status<300 表示连通。
     """
+    if _shutdown_event.is_set():
+        return False
     if not test_urls:
         from app.constants import DEFAULT_HTTP_TARGETS
+
         test_urls = DEFAULT_HTTP_TARGETS.split(",")
     urls = list(test_urls)
     if len(urls) == 0:
