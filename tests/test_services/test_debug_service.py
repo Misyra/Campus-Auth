@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.services.debug_service import DebugSessionManager
+from app.services.debug_service import DebugSessionManager, _rm
 from app.services.debug_session import DebugSession
 from app.workers.playwright_worker import WorkerResponse
 
@@ -403,3 +403,63 @@ class TestStopTempDirCleanupError:
             result = await manager.stop()
 
         assert result["running"] is False
+
+
+# =====================================================================
+# _rm: Windows 文件占用重试删除
+# =====================================================================
+
+
+class TestRmRetryDelete:
+    """覆盖 _rm 函数的重试删除逻辑。"""
+
+    def test_rm_success_on_first_try(self, tmp_path):
+        """文件可正常删除时直接成功。"""
+        f = tmp_path / "test.txt"
+        f.write_text("data")
+
+        _rm(f)
+        assert not f.exists()
+
+    def test_rm_success_after_permission_errors(self, tmp_path):
+        """前几次 PermissionError 后成功删除。"""
+        f = tmp_path / "test.txt"
+        f.write_text("data")
+
+        call_count = 0
+
+        original_unlink = f.unlink
+
+        def _mock_unlink(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count < 3:
+                raise PermissionError("文件被占用")
+            # 第三次调用时真正删除
+            return original_unlink(*args, **kwargs)
+
+        with patch.object(type(f), "unlink", _mock_unlink):
+            _rm(f)
+
+        assert call_count == 3
+
+    def test_rm_raises_after_all_retries_exhausted(self, tmp_path):
+        """5 次重试全部失败后抛出 OSError。"""
+        f = tmp_path / "test.txt"
+        f.write_text("data")
+
+        with (
+            patch("pathlib.Path.unlink", side_effect=PermissionError("占用")),
+            pytest.raises(OSError, match="无法删除被占用文件"),
+        ):
+            _rm(f)
+
+    def test_rm_file_not_found_is_not_retried(self, tmp_path):
+        """FileNotFoundError 不触发重试，直接抛出。"""
+        f = tmp_path / "nonexistent.txt"
+
+        with (
+            patch("pathlib.Path.unlink", side_effect=FileNotFoundError),
+            pytest.raises(FileNotFoundError),
+        ):
+            _rm(f)

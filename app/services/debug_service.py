@@ -30,6 +30,17 @@ from .debug_session import (
 debug_logger = get_logger("debug_manager", source="backend")
 
 
+def _rm(path: Path) -> None:
+    """删除文件，Windows 下文件被占用时自动重试。"""
+    for _ in range(5):
+        try:
+            path.unlink()
+            return
+        except PermissionError:
+            time.sleep(0.1)
+    raise OSError(f"无法删除被占用文件: {path}")
+
+
 class DebugSessionManager:
     """调试会话管理器 — 封装所有调试会话的状态和操作。"""
 
@@ -320,7 +331,9 @@ class DebugSessionManager:
             if self._temp_dir.exists():
                 for item in self._temp_dir.iterdir():
                     if item.is_file():
-                        item.unlink(missing_ok=True)
+                        _rm(item)
+        except FileNotFoundError:
+            pass
         except Exception:
             debug_logger.warning("调试临时目录清理失败: {}", self._temp_dir, exc_info=True)
         debug_logger.info("停止调试会话成功")
