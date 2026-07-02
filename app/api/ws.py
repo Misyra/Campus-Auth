@@ -40,6 +40,8 @@ async def websocket_logs_handler(websocket, ws_manager):
                         level_name = str(d.get("level", "INFO")).upper()
                         log_func = getattr(_fe_logger, level_name.lower(), _fe_logger.info)
                         log_func("[{}] {}", scope, message_text)
+                else:
+                    ws_logger.warning("收到未知 WebSocket 消息类型: {}", msg_type)
             except json.JSONDecodeError as e:
                 ws_logger.warning("WebSocket 消息解析失败: {}", e, exc_info=True)
             except Exception as e:
