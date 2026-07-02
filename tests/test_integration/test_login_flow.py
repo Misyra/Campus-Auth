@@ -124,7 +124,6 @@ class TestFullLoginSequence:
                 username="testuser", password="testpass", auth_url="http://auth.example.com",
             ),
         )
-        svc._orchestrator.validate.return_value = None
         handle = MagicMock()
         handle.rejected_reason = None
         mock_future = Future()
@@ -152,7 +151,6 @@ class TestFullLoginSequence:
                 username="testuser", password="testpass", auth_url="http://auth.example.com",
             ),
         )
-        svc._orchestrator.validate.return_value = None
         handle = MagicMock()
         handle.rejected_reason = None
         handle.future = None  # 去重命中
@@ -171,7 +169,10 @@ class TestFullLoginSequence:
         svc._runtime_config = RuntimeConfig(
             credentials=LoginCredentials(username="u"),  # 缺少 password 和 auth_url
         )
-        svc._orchestrator.validate.return_value = "登录配置不完整（请先设置认证地址、用户名和密码）"
+        # 校验失败由 orchestrator.submit 内部处理，返回 rejected handle
+        handle = MagicMock()
+        handle.rejected_reason = "登录配置不完整（请先设置认证地址、用户名和密码）"
+        svc._orchestrator.submit.return_value = handle
 
         cmd = EngineCommand(
             type=EngineCmdType.LOGIN, response_event=threading.Event()
