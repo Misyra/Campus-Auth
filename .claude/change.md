@@ -2,6 +2,11 @@
 
 ## 2026-07-03
 
+### fix: Windows SSID 编码回退链增加 UTF-8/UTF-16 优先尝试
+
+- `app/network/detect.py`：`_detect_ssid_windows()` 编码回退链重构为 UTF-8 → UTF-16-LE → locale 编码 → GBK，增加编码去重和 `isprintable()` 解码校验（防止 UTF-16-LE 误解码 GBK 字节产生不可打印字符）；`locale.getpreferredencoding()` 移入函数内部便于测试 mock
+- `tests/test_network/test_detect.py`：新增 `TestDetectSsidWindowsEncodingFallback` 测试类，覆盖 UTF-8/UTF-16-LE/GBK/locale 编码、回退链顺序、null 字节清理、hex 编码 SSID、空 SSID 等场景
+
 ### fix: macOS 14+ SSID 检测增加 system_profiler 回退
 
 - `app/network/detect.py`：新增 `_get_ssid_macos_modern()` 函数，使用 `system_profiler SPAirPortDataType -json` 获取 SSID；`_detect_ssid_darwin()` 回退顺序调整为 airport → networksetup → system_profiler
@@ -45,6 +50,11 @@
 - `app/network/probes.py`：新增 `_shutdown_event`（threading.Event）和 `shutdown_probes()` 函数，替代原来的 `atexit.register` 注册；三个探测函数（`is_network_available_socket`、`is_network_available_url`、`is_network_available_http`）增加 shutdown guard，关闭后拒绝新任务
 - `app/container.py`：`ServiceContainer.shutdown()` 中在 engine 关闭后调用 `shutdown_probes()`，确保关闭顺序可控
 - `tests/test_network/test_probes.py`：新增 11 个测试（shutdown_probes 可调用性、event 设置、in-flight 等待、新任务拒绝、客户端关闭、三个探测函数 guard 行为、atexit 移除验证）
+
+### fix: Linux 网关解析增加字段长度与 IPv4 有效性校验
+
+- `app/network/detect.py`：新增 `_hex_to_ipv4()` 辅助函数和 `_parse_linux_gateway()` 解析函数，增加字段数（>=3）、字段长度（>=8）、目标地址（`00000000`）和 `_is_valid_ipv4()` 四重校验；`_detect_gateway_linux()` 重构为调用 `_parse_linux_gateway()`
+- `tests/test_network/test_detect.py`：新增 TestHexToIpv4（4 个用例）和 TestParseLinuxGateway（9 个用例）
 
 ## 2026-07-02
 
