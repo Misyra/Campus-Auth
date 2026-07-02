@@ -455,6 +455,7 @@ class PlaywrightWorker:
             except Exception as e:
                 logger.warning("关闭旧调试页面失败: {}", e)
             self._debug_page = None
+        self._page = None
 
     async def _handle_debug_start(self, data: dict) -> WorkerResponse:
         """启动调试会话。
