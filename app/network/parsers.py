@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from app.utils.logging import get_logger
+
+logger = get_logger("parsers")
+
 
 def parse_url_checks(raw: str | list | None) -> list[tuple[str, str]]:
     """解析网址响应检测 URL 列表，返回 [(url, expected_text), ...]。
@@ -52,8 +56,45 @@ def parse_url_checks(raw: str | list | None) -> list[tuple[str, str]]:
     return []
 
 
+def _parse_single_host_port(item: str) -> tuple[str, int]:
+    """解析单个 'host:port' 字符串为 (host, port) 元组。
+
+    Args:
+        item: 格式为 "host:port" 的字符串
+
+    Returns:
+        解析后的 (host, port) 元组
+
+    Raises:
+        ValueError: 如果格式无效（缺少端口、端口非数字、端口超范围、主机名为空）
+    """
+    if ":" not in item:
+        raise ValueError(f"格式错误 '{item}'：缺少端口号（请使用 host:port 格式）")
+
+    host_part, port_part = item.rsplit(":", 1)
+    host = host_part.strip()
+    # 剥离 IPv6 方括号：[::1] → ::1
+    if host.startswith("[") and host.endswith("]"):
+        host = host[1:-1]
+    port_str = port_part.strip()
+
+    if not host:
+        raise ValueError(f"'{item}' 中主机名为空")
+
+    if not port_str.isdigit():
+        raise ValueError(f"'{item}' 中的端口 '{port_part}' 不是数字")
+
+    port = int(port_str)
+    if not (1 <= port <= 65535):
+        raise ValueError(f"'{item}' 中的端口 {port} 超出范围（1-65535）")
+
+    return (host, port)
+
+
 def parse_host_port(targets: list[str]) -> list[tuple[str, int]]:
     """解析 'host:port' 字符串列表为 (host, port) 元组列表。
+
+    跳过格式无效的条目并记录警告，不会因单条错误丢弃全部目标。
 
     Args:
         targets: 格式为 "host:port" 的字符串列表，
@@ -61,38 +102,13 @@ def parse_host_port(targets: list[str]) -> list[tuple[str, int]]:
 
     Returns:
         解析后的 (host, port) 元组列表。输入为空列表时返回空列表。
-
-    Raises:
-        ValueError: 如果输入格式无效：
-            - 缺少冒号（没有指定端口）
-            - 端口不是数字
-            - 端口不在 1-65535 范围内
-            - 主机名为空
     """
     result: list[tuple[str, int]] = []
     for item in targets:
-        if ":" not in item:
-            raise ValueError(f"格式错误 '{item}'：缺少端口号（请使用 host:port 格式）")
-
-        host_part, port_part = item.rsplit(":", 1)
-        host = host_part.strip()
-        # 剥离 IPv6 方括号：[::1] → ::1
-        if host.startswith("[") and host.endswith("]"):
-            host = host[1:-1]
-        port_str = port_part.strip()
-
-        if not host:
-            raise ValueError(f"'{item}' 中主机名为空")
-
-        if not port_str.isdigit():
-            raise ValueError(f"'{item}' 中的端口 '{port_part}' 不是数字")
-
-        port = int(port_str)
-        if not (1 <= port <= 65535):
-            raise ValueError(f"'{item}' 中的端口 {port} 超出范围（1-65535）")
-
-        result.append((host, port))
-
+        try:
+            result.append(_parse_single_host_port(item))
+        except ValueError as exc:
+            logger.warning("忽略无效探测目标 '{}': {}", item, exc)
     return result
 
 

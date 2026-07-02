@@ -311,25 +311,21 @@ class TestParseHostPort:
         result = parse_host_port(["[::1]:8080"])
         assert result == [("::1", 8080)]
 
-    def test_missing_port(self):
-        with pytest.raises(ValueError):
-            parse_host_port(["8.8.8.8"])
+    def test_missing_port_skipped(self):
+        assert parse_host_port(["8.8.8.8"]) == []
 
-    def test_invalid_port(self):
-        with pytest.raises(ValueError):
-            parse_host_port(["8.8.8.8:99999"])
+    def test_invalid_port_skipped(self):
+        assert parse_host_port(["8.8.8.8:99999"]) == []
 
-    def test_non_numeric_port(self):
-        with pytest.raises(ValueError):
-            parse_host_port(["8.8.8.8:abc"])
+    def test_non_numeric_port_skipped(self):
+        assert parse_host_port(["8.8.8.8:abc"]) == []
 
     def test_hostname(self):
         result = parse_host_port(["www.baidu.com:443"])
         assert result == [("www.baidu.com", 443)]
 
-    def test_empty_host(self):
-        with pytest.raises(ValueError):
-            parse_host_port([":8080"])
+    def test_empty_host_skipped(self):
+        assert parse_host_port([":8080"]) == []
 
 
 # =====================================================================
