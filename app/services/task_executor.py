@@ -7,6 +7,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import sys
 import threading
 import time
@@ -29,7 +31,9 @@ class BoundedExecutor:
     队列满时 submit 抛出 RuntimeError，防止任务堆积。
     """
 
-    def __init__(self, max_workers: int, queue_size: int, thread_name_prefix: str = "task-exec") -> None:
+    def __init__(
+        self, max_workers: int, queue_size: int, thread_name_prefix: str = "task-exec"
+    ) -> None:
         self._executor = ThreadPoolExecutor(
             max_workers=max_workers,
             thread_name_prefix=thread_name_prefix,
@@ -117,7 +121,9 @@ class TaskExecutor:
         self._task_pool_lock = threading.Lock()
 
         # 登录专用执行器（max_workers=1, queue_size=1 — 信号量天然保证单并发）
-        self._login_executor = BoundedExecutor(max_workers=1, queue_size=1, thread_name_prefix="login-exec")
+        self._login_executor = BoundedExecutor(
+            max_workers=1, queue_size=1, thread_name_prefix="login-exec"
+        )
 
         # 定时任务去重
         self._running_tasks: dict[str, Future] = {}
@@ -309,9 +315,12 @@ class TaskExecutor:
         if not task or task.get("type") != "browser":
             return False, f"浏览器任务不存在: {task_id}"
 
-        config = self._get_runtime_config() if self._get_runtime_config else RuntimeConfig()
+        config = (
+            self._get_runtime_config() if self._get_runtime_config else RuntimeConfig()
+        )
         handle = self._login_orchestrator.submit(
-            source="browser", config=config,
+            source="browser",
+            config=config,
             timeout=timeout,
         )
 
@@ -333,7 +342,11 @@ class TaskExecutor:
         # 如果没有指定 shell，使用全局配置或默认值
         if not shell_path:
             try:
-                config = self._get_runtime_config() if self._get_runtime_config else RuntimeConfig()
+                config = (
+                    self._get_runtime_config()
+                    if self._get_runtime_config
+                    else RuntimeConfig()
+                )
                 shell_path = config.app_settings.shell_path
             except Exception:
                 logger.warning("获取 shell_path 失败，使用默认值", exc_info=True)
@@ -378,6 +391,34 @@ class TaskExecutor:
         return self._registry.get_script_path(script_id)
 
     # ── 生命周期 ──
+
+    async def wait_for_callbacks(self, timeout: float = 10) -> None:
+        """等待所有进行中的任务完成回调。
+
+        在 engine.shutdown() 之后、task_executor.shutdown() 之前调用，
+        确保 in-flight 任务的 done 回调在关闭下游服务之前执行完毕，
+        避免回调触及已关闭的组件。
+
+        Args:
+            timeout: 最大等待时间（秒），超时后放弃等待。
+        """
+        with self._running_tasks_lock:
+            pending = [f for f in self._running_tasks.values() if not f.done()]
+
+        if not pending:
+            return
+
+        logger.debug("等待 {} 个进行中的任务回调完成", len(pending))
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + timeout
+
+        async def _wait_one(future: Future) -> None:
+            remaining = max(0.0, deadline - loop.time())
+            with contextlib.suppress(Exception):
+                await loop.run_in_executor(None, future.result, remaining)
+
+        await asyncio.gather(*[_wait_one(f) for f in pending])
+        logger.debug("所有任务回调已完成")
 
     def shutdown(self, wait: bool = True, timeout: float | None = None) -> None:
         """关闭线程池。"""

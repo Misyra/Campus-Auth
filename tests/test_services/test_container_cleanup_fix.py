@@ -47,7 +47,10 @@ def mock_container_deps():
 
 def _make_container(tmp_path: Path, mock_container_deps: dict):
     """创建一个已 mock 依赖的 ServiceContainer 实例。"""
-    return ServiceContainer(tmp_path)
+    c = ServiceContainer(tmp_path)
+    # wait_for_callbacks 是异步方法，mock executor 需要返回协程
+    c.task_executor.wait_for_callbacks = AsyncMock()
+    return c
 
 
 class TestSuppressExceptionFix:
