@@ -4033,3 +4033,20 @@
   - 服务层与任务层清理（11 tasks）— 删除死方法、ConfigBuilder 改函数
   - 工具层与核心层清理（10 tasks）— 删除死常量、内联单调用函数
   - 前端清理（6 tasks）— 删除死函数、合并 data 工厂文件
+
+## 2026-07-03: 端口检测增加 IPv6 支持 (Task 2.10)
+
+- ： 增加  参数，自动检测 IPv6 地址（包含  时使用 AF_INET6）
+- ：新增 3 个 IPv6 相关测试（IPv6 localhost、自动检测、IPv4 默认 host）
+
+## 2026-07-03: 端口检测增加 IPv6 支持 (Task 2.10)
+
+- app/utils/process.py: is_local_port_in_use 增加 host 参数，自动检测 IPv6 地址（包含 : 时使用 AF_INET6）
+- tests/test_utils/test_process.py: 新增 3 个 IPv6 相关测试（IPv6 localhost、自动检测、IPv4 默认 host）
+
+
+## 2026-07-03: 修复端口检测超时与 IPv6 测试覆盖 (Task 2.10 审查修复)
+
+- app/utils/process.py: is_local_port_in_use 增加 s.settimeout(0.5) 防止异常网络环境下长时间阻塞
+- tests/test_utils/test_process.py: test_ipv6_localhost 改为绑定已用端口并断言 True，新增 test_ipv6_closed_port_returns_false 负向测试
+
