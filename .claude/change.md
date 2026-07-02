@@ -2,6 +2,11 @@
 
 ## 2026-07-03
 
+### fix: macOS 14+ SSID 检测增加 system_profiler 回退
+
+- `app/network/detect.py`：新增 `_get_ssid_macos_modern()` 函数，使用 `system_profiler SPAirPortDataType -json` 获取 SSID；`_detect_ssid_darwin()` 回退顺序调整为 airport → networksetup → system_profiler
+- `tests/test_network/test_detect.py`：新增 10 个测试用例（JSON 解析、错误处理、回退顺序验证）
+
 ### fix: 移除 decision.py 中 parse_host_port 的死代码 try/except
 
 - `app/network/decision.py`：移除 `is_network_available()` 中对 `parse_host_port()` 的 `try/except ValueError` 包裹，该异常已不会被抛出（`parse_host_port` 内部已处理无效条目）
