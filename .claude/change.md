@@ -2,6 +2,15 @@
 
 ## 2026-07-03
 
+### fix: 暂停时段判断支持分钟精度
+
+- `app/schemas.py`：`PauseSettings` 新增 `start_minute` / `end_minute` 字段（默认 0，范围 0-59）
+- `app/utils/time_utils.py`：新增 `_parse_pause_range()` 解析 HH:MM-HH:MM 格式字符串；`is_in_pause_period()` 签名改为 `(now, ranges)` 纯函数；新增 `is_pause_enabled()` 包装 PauseSettings 的便利函数
+- `app/network/decision.py`：`check_pause()` 改用 `is_pause_enabled()`
+- `app/utils/__init__.py`：导出 `is_pause_enabled`
+- `tests/test_utils/test_utils.py`：新增 `TestParsePauseRange`（4 个用例）、`TestIsPausePeriod`（10 个用例含分钟精度边界测试）、`TestIsPauseEnabled`（10 个用例含分钟委托验证）
+- `tests/test_core/test_network_probes.py`：mock 路径同步更新
+
 ### fix: Windows SSID 编码回退链增加 UTF-8/UTF-16 优先尝试
 
 - `app/network/detect.py`：`_detect_ssid_windows()` 编码回退链重构为 UTF-8 → UTF-16-LE → locale 编码 → GBK，增加编码去重和 `isprintable()` 解码校验（防止 UTF-16-LE 误解码 GBK 字节产生不可打印字符）；`locale.getpreferredencoding()` 移入函数内部便于测试 mock

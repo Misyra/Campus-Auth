@@ -58,7 +58,7 @@ from app.utils.platform import (
 
 # ── time_utils ──
 from app.schemas import PauseSettings
-from app.utils.time_utils import is_in_pause_period
+from app.utils.time_utils import _parse_pause_range, is_in_pause_period, is_pause_enabled
 
 # ── version ──
 from app.version import get_project_version
@@ -368,56 +368,152 @@ class TestGetProjectVersion:
 # =====================================================================
 
 
-class TestIsInPausePeriod:
-    def test_disabled(self):
-        pause = PauseSettings(enabled=False, start_hour=0, end_hour=6)
-        assert is_in_pause_period(pause) is False
+class TestParsePauseRange:
+    """_parse_pause_range 解析测试。"""
 
-    def test_same_hour_means_all_day(self):
-        pause = PauseSettings(enabled=True, start_hour=5, end_hour=5)
-        assert is_in_pause_period(pause) is True
+    def test_basic_range(self):
+        start, end = _parse_pause_range("08:00-18:00")
+        assert start == datetime.time(8, 0)
+        assert end == datetime.time(18, 0)
+
+    def test_with_minutes(self):
+        start, end = _parse_pause_range("08:15-09:30")
+        assert start == datetime.time(8, 15)
+        assert end == datetime.time(9, 30)
+
+    def test_cross_midnight(self):
+        start, end = _parse_pause_range("23:30-06:15")
+        assert start == datetime.time(23, 30)
+        assert end == datetime.time(6, 15)
+
+    def test_strips_whitespace(self):
+        start, end = _parse_pause_range(" 08:00 - 18:00 ")
+        assert start == datetime.time(8, 0)
+        assert end == datetime.time(18, 0)
+
+
+class TestIsInPausePeriod:
+    """is_in_pause_period(now, ranges) 纯函数测试。"""
 
     def test_normal_range_in_pause(self):
-        pause = PauseSettings(enabled=True, start_hour=0, end_hour=6)
-        mock_now = datetime.datetime(2025, 1, 1, 3, 0, 0)
-        with patch("app.utils.time_utils.datetime") as mock_dt:
-            mock_dt.datetime.now.return_value = mock_now
-            assert is_in_pause_period(pause) is True
+        now = datetime.datetime(2025, 1, 1, 3, 30, 0)
+        ranges = [(datetime.time(0, 0), datetime.time(6, 0))]
+        assert is_in_pause_period(now, ranges) is True
 
     def test_normal_range_outside_pause(self):
-        pause = PauseSettings(enabled=True, start_hour=0, end_hour=6)
-        mock_now = datetime.datetime(2025, 1, 1, 12, 0, 0)
-        with patch("app.utils.time_utils.datetime") as mock_dt:
-            mock_dt.datetime.now.return_value = mock_now
-            assert is_in_pause_period(pause) is False
+        now = datetime.datetime(2025, 1, 1, 12, 0, 0)
+        ranges = [(datetime.time(0, 0), datetime.time(6, 0))]
+        assert is_in_pause_period(now, ranges) is False
 
     def test_cross_midnight_in_pause(self):
-        pause = PauseSettings(enabled=True, start_hour=23, end_hour=6)
-        mock_now = datetime.datetime(2025, 1, 1, 2, 0, 0)
-        with patch("app.utils.time_utils.datetime") as mock_dt:
-            mock_dt.datetime.now.return_value = mock_now
-            assert is_in_pause_period(pause) is True
+        now = datetime.datetime(2025, 1, 1, 2, 0, 0)
+        ranges = [(datetime.time(23, 0), datetime.time(6, 0))]
+        assert is_in_pause_period(now, ranges) is True
 
     def test_cross_midnight_outside_pause(self):
+        now = datetime.datetime(2025, 1, 1, 12, 0, 0)
+        ranges = [(datetime.time(23, 0), datetime.time(6, 0))]
+        assert is_in_pause_period(now, ranges) is False
+
+    def test_minute_precision_in_pause(self):
+        now = datetime.datetime(2025, 1, 1, 8, 30, 0)
+        ranges = [(datetime.time(8, 15), datetime.time(9, 0))]
+        assert is_in_pause_period(now, ranges) is True
+
+    def test_minute_precision_outside_pause(self):
+        now = datetime.datetime(2025, 1, 1, 8, 10, 0)
+        ranges = [(datetime.time(8, 15), datetime.time(9, 0))]
+        assert is_in_pause_period(now, ranges) is False
+
+    def test_minute_precision_boundary_start(self):
+        now = datetime.datetime(2025, 1, 1, 8, 15, 0)
+        ranges = [(datetime.time(8, 15), datetime.time(9, 0))]
+        assert is_in_pause_period(now, ranges) is True
+
+    def test_minute_precision_boundary_end(self):
+        now = datetime.datetime(2025, 1, 1, 9, 0, 0)
+        ranges = [(datetime.time(8, 15), datetime.time(9, 0))]
+        assert is_in_pause_period(now, ranges) is True
+
+    def test_empty_ranges(self):
+        now = datetime.datetime(2025, 1, 1, 3, 0, 0)
+        assert is_in_pause_period(now, []) is False
+
+    def test_multiple_ranges(self):
+        now = datetime.datetime(2025, 1, 1, 10, 0, 0)
+        ranges = [
+            (datetime.time(8, 0), datetime.time(9, 0)),
+            (datetime.time(9, 50), datetime.time(10, 10)),
+        ]
+        assert is_in_pause_period(now, ranges) is True
+
+
+class TestIsPauseEnabled:
+    """is_pause_enabled(pause) PauseSettings 包装测试。"""
+
+    def test_disabled(self):
+        pause = PauseSettings(enabled=False, start_hour=0, end_hour=6)
+        assert is_pause_enabled(pause) is False
+
+    def test_same_hour_and_minute_means_all_day(self):
+        pause = PauseSettings(enabled=True, start_hour=5, end_hour=5, start_minute=0, end_minute=0)
+        assert is_pause_enabled(pause) is True
+
+    @patch("app.utils.time_utils.is_in_pause_period", return_value=True)
+    def test_same_hour_different_minute_delegates(self, mock_check):
+        pause = PauseSettings(enabled=True, start_hour=5, start_minute=0, end_hour=5, end_minute=30)
+        assert is_pause_enabled(pause) is True
+        mock_check.assert_called_once()
+        # 验证传入的 start/end 时间对象正确
+        call_args = mock_check.call_args
+        ranges = call_args[0][1]
+        assert ranges == [(datetime.time(5, 0), datetime.time(5, 30))]
+
+    @patch("app.utils.time_utils.is_in_pause_period", return_value=True)
+    def test_normal_range_in_pause(self, mock_check):
+        pause = PauseSettings(enabled=True, start_hour=0, end_hour=6)
+        assert is_pause_enabled(pause) is True
+
+    @patch("app.utils.time_utils.is_in_pause_period", return_value=False)
+    def test_normal_range_outside_pause(self, mock_check):
+        pause = PauseSettings(enabled=True, start_hour=0, end_hour=6)
+        assert is_pause_enabled(pause) is False
+
+    @patch("app.utils.time_utils.is_in_pause_period", return_value=True)
+    def test_cross_midnight_in_pause(self, mock_check):
         pause = PauseSettings(enabled=True, start_hour=23, end_hour=6)
-        mock_now = datetime.datetime(2025, 1, 1, 12, 0, 0)
-        with patch("app.utils.time_utils.datetime") as mock_dt:
-            mock_dt.datetime.now.return_value = mock_now
-            assert is_in_pause_period(pause) is False
+        assert is_pause_enabled(pause) is True
 
-    def test_defaults_in_pause(self):
-        pause = PauseSettings()
-        mock_now = datetime.datetime(2025, 1, 1, 3, 0, 0)
-        with patch("app.utils.time_utils.datetime") as mock_dt:
-            mock_dt.datetime.now.return_value = mock_now
-            assert is_in_pause_period(pause) is True
+    @patch("app.utils.time_utils.is_in_pause_period", return_value=False)
+    def test_cross_midnight_outside_pause(self, mock_check):
+        pause = PauseSettings(enabled=True, start_hour=23, end_hour=6)
+        assert is_pause_enabled(pause) is False
 
-    def test_defaults_outside_pause(self):
+    @patch("app.utils.time_utils.is_in_pause_period", return_value=True)
+    def test_defaults_in_pause(self, mock_check):
         pause = PauseSettings()
-        mock_now = datetime.datetime(2025, 1, 1, 12, 0, 0)
-        with patch("app.utils.time_utils.datetime") as mock_dt:
-            mock_dt.datetime.now.return_value = mock_now
-            assert is_in_pause_period(pause) is False
+        assert is_pause_enabled(pause) is True
+
+    @patch("app.utils.time_utils.is_in_pause_period", return_value=False)
+    def test_defaults_outside_pause(self, mock_check):
+        pause = PauseSettings()
+        assert is_pause_enabled(pause) is False
+
+    @patch("app.utils.time_utils.is_in_pause_period", return_value=True)
+    def test_minute_precision_delegates(self, mock_check):
+        pause = PauseSettings(enabled=True, start_hour=8, start_minute=15, end_hour=9, end_minute=0)
+        assert is_pause_enabled(pause) is True
+        call_args = mock_check.call_args
+        ranges = call_args[0][1]
+        assert ranges == [(datetime.time(8, 15), datetime.time(9, 0))]
+
+    @patch("app.utils.time_utils.is_in_pause_period", return_value=True)
+    def test_minute_precision_cross_midnight_delegates(self, mock_check):
+        pause = PauseSettings(enabled=True, start_hour=23, start_minute=30, end_hour=6, end_minute=30)
+        assert is_pause_enabled(pause) is True
+        call_args = mock_check.call_args
+        ranges = call_args[0][1]
+        assert ranges == [(datetime.time(23, 30), datetime.time(6, 30))]
 
 
 

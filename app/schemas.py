@@ -311,13 +311,15 @@ class MonitorSettings(BaseModel, frozen=True):
 class PauseSettings(BaseModel, frozen=True):
     """暂停时段配置 — check_pause() 消费。
 
-    start_hour == end_hour 语义为全天暂停（见 is_in_pause_period）。
+    start_hour == end_hour 且 start_minute == end_minute 语义为全天暂停。
     start_hour > end_hour 语义为跨天（如 23:00-06:00）。
     """
 
     enabled: bool = True
     start_hour: int = Field(default=0, ge=0, le=23)
+    start_minute: int = Field(default=0, ge=0, le=59)
     end_hour: int = Field(default=6, ge=0, le=23)
+    end_minute: int = Field(default=0, ge=0, le=59)
 
 
 class LoggingSettings(BaseModel, frozen=True):
