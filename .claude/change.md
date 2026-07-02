@@ -2,6 +2,10 @@
 
 ## 2026-07-03
 
+### fix: 移除 decision.py 中 parse_host_port 的死代码 try/except
+
+- `app/network/decision.py`：移除 `is_network_available()` 中对 `parse_host_port()` 的 `try/except ValueError` 包裹，该异常已不会被抛出（`parse_host_port` 内部已处理无效条目）
+
 ### fix: 网络决策层使用独立 executor，避免嵌套提交导致线程池饥饿
 
 - `app/network/decision.py`：新增 `_decision_executor`（3-worker 独立线程池），`is_network_available()` 改用该池调度外层决策任务，与 `probes.py` 的 8-worker 内层探测池分离；新增 `shutdown_decision_executor()` 函数
