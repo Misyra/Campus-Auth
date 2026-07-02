@@ -90,6 +90,10 @@
 - `app/network/detect.py`：新增 `_hex_to_ipv4()` 辅助函数和 `_parse_linux_gateway()` 解析函数，增加字段数（>=3）、字段长度（>=8）、目标地址（`00000000`）和 `_is_valid_ipv4()` 四重校验；`_detect_gateway_linux()` 重构为调用 `_parse_linux_gateway()`
 - `tests/test_network/test_detect.py`：新增 TestHexToIpv4（4 个用例）和 TestParseLinuxGateway（9 个用例）
 
+### docs: 澄清 _page 与 _debug_page 的别名语义
+
+- `app/workers/playwright_worker.py`：`_handle_debug_start()` 方法中 `self._debug_page = self._page` 处的注释从"保存调试页面引用"改为说明别名关系（_debug_page 与 _page 共享同一 page 对象，调试会话结束后由 _cleanup_debug_session 置 None）；方法 docstring 补充别名说明
+
 ## 2026-07-02
 
 ### docs: 文档目录重构与索引补全
@@ -4074,4 +4078,9 @@
 
 - app/utils/process.py: is_local_port_in_use 增加 s.settimeout(0.5) 防止异常网络环境下长时间阻塞
 - tests/test_utils/test_process.py: test_ipv6_localhost 改为绑定已用端口并断言 True，新增 test_ipv6_closed_port_returns_false 负向测试
+
+## 2026-07-03: _safe_psutil_call 返回类型一致 (Task 4.1)
+
+- app/api/system.py: _safe_psutil_call 默认参数从 -1 改为 None，异常时返回空列表 [] 而非整数，保持与正常返回值的类型一致
+- tests/test_api/test_system.py: 新增 7 个测试覆盖所有分支（正常调用、三种 psutil 异常、自定义默认值、None 默认值转换、非 psutil 异常传播）
 
