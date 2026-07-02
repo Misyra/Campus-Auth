@@ -373,7 +373,7 @@ def _get_ssid_macos_modern() -> str | None:
                 )
                 if ssid:
                     return ssid
-    except (json.JSONDecodeError, KeyError, TypeError) as exc:
+    except (json.JSONDecodeError, TypeError) as exc:
         logger.debug("system_profiler JSON 解析失败: {}", exc)
     except FileNotFoundError:
         logger.debug("system_profiler 命令不存在")

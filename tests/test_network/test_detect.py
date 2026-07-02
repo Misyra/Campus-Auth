@@ -305,4 +305,22 @@ class TestDetectSsidDarwinFallbackOrder:
 
         result = detect_wifi_ssid()
         assert result == "SystemProfilerSSID"
+        # airport 和 networksetup 各调用一次
+        assert mock_run.call_count == 2
+        mock_run.assert_any_call(
+            [
+                "/System/Library/PrivateFrameworks/Apple80211.framework"
+                "/Versions/Current/Resources/airport",
+                "-I",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        mock_run.assert_any_call(
+            ["networksetup", "-listallhardwareports"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
         mock_modern.assert_called_once()
