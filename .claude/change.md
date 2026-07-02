@@ -2,6 +2,16 @@
 
 ## 2026-07-03
 
+### fix: WebSocket 消息大小限制按 UTF-8 字节数计算
+
+- `app/api/ws.py`：消息大小预检从 `len(raw)`（字符数）改为 `len(raw.encode("utf-8"))`（字节数），确保中文等多字节字符按实际传输大小计算
+- `tests/test_api/test_ws.py`：新增 `TestMessageSizeLimit` 测试类（6 个用例：ASCII 在限制内/超限、中文字符数在限制内但字节数超限/字节数在限制内、边界值 65536/65537 字节）
+
+### fix: 删除背景图片时处理 Windows 文件占用
+
+- `app/api/tools.py`：`delete_background` 中 `filepath.unlink()` 包裹 try/except，`PermissionError` 返回 409（文件被占用），`OSError` 返回 500（删除失败）
+- `tests/test_api/test_api_tools_routes.py`：新增 `test_delete_permission_error` 和 `test_delete_os_error` 两个测试用例
+
 ### fix: Chromium 安装后增加二进制存在与可执行校验
 
 - `app/workers/playwright_bootstrap.py`：新增 `_verify_chromium_install()` 函数，遍历 Playwright 缓存目录下的 `chromium-*` 子目录，检查 `chrome-win64/chrome.exe`、`chrome-linux/chrome`、`chrome-mac/Chromium.app/.../Chromium` 二进制文件是否存在且可执行；`ensure_playwright_ready()` 安装成功后调用该校验，失败时重置 `_BOOTSTRAP_DONE` 并返回 `False`
@@ -4083,4 +4093,11 @@
 
 - app/api/system.py: _safe_psutil_call 默认参数从 -1 改为 None，异常时返回空列表 [] 而非整数，保持与正常返回值的类型一致
 - tests/test_api/test_system.py: 新增 7 个测试覆盖所有分支（正常调用、三种 psutil 异常、自定义默认值、None 默认值转换、非 psutil 异常传播）
+
+## 2026-07-03: TaskManager 暴露公共 get_script_path (Task 4.3)
+
+- app/tasks/manager.py: 新增 get_script_path(task_id) 公共方法，封装 _safe_task_path(task_id, task_type="scripts")
+- app/api/scripts.py: run_script 路由改用 task_mgr.get_script_path(task_id) 替代对私有方法 _safe_task_path 的直接调用
+- tests/test_tasks/test_manager.py: 新建，8 个测试覆盖 get_script_path（JSON/PY/优先级/不存在/无效ID/仅搜索scripts）及 _safe_task_path
+- tests/test_api/test_api_scripts_routes.py: 3 处 mock 从 _safe_task_path 更新为 get_script_path
 

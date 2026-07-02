@@ -17,10 +17,11 @@ async def websocket_logs_handler(websocket, ws_manager):
     try:
         while True:
             raw = await websocket.receive_text()
-            # WebSocket 消息大小预检，防止超大消息导致内存问题
-            if len(raw) > 65536:
+            # WebSocket 消息大小预检，按 UTF-8 字节长度计算，防止超大消息导致内存问题
+            msg_bytes = len(raw.encode("utf-8"))
+            if msg_bytes > 65536:
                 ws_logger.warning(
-                    "WebSocket 消息过大 ({} bytes)，断开连接", len(raw)
+                    "WebSocket 消息过大 ({} bytes)，断开连接", msg_bytes
                 )
                 await ws_manager.disconnect(websocket)
                 return
