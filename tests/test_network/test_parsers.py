@@ -7,10 +7,48 @@ import logging
 import pytest
 
 from app.network.parsers import (
+    _looks_like_ipv6,
     _parse_single_host_port,
     parse_host_port,
     parse_ping_targets,
 )
+
+# =====================================================================
+# _looks_like_ipv6 IPv6 地址检测
+# =====================================================================
+
+
+class TestLooksLikeIPv6:
+    def test_loopback(self):
+        assert _looks_like_ipv6("::1") is True
+
+    def test_full_address(self):
+        assert _looks_like_ipv6("2001:0db8:85a3:0000:0000:8a2e:0370:7334") is True
+
+    def test_compressed(self):
+        assert _looks_like_ipv6("2001:db8::1") is True
+
+    def test_all_zeros(self):
+        assert _looks_like_ipv6("::") is True
+
+    def test_link_local(self):
+        assert _looks_like_ipv6("fe80::1") is True
+
+    def test_not_ipv6_string(self):
+        assert _looks_like_ipv6("example.com") is False
+
+    def test_not_ipv6_ipv4(self):
+        assert _looks_like_ipv6("8.8.8.8") is False
+
+    def test_not_ipv6_colon_with_port(self):
+        assert _looks_like_ipv6("host:8080") is False
+
+    def test_not_ipv6_random_string(self):
+        assert _looks_like_ipv6("abc:def:ghi") is False
+
+    def test_empty_string(self):
+        assert _looks_like_ipv6("") is False
+
 
 # =====================================================================
 # _parse_single_host_port 单条解析
@@ -166,3 +204,35 @@ class TestParsePingTargetsIPv4Range:
         """空输入返回空列表。"""
         assert parse_ping_targets(None) == []
         assert parse_ping_targets("") == []
+
+
+# =====================================================================
+# parse_ping_targets IPv6 地址处理
+# =====================================================================
+
+
+class TestParsePingTargetsIPv6:
+    def test_ipv6_loopback(self):
+        """IPv6 环回地址自动补全端口 53。"""
+        result = parse_ping_targets("::1")
+        assert result == [("::1", 53)]
+
+    def test_ipv6_compressed(self):
+        """压缩格式 IPv6 自动补全端口 53。"""
+        result = parse_ping_targets("2001:db8::1")
+        assert result == [("2001:db8::1", 53)]
+
+    def test_ipv6_with_port(self):
+        """带端口的 IPv6 地址直接传递。"""
+        result = parse_ping_targets("[::1]:8080")
+        assert result == [("::1", 8080)]
+
+    def test_ipv6_mixed_with_ipv4(self):
+        """混合 IPv6 和 IPv4。"""
+        result = parse_ping_targets("::1, 8.8.8.8")
+        assert result == [("::1", 53), ("8.8.8.8", 53)]
+
+    def test_ipv6_mixed_with_domain(self):
+        """混合 IPv6 和域名。"""
+        result = parse_ping_targets("::1, example.com")
+        assert result == [("::1", 53), ("example.com", 443)]
