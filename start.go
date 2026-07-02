@@ -109,8 +109,8 @@ func main() {
 // findUv 查找 uv 命令：PATH → 本地 .uv（校验版本）→ 下载
 func findUv(uvDir, uvExe string) string {
 	// 1. 检查 PATH
-	if path, err := exec.LookPath("uv"); err == nil {
-		return path
+	if filePath, err := exec.LookPath("uv"); err == nil {
+		return filePath
 	}
 
 	// 2. 检查本地 .uv 目录（校验版本）
