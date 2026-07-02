@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import ipaddress
+
 from app.utils.logging import get_logger
 
 logger = get_logger("parsers")
@@ -112,6 +114,24 @@ def parse_host_port(targets: list[str]) -> list[tuple[str, int]]:
     return result
 
 
+def _looks_like_ipv6(item: str) -> bool:
+    """判断字符串是否为合法 IPv6 地址。
+
+    使用标准库 ipaddress 模块解析，比冒号计数更准确。
+
+    Args:
+        item: 待检测的字符串
+
+    Returns:
+        是否为合法 IPv6 地址
+    """
+    try:
+        ipaddress.IPv6Address(item)
+        return True
+    except ValueError:
+        return False
+
+
 def parse_ping_targets(raw: str | list | None) -> list[tuple[str, int]]:
     """解析 ping_targets 配置为 (host, port) 列表。
 
@@ -147,8 +167,7 @@ def parse_ping_targets(raw: str | list | None) -> list[tuple[str, int]]:
                 targets.append(item)
         elif ":" in item:
             # 可能是 IPv6 地址（含多个冒号）或 host:port
-            colon_count = item.count(":")
-            if colon_count >= 2:
+            if _looks_like_ipv6(item):
                 # IPv6 地址，补全端口
                 targets.append(f"[{item}]:53")
             else:
