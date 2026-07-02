@@ -13,8 +13,11 @@ from unittest.mock import patch
 import pytest
 
 from app.workers.script_runner import (
+    _EXEC_NAME_RE,
     DEFAULT_TIMEOUT,
     ScriptRunner,
+    _get_interpreter_name,
+    _get_temp_extension,
     detect_available_binaries,
     get_default_binary,
 )
@@ -255,3 +258,127 @@ class TestScriptRunnerRunExtra:
         ok, msg = runner.run()
         assert ok is True
         assert "It works!" in msg
+
+
+# =====================================================================
+# _EXEC_NAME_RE 正则测试
+# =====================================================================
+
+
+class TestExecNameRe:
+    """正则匹配解释器名。"""
+
+    @pytest.mark.parametrize(
+        ("name", "expected"),
+        [
+            ("python", "python"),
+            ("python3", "python"),
+            ("python3.12", "python"),
+            ("python312", "python"),
+            ("node", "node"),
+            ("node18", "node"),
+            ("ruby", "ruby"),
+            ("bash", "bash"),
+            ("sh", "sh"),
+            ("pwsh", "pwsh"),
+            ("pwsh7", "pwsh"),
+        ],
+    )
+    def test_valid_names(self, name: str, expected: str) -> None:
+        """标准解释器名应正确提取语言前缀。"""
+        match = _EXEC_NAME_RE.match(name)
+        assert match is not None
+        assert match.group(1).lower() == expected
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "3python",
+            "-python",
+            "",
+        ],
+    )
+    def test_invalid_names(self, name: str) -> None:
+        """非法名称不应匹配。"""
+        assert _EXEC_NAME_RE.match(name) is None
+
+
+# =====================================================================
+# _get_interpreter_name 测试
+# =====================================================================
+
+
+class TestGetInterpreterName:
+    """从路径中提取解释器名。"""
+
+    def test_unix_python3(self) -> None:
+        """Unix 路径 python3。"""
+        assert _get_interpreter_name("/usr/bin/python3") == "python"
+
+    def test_unix_python312(self) -> None:
+        """Unix 路径 python3.12。"""
+        assert _get_interpreter_name("/usr/bin/python3.12") == "python"
+
+    def test_windows_python_exe(self) -> None:
+        """Windows 路径 python.exe。"""
+        assert _get_interpreter_name("C:\\Python312\\python.exe") == "python"
+
+    def test_windows_python_with_spaces(self) -> None:
+        """Windows 路径含空格。"""
+        assert (
+            _get_interpreter_name("C:\\Program Files\\Python312\\python.exe")
+            == "python"
+        )
+
+    def test_bare_name(self) -> None:
+        """裸名称无路径。"""
+        assert _get_interpreter_name("bash") == "bash"
+
+    def test_bare_name_with_version(self) -> None:
+        """裸名称带版本号。"""
+        assert _get_interpreter_name("pwsh7") == "pwsh"
+
+    def test_unknown_binary(self) -> None:
+        """未知二进制名回退到 stem。"""
+        assert _get_interpreter_name("/usr/local/bin/mytool") == "mytool"
+
+    def test_path_with_dots(self) -> None:
+        """路径中含多个点号。"""
+        assert _get_interpreter_name("/usr/bin/node18.17.0") == "node"
+
+
+# =====================================================================
+# _get_temp_extension 测试
+# =====================================================================
+
+
+class TestGetTempExtension:
+    """根据解释器名推断临时文件后缀。"""
+
+    def test_python(self) -> None:
+        """Python -> .py。"""
+        assert _get_temp_extension("/usr/bin/python3") == ".py"
+
+    def test_python312(self) -> None:
+        """Python3.12 -> .py。"""
+        assert _get_temp_extension("/usr/bin/python3.12") == ".py"
+
+    def test_node(self) -> None:
+        """Node -> .js。"""
+        assert _get_temp_extension("/usr/bin/node") == ".js"
+
+    def test_bash(self) -> None:
+        """Bash -> .sh。"""
+        assert _get_temp_extension("/bin/bash") == ".sh"
+
+    def test_powershell(self) -> None:
+        """PowerShell -> .ps1。"""
+        assert _get_temp_extension("pwsh.exe") == ".ps1"
+
+    def test_cmd(self) -> None:
+        """cmd -> .bat。"""
+        assert _get_temp_extension("C:\\Windows\\System32\\cmd.exe") == ".bat"
+
+    def test_unknown_binary(self) -> None:
+        """未知二进制 -> 空字符串。"""
+        assert _get_temp_extension("/usr/local/bin/mytool") == ""
