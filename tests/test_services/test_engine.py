@@ -20,10 +20,12 @@ from app.schemas import BrowserSettings, LoginCredentials, MonitorSettings, Runt
 from app.services.engine import (
     EngineCmdType,
     EngineCommand,
+    LoginBridge,
     ScheduleEngine,
 )
 from app.services.engine import StatusSnapshot
 from app.services.monitor_service import CheckOnceResult
+from app.services.retry_policy import MonitoredPolicy
 from app.services.scheduler_service import SchedulerService
 
 
@@ -1815,3 +1817,63 @@ class TestStartThreadQueueCleanup:
         assert engine._cmd_queue.qsize() == 0
         # join() 应立即返回（不阻塞），说明 task_done 已被正确调用
         engine._cmd_queue.join()  # 不应阻塞
+
+
+# =====================================================================
+# LoginBridge 去重分支 on_complete 回调
+# =====================================================================
+
+
+class TestLoginBridgeDuplicateCallback:
+    """去重命中时应调用 on_complete 回调，避免手动登录挂起。"""
+
+    def _make_bridge(self):
+        mock_orchestrator = MagicMock()
+        bridge = LoginBridge(
+            get_orchestrator=lambda: mock_orchestrator,
+            get_runtime_config=lambda: RuntimeConfig(),
+            retry_policy=MonitoredPolicy(),
+            status_update_callback=lambda: None,
+            logger=MagicMock(),
+            wakeup_event=threading.Event(),
+            get_monitor_check_interval=lambda: 300,
+        )
+        return bridge, mock_orchestrator
+
+    def test_submit_login_duplicate_triggers_callback(self):
+        """去重命中时 on_complete 应被调用，返回 (False, msg)。"""
+        bridge, mock_orch = self._make_bridge()
+        callbacks = []
+
+        def on_complete(ok, msg):
+            callbacks.append((ok, msg))
+
+        # 第一次提交：handle.future 注册到 _registered_futures
+        future = Future()
+        handle = mock_orch.submit.return_value
+        handle.rejected_reason = None
+        handle.future = future
+
+        result1 = bridge.submit_login(is_manual=True, on_complete=on_complete)
+        assert result1 is True
+        assert len(callbacks) == 0  # 第一次成功提交不触发 on_complete
+
+        # 第二次提交：同一个 future 已在 _registered_futures，去重命中
+        result2 = bridge.submit_login(is_manual=True, on_complete=on_complete)
+        assert result2 is False
+        # 关键断言：on_complete 必须被调用，否则手动登录会挂起
+        assert len(callbacks) == 1
+        assert callbacks[0] == (False, "登录任务已在执行中，请稍后再试")
+
+    def test_submit_login_duplicate_no_on_complete(self):
+        """去重命中时 on_complete=None 不应抛异常。"""
+        bridge, mock_orch = self._make_bridge()
+
+        future = Future()
+        handle = mock_orch.submit.return_value
+        handle.rejected_reason = None
+        handle.future = future
+
+        bridge.submit_login(is_manual=True, on_complete=None)
+        result = bridge.submit_login(is_manual=True, on_complete=None)
+        assert result is False
