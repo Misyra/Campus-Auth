@@ -107,6 +107,10 @@ class TaskManager:
             return None
         return candidate
 
+    def get_script_path(self, task_id: str) -> Path | None:
+        """返回脚本任务文件路径（公共 API，替代对 _safe_task_path 的直接调用）。"""
+        return self._safe_task_path(task_id, task_type="scripts")
+
     def _safe_task_path(self, task_id: str, task_type: str = "") -> Path | None:
         """返回任务文件路径（跨 browser/scripts 子目录搜索）。
 

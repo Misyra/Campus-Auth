@@ -8,7 +8,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # ── 列出脚本 ──
 
 
@@ -143,7 +142,7 @@ class TestRunScript:
             "type": "script",
             "binary_path": "",
         }
-        mock_services.task_manager._safe_task_path.return_value = script_file
+        mock_services.task_manager.get_script_path.return_value = script_file
 
         with patch("app.api.scripts.ScriptRunner") as MockRunner:
             mock_runner = MagicMock()
@@ -170,7 +169,7 @@ class TestRunScript:
             "name": "测试",
             "type": "script",
         }
-        mock_services.task_manager._safe_task_path.return_value = None
+        mock_services.task_manager.get_script_path.return_value = None
         resp = test_client.post("/api/scripts/script1/run")
         assert resp.status_code == 200
         assert resp.json()["success"] is False
@@ -213,7 +212,7 @@ class TestScriptThreadPool:
 
         mock_task_mgr = MagicMock()
         mock_task_mgr.get_task_detail.return_value = {"type": "script", "binary_path": ""}
-        mock_task_mgr._safe_task_path.return_value = MagicMock(
+        mock_task_mgr.get_script_path.return_value = MagicMock(
             exists=MagicMock(return_value=True)
         )
 
