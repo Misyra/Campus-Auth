@@ -268,18 +268,39 @@ def _detect_ssid_windows() -> str | None:
 # ── Linux 实现 ──
 
 
+def _hex_to_ipv4(hex_str: str) -> str | None:
+    """将 /proc/net/route 中的 8 字符十六进制网关转换为 IPv4 字符串。"""
+    try:
+        gateway_bytes = bytes.fromhex(hex_str)
+        return ".".join(str(b) for b in reversed(gateway_bytes))
+    except (ValueError, TypeError):
+        return None
+
+
+def _parse_linux_gateway(line: str) -> str | None:
+    """解析 /proc/net/route 单行，提取默认网关 IPv4 地址。"""
+    parts = line.split()
+    if len(parts) < 3:
+        return None
+    dest, gateway = parts[1], parts[2]
+    if len(dest) < 8 or len(gateway) < 8:
+        return None
+    if dest != "00000000":
+        return None
+    ip = _hex_to_ipv4(gateway)
+    if ip is None or not _is_valid_ipv4(ip):
+        return None
+    return ip
+
+
 def _detect_gateway_linux() -> str | None:
     """Linux: 解析 /proc/net/route 获取默认网关"""
     try:
         with open("/proc/net/route") as f:
             for line in f:
-                parts = line.strip().split()
-                if len(parts) >= 3 and parts[1] == "00000000":
-                    gateway_hex = parts[2]
-                    gateway_bytes = bytes.fromhex(gateway_hex)
-                    ip = ".".join(str(b) for b in reversed(gateway_bytes))
-                    if ip != "0.0.0.0":
-                        return ip
+                ip = _parse_linux_gateway(line)
+                if ip is not None and ip != "0.0.0.0":
+                    return ip
     except Exception as exc:
         logger.debug("Linux 网关检测失败: {}", exc)
 

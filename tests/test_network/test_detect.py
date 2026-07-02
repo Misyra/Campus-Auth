@@ -9,7 +9,9 @@ from app.network.detect import (
     _get_ssid_macos_modern,
     _get_windows_gateway_powershell,
     _get_windows_gateway_route_print,
+    _hex_to_ipv4,
     _is_valid_ipv4,
+    _parse_linux_gateway,
     _parse_windows_route_print,
     detect_gateway_ip,
 )
@@ -324,3 +326,68 @@ class TestDetectSsidDarwinFallbackOrder:
             timeout=5,
         )
         mock_modern.assert_called_once()
+
+
+class TestHexToIpv4:
+    """十六进制网关转换测试。"""
+
+    def test_valid_gateway(self):
+        """192.168.1.1 -> 0101A8C0 (little-endian hex)"""
+        assert _hex_to_ipv4("0101A8C0") == "192.168.1.1"
+
+    def test_zero_gateway(self):
+        assert _hex_to_ipv4("00000000") == "0.0.0.0"
+
+    def test_odd_length_hex(self):
+        """奇数长度的十六进制字符串应返回 None。"""
+        assert _hex_to_ipv4("01A8C") is None
+
+    def test_invalid_hex_chars(self):
+        assert _hex_to_ipv4("ZZZZZZZZ") is None
+
+
+class TestParseLinuxGateway:
+    """/proc/net/route 单行解析测试。"""
+
+    def test_valid_default_route(self):
+        """正常的默认路由行。"""
+        line = "eth0\t00000000\t0101A8C0\t0001\t0\t0\t100\t00000000\t0\t0"
+        assert _parse_linux_gateway(line) == "192.168.1.1"
+
+    def test_not_default_route(self):
+        """destination 非零（非默认路由）应返回 None。"""
+        line = "eth0\t0000000A\t0101A8C0\t0001\t0\t0\t100\t00000000\t0\t0"
+        assert _parse_linux_gateway(line) is None
+
+    def test_too_few_fields(self):
+        """字段数不足 3 应返回 None。"""
+        assert _parse_linux_gateway("eth0\t00000000") is None
+
+    def test_empty_line(self):
+        assert _parse_linux_gateway("") is None
+
+    def test_short_dest_field(self):
+        """dest 字段长度不足 8 应返回 None。"""
+        line = "eth0\t000000\t0101A8C0\t0001"
+        assert _parse_linux_gateway(line) is None
+
+    def test_short_gateway_field(self):
+        """gateway 字段长度不足 8 应返回 None。"""
+        line = "eth0\t00000000\t01A8C0\t0001"
+        assert _parse_linux_gateway(line) is None
+
+    def test_invalid_gateway_hex(self):
+        """gateway 十六进制转换失败应返回 None。"""
+        line = "eth0\t00000000\tZZZZZZZZ\t0001"
+        assert _parse_linux_gateway(line) is None
+
+    def test_gateway_is_zero_ip(self):
+        """gateway 为 0.0.0.0 时 _parse_linux_gateway 仍返回 "0.0.0.0"，
+        过滤由 _detect_gateway_linux 负责。"""
+        line = "eth0\t00000000\t00000000\t0001"
+        assert _parse_linux_gateway(line) == "0.0.0.0"
+
+    def test_tab_separated(self):
+        """/proc/net/route 常见格式：tab 分隔。"""
+        line = "wlan0\t00000000\t0201A8C0\t0003\t0\t0\t600\t00000000\t0\t0"
+        assert _parse_linux_gateway(line) == "192.168.1.2"
