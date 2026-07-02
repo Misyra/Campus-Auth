@@ -1,14 +1,14 @@
-"""WebSocket 消息大小限制测试 — 验证按 UTF-8 字节计算。"""
+"""WebSocket 消息大小限制与 frontend_log 测试。"""
 
 from __future__ import annotations
 
 import json
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import WebSocketDisconnect
 
-from app.api.ws import websocket_logs_handler
+from app.api.ws import _fe_logger, websocket_logs_handler
 
 
 def _make_ws(messages: list[str]) -> MagicMock:
@@ -110,3 +110,115 @@ class TestMessageSizeLimit:
 
         mgr.disconnect.assert_called_once_with(ws)
         ws.send_text.assert_not_called()
+
+
+class TestFrontendLog:
+    """frontend_log 消息处理测试 — 验证模块级 logger 复用。"""
+
+    def test_module_level_logger_is_singleton(self):
+        """模块级 _fe_logger 是单例实例，不会每次调用重新创建。"""
+        from app.api.ws import _fe_logger as logger1
+        from app.api.ws import _fe_logger as logger2
+
+        assert logger1 is logger2
+
+    @pytest.mark.asyncio
+    async def test_frontend_log_with_default_level(self):
+        """frontend_log 消息默认使用 INFO 级别。"""
+        msg = json.dumps({
+            "type": "frontend_log",
+            "data": {"message": "test log", "scope": "test"},
+        })
+        ws = _make_ws([msg])
+        mgr = _make_manager()
+
+        with patch.object(_fe_logger, "info") as mock_info:
+            await websocket_logs_handler(ws, mgr)
+            mock_info.assert_called_once_with("[{}] {}", "test", "test log")
+
+    @pytest.mark.asyncio
+    async def test_frontend_log_with_explicit_level(self):
+        """frontend_log 消息使用指定的日志级别。"""
+        msg = json.dumps({
+            "type": "frontend_log",
+            "data": {"message": "warning msg", "scope": "auth", "level": "WARNING"},
+        })
+        ws = _make_ws([msg])
+        mgr = _make_manager()
+
+        with patch.object(_fe_logger, "warning") as mock_warning:
+            await websocket_logs_handler(ws, mgr)
+            mock_warning.assert_called_once_with("[{}] {}", "auth", "warning msg")
+
+    @pytest.mark.asyncio
+    async def test_frontend_log_with_invalid_level_falls_back_to_info(self):
+        """frontend_log 消息使用无效级别时降级为 INFO。"""
+        msg = json.dumps({
+            "type": "frontend_log",
+            "data": {"message": "msg", "scope": "s", "level": "INVALID"},
+        })
+        ws = _make_ws([msg])
+        mgr = _make_manager()
+
+        with patch.object(_fe_logger, "info") as mock_info:
+            await websocket_logs_handler(ws, mgr)
+            mock_info.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_frontend_log_empty_message_not_logged(self):
+        """frontend_log 空消息不触发日志调用。"""
+        msg = json.dumps({
+            "type": "frontend_log",
+            "data": {"message": "", "scope": "test"},
+        })
+        ws = _make_ws([msg])
+        mgr = _make_manager()
+
+        with patch.object(_fe_logger, "info") as mock_info:
+            await websocket_logs_handler(ws, mgr)
+            mock_info.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_frontend_log_missing_data_not_logged(self):
+        """frontend_log 缺少 data 字段时不触发日志调用。"""
+        msg = json.dumps({"type": "frontend_log"})
+        ws = _make_ws([msg])
+        mgr = _make_manager()
+
+        with patch.object(_fe_logger, "info") as mock_info:
+            await websocket_logs_handler(ws, mgr)
+            mock_info.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_frontend_log_message_truncated_to_10000(self):
+        """frontend_log 消息超过 10000 字符时被截断。"""
+        long_msg = "x" * 15000
+        msg = json.dumps({
+            "type": "frontend_log",
+            "data": {"message": long_msg, "scope": "test"},
+        })
+        ws = _make_ws([msg])
+        mgr = _make_manager()
+
+        with patch.object(_fe_logger, "info") as mock_info:
+            await websocket_logs_handler(ws, mgr)
+            call_args = mock_info.call_args
+            # 消息被截断为 10000 字符
+            assert len(call_args[0][2]) == 10000
+
+    @pytest.mark.asyncio
+    async def test_frontend_log_scope_truncated_to_200(self):
+        """frontend_log scope 超过 200 字符时被截断。"""
+        long_scope = "y" * 300
+        msg = json.dumps({
+            "type": "frontend_log",
+            "data": {"message": "test", "scope": long_scope},
+        })
+        ws = _make_ws([msg])
+        mgr = _make_manager()
+
+        with patch.object(_fe_logger, "info") as mock_info:
+            await websocket_logs_handler(ws, mgr)
+            call_args = mock_info.call_args
+            # scope 被截断为 200 字符
+            assert len(call_args[0][1]) == 200

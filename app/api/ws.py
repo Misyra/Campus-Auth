@@ -7,6 +7,7 @@ import json
 from app.utils.logging import get_logger
 
 ws_logger = get_logger("ws", source="backend")
+_fe_logger = get_logger("frontend", source="frontend")
 
 
 async def websocket_logs_handler(websocket, ws_manager):
@@ -36,9 +37,8 @@ async def websocket_logs_handler(websocket, ws_manager):
                     message_text = str(d.get("message", ""))[:10000]
                     scope = str(d.get("scope", "?"))[:200]
                     if message_text:
-                        fe_logger = get_logger("frontend", source="frontend")
                         level_name = str(d.get("level", "INFO")).upper()
-                        log_func = getattr(fe_logger, level_name.lower(), fe_logger.info)
+                        log_func = getattr(_fe_logger, level_name.lower(), _fe_logger.info)
                         log_func("[{}] {}", scope, message_text)
             except json.JSONDecodeError as e:
                 ws_logger.warning("WebSocket 消息解析失败: {}", e, exc_info=True)
