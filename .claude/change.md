@@ -2,6 +2,16 @@
 
 ## 2026-07-03
 
+### fix: Chromium 安装后增加二进制存在与可执行校验
+
+- `app/workers/playwright_bootstrap.py`：新增 `_verify_chromium_install()` 函数，遍历 Playwright 缓存目录下的 `chromium-*` 子目录，检查 `chrome-win64/chrome.exe`、`chrome-linux/chrome`、`chrome-mac/Chromium.app/.../Chromium` 二进制文件是否存在且可执行；`ensure_playwright_ready()` 安装成功后调用该校验，失败时重置 `_BOOTSTRAP_DONE` 并返回 `False`
+- `tests/test_workers/test_playwright_bootstrap.py`：新增 `TestVerifyChromiumInstall` 测试类（7 个用例：Windows/Linux/macOS 二进制通过 / 空目录失败 / 无执行权限失败 / 目录名不匹配失败 / 文件非目录失败）
+
+### fix: 调试会话清理时同步释放 _page 引用
+
+- `app/workers/playwright_worker.py`：`_cleanup_debug_session()` 方法末尾添加 `self._page = None`，确保调试会话清理时同步释放 `_page` 引用
+- `tests/test_workers/test_playwright_worker.py`：新增 `TestCleanupDebugSession` 测试类（4 个用例：完整清理 / debug_page 为 None 时仍清理 / 关闭未关闭页面 / 已关闭页面跳过 close）
+
 ### fix: Worker stop 在队列满时仍等待消费者线程 join
 
 - `app/workers/playwright_worker.py`：移除 `stop()` 方法中 `except queue.Full` 块末尾的 `return` 语句，确保无论队列是否满都会调用 `_consumer_thread.join()` 等待消费者线程退出

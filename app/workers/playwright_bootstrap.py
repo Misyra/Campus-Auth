@@ -12,9 +12,14 @@ import subprocess
 import sys
 import threading
 from collections.abc import Callable
+from pathlib import Path
 
 from app.utils.logging import get_logger
-from app.utils.platform import CREATE_NO_WINDOW_FLAG, is_windows
+from app.utils.platform import (
+    CREATE_NO_WINDOW_FLAG,
+    get_playwright_cache_dir,
+    is_windows,
+)
 
 logger = get_logger("playwright_bootstrap", source="backend")
 
@@ -49,7 +54,12 @@ def _is_enabled() -> bool:
 
 
 def _run(cmd: list[str], env: dict | None = None) -> subprocess.CompletedProcess[str]:
-    kwargs: dict = {"capture_output": True, "text": True, "check": False, "timeout": BOOTSTRAP_TIMEOUT}
+    kwargs: dict = {
+        "capture_output": True,
+        "text": True,
+        "check": False,
+        "timeout": BOOTSTRAP_TIMEOUT,
+    }
     if is_windows():
         kwargs["creationflags"] = CREATE_NO_WINDOW_FLAG
     if env is not None:
@@ -93,6 +103,24 @@ def _has_chromium() -> bool:
     from app.utils.browser_registry import has_playwright_chromium
 
     return has_playwright_chromium()
+
+
+def _verify_chromium_install(cache_dir: Path) -> bool:
+    """校验 Chromium 安装完整性：关键二进制文件存在且可执行。"""
+    binary_paths = [
+        Path("chrome-win64") / "chrome.exe",
+        Path("chrome-win") / "chrome.exe",
+        Path("chrome-linux") / "chrome",
+        Path("chrome-mac") / "Chromium.app" / "Contents" / "MacOS" / "Chromium",
+    ]
+    for d in cache_dir.glob("chromium-*"):
+        if not d.is_dir():
+            continue
+        for rel in binary_paths:
+            exe = d / rel
+            if exe.exists() and os.access(exe, os.X_OK):
+                return True
+    return False
 
 
 def ensure_playwright_ready(log: Callable[[str], None] | None = None) -> bool:
@@ -185,6 +213,19 @@ def ensure_playwright_ready(log: Callable[[str], None] | None = None) -> bool:
                     _BOOTSTRAP_DONE = True
                     if log:
                         log(f"Playwright {install_target} 下载完成")
+
+                    # 安装完整性校验：确认二进制文件存在且可执行
+                    cache_dir = get_playwright_cache_dir()
+                    if cache_dir is not None and not _verify_chromium_install(
+                        cache_dir
+                    ):
+                        _BOOTSTRAP_DONE = False
+                        msg = "Chromium 安装完整性校验失败：未找到可执行的浏览器二进制"
+                        logger.error(msg)
+                        if log:
+                            log(msg)
+                        return False
+
                     logger.info("Playwright 浏览器就绪成功")
                     return True
 
