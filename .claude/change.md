@@ -40,6 +40,12 @@
 - `app/network/parsers.py`：`parse_ping_targets()` 中 IPv4 检测逻辑增加段值 0-255 范围校验，避免如 `999.999.999.999` 被错误识别为 IPv4 地址
 - `tests/test_network/test_parsers.py`：新增 TestParsePingTargetsIPv4Range 测试类（11 个用例），覆盖边界值、超范围、混合输入等场景
 
+### fix: 网络探测模块显式生命周期管理，确保 in-flight 请求完成后再关闭
+
+- `app/network/probes.py`：新增 `_shutdown_event`（threading.Event）和 `shutdown_probes()` 函数，替代原来的 `atexit.register` 注册；三个探测函数（`is_network_available_socket`、`is_network_available_url`、`is_network_available_http`）增加 shutdown guard，关闭后拒绝新任务
+- `app/container.py`：`ServiceContainer.shutdown()` 中在 engine 关闭后调用 `shutdown_probes()`，确保关闭顺序可控
+- `tests/test_network/test_probes.py`：新增 11 个测试（shutdown_probes 可调用性、event 设置、in-flight 等待、新任务拒绝、客户端关闭、三个探测函数 guard 行为、atexit 移除验证）
+
 ## 2026-07-02
 
 ### docs: 文档目录重构与索引补全

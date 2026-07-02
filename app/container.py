@@ -175,6 +175,11 @@ class ServiceContainer:
         # BUG-013 修复：先关闭引擎（停止提交任务），再关闭线程池
         self.engine.shutdown()
 
+        # 关闭网络探测模块（停止接收新任务，等待 in-flight 请求完成）
+        from app.network.probes import shutdown_probes
+
+        shutdown_probes()
+
         # 关闭网络决策层线程池（与 probes.py 内层探测池分离）
         from app.network.decision import shutdown_decision_executor
 
