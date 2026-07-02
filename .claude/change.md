@@ -2,6 +2,11 @@
 
 ## 2026-07-03
 
+### fix: 孤儿浏览器清理增加父进程存活校验，避免误杀
+
+- `app/workers/playwright_worker.py`：新增 `_is_orphan()` 函数，通过 `proc.parent()` 检查父进程是否存活；`cleanup_orphan_browsers()` 条件追加 `_is_orphan(proc)` 判断，仅在父进程已退出时才终止浏览器进程
+- `tests/test_workers/test_playwright_worker.py`：新增 `TestIsOrphan`（4 个用例：父进程为 None / 已退出 / 存活 / NoSuchProcess）和 `TestCleanupOrphanBrowsers`（7 个用例：孤儿清理 / 存活跳过 / 非 Playwright 跳过 / 非浏览器跳过 / AccessDenied 处理 / 多孤儿清理 / 混合场景）
+
 ### fix: 暂停时段判断支持分钟精度
 
 - `app/schemas.py`：`PauseSettings` 新增 `start_minute` / `end_minute` 字段（默认 0，范围 0-59）

@@ -1,0 +1,178 @@
+"""Playwright Worker 孤儿浏览器清理测试。"""
+
+from __future__ import annotations
+
+from unittest.mock import MagicMock, patch
+
+import psutil
+
+from app.workers.playwright_worker import (
+    _is_orphan,
+    cleanup_orphan_browsers,
+)
+
+# ── _is_orphan ──
+
+
+class TestIsOrphan:
+    """孤儿进程判断。"""
+
+    def test_parent_is_none(self):
+        """父进程为 None → 孤儿。"""
+        proc = MagicMock(spec=psutil.Process)
+        proc.parent.return_value = None
+        assert _is_orphan(proc) is True
+
+    def test_parent_not_running(self):
+        """父进程存在但已退出 → 孤儿。"""
+        parent = MagicMock(spec=psutil.Process)
+        parent.is_running.return_value = False
+        proc = MagicMock(spec=psutil.Process)
+        proc.parent.return_value = parent
+        assert _is_orphan(proc) is True
+
+    def test_parent_running(self):
+        """父进程存活 → 非孤儿。"""
+        parent = MagicMock(spec=psutil.Process)
+        parent.is_running.return_value = True
+        proc = MagicMock(spec=psutil.Process)
+        proc.parent.return_value = parent
+        assert _is_orphan(proc) is False
+
+    def test_no_such_process(self):
+        """进程已消失 → 孤儿（安全清理）。"""
+        proc = MagicMock(spec=psutil.Process)
+        proc.parent.side_effect = psutil.NoSuchProcess(123)
+        assert _is_orphan(proc) is True
+
+
+# ── cleanup_orphan_browsers ──
+
+
+def _make_proc(pid, exe, cmdline):
+    """构造 mock 进程对象。"""
+    proc = MagicMock(spec=psutil.Process)
+    proc.info = {"pid": pid, "exe": exe, "cmdline": cmdline}
+    return proc
+
+
+class TestCleanupOrphanBrowsers:
+    """孤儿浏览器清理。"""
+
+    def test_kills_orphan_playwright_browser(self):
+        """Playwright 浏览器 + 父进程已死 → 被清理。"""
+        proc = _make_proc(
+            100,
+            "C:\\ms-playwright\\chromium-123\\chrome.exe",
+            ["chrome.exe", "--ms-playwright"],
+        )
+
+        with (
+            patch("psutil.process_iter", return_value=[proc]),
+            patch("app.workers.playwright_worker._is_orphan", return_value=True),
+        ):
+            cleanup_orphan_browsers()
+
+        proc.kill.assert_called_once()
+
+    def test_skips_alive_parent(self):
+        """Playwright 浏览器 + 父进程存活 → 不清理。"""
+        proc = _make_proc(
+            100,
+            "C:\\ms-playwright\\chromium-123\\chrome.exe",
+            ["chrome.exe", "--ms-playwright"],
+        )
+
+        with (
+            patch("psutil.process_iter", return_value=[proc]),
+            patch("app.workers.playwright_worker._is_orphan", return_value=False),
+        ):
+            cleanup_orphan_browsers()
+
+        proc.kill.assert_not_called()
+
+    def test_skips_non_playwright_browser(self):
+        """非 Playwright 管理的浏览器 → 不清理。"""
+        proc = _make_proc(
+            200,
+            "C:\\Program Files\\Google\\Chrome\\chrome.exe",
+            ["chrome.exe"],
+        )
+
+        with patch("psutil.process_iter", return_value=[proc]):
+            cleanup_orphan_browsers()
+
+        proc.kill.assert_not_called()
+
+    def test_skips_non_browser_process(self):
+        """非浏览器的 Playwright 进程 → 不清理。"""
+        proc = _make_proc(
+            300,
+            "C:\\ms-playwright\\node-123\\node.exe",
+            ["node.exe", "--ms-playwright"],
+        )
+
+        with patch("psutil.process_iter", return_value=[proc]):
+            cleanup_orphan_browsers()
+
+        proc.kill.assert_not_called()
+
+    def test_handles_access_denied(self):
+        """AccessDenied 异常被静默处理。"""
+        proc = _make_proc(
+            400,
+            "C:\\ms-playwright\\chromium-123\\chrome.exe",
+            ["chrome.exe", "--ms-playwright"],
+        )
+        proc.kill.side_effect = psutil.AccessDenied(400)
+
+        with (
+            patch("psutil.process_iter", return_value=[proc]),
+            patch("app.workers.playwright_worker._is_orphan", return_value=True),
+        ):
+            cleanup_orphan_browsers()  # 不应抛异常
+
+    def test_kills_multiple_orphans(self):
+        """多个孤儿浏览器进程 → 全部清理。"""
+        proc1 = _make_proc(
+            101,
+            "C:\\ms-playwright\\chromium-123\\chrome.exe",
+            ["chrome.exe", "--ms-playwright"],
+        )
+        proc2 = _make_proc(
+            102,
+            "C:\\ms-playwright\\firefox-123\\firefox.exe",
+            ["firefox.exe", "--ms-playwright"],
+        )
+
+        with (
+            patch("psutil.process_iter", return_value=[proc1, proc2]),
+            patch("app.workers.playwright_worker._is_orphan", return_value=True),
+        ):
+            cleanup_orphan_browsers()
+
+        proc1.kill.assert_called_once()
+        proc2.kill.assert_called_once()
+
+    def test_skips_alive_parent_among_mix(self):
+        """混合场景：一个孤儿 + 一个有父进程 → 只清理孤儿。"""
+        orphan = _make_proc(
+            101,
+            "C:\\ms-playwright\\chromium-123\\chrome.exe",
+            ["chrome.exe", "--ms-playwright"],
+        )
+        alive = _make_proc(
+            102,
+            "C:\\ms-playwright\\chromium-124\\chrome.exe",
+            ["chrome.exe", "--ms-playwright"],
+        )
+
+        with (
+            patch("psutil.process_iter", return_value=[orphan, alive]),
+            patch("app.workers.playwright_worker._is_orphan") as mock_orphan,
+        ):
+            mock_orphan.side_effect = [True, False]
+            cleanup_orphan_browsers()
+
+        orphan.kill.assert_called_once()
+        alive.kill.assert_not_called()

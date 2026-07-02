@@ -171,9 +171,7 @@ class PlaywrightWorker:
         # 等待事件循环就绪（最多 5 秒）
         self._worker_ready.wait(timeout=WORKER_READY_TIMEOUT)
         if not self._worker_ready.is_set():
-            logger.warning(
-                "Worker 启动失败: 事件循环超时 ({}s)", WORKER_READY_TIMEOUT
-            )
+            logger.warning("Worker 启动失败: 事件循环超时 ({}s)", WORKER_READY_TIMEOUT)
         else:
             logger.info("Worker 启动成功")
 
@@ -445,7 +443,9 @@ class PlaywrightWorker:
             success, message = await handler.attempt_login()
             return WorkerResponse(success=success, data=message)
         except Exception as e:
-            logger.exception("登录执行异常: task_id={}", config.get("task_id", "unknown"))
+            logger.exception(
+                "登录执行异常: task_id={}", config.get("task_id", "unknown")
+            )
             return WorkerResponse(success=False, error=str(e))
 
     async def _cleanup_debug_session(self):
@@ -499,7 +499,9 @@ class PlaywrightWorker:
             except Exception as e:
                 logger.warning(
                     "调试页面重建失败 (task_id={}): {}",
-                    task_data.get("task_id", "unknown") if isinstance(task_data, dict) else "unknown",
+                    task_data.get("task_id", "unknown")
+                    if isinstance(task_data, dict)
+                    else "unknown",
                     e,
                 )
                 return WorkerResponse(success=False, error=f"浏览器页面初始化失败: {e}")
@@ -517,7 +519,9 @@ class PlaywrightWorker:
             except Exception as e:
                 logger.warning(
                     "调试页面加载失败 (task_id={}): {}",
-                    task_data.get("task_id", "unknown") if isinstance(task_data, dict) else "unknown",
+                    task_data.get("task_id", "unknown")
+                    if isinstance(task_data, dict)
+                    else "unknown",
                     e,
                 )
                 return WorkerResponse(success=False, error=f"调试页面加载失败: {e}")
@@ -560,7 +564,11 @@ class PlaywrightWorker:
 
                 try:
                     rel = ss_dir.relative_to(TEMP_DIR)
-                    screenshot_url = f"/temp/{rel.as_posix()}/{filename}" if str(rel) != "." else f"/temp/{filename}"
+                    screenshot_url = (
+                        f"/temp/{rel.as_posix()}/{filename}"
+                        if str(rel) != "."
+                        else f"/temp/{filename}"
+                    )
                 except ValueError:
                     screenshot_url = f"/temp/{filename}"
             except Exception as e:
@@ -665,21 +673,28 @@ class PlaywrightWorker:
     # ── 浏览器生命周期管理 ──
 
     _CHROMIUM_ONLY_FLAGS = {
-        "--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu",
-        "--memory-pressure-off", "--disable-web-security",
+        "--no-sandbox",
+        "--disable-dev-shm-usage",
+        "--disable-gpu",
+        "--memory-pressure-off",
+        "--disable-web-security",
     }
 
-    def _build_launch_args(self, browser_settings: dict, channel: str = "playwright") -> list[str]:
+    def _build_launch_args(
+        self, browser_settings: dict, channel: str = "playwright"
+    ) -> list[str]:
         """构建浏览器启动参数。"""
         args = []
 
         if channel != "firefox":
-            args.extend([
-                "--no-sandbox",
-                "--disable-dev-shm-usage",
-                "--disable-gpu",
-                "--memory-pressure-off",
-            ])
+            args.extend(
+                [
+                    "--no-sandbox",
+                    "--disable-dev-shm-usage",
+                    "--disable-gpu",
+                    "--memory-pressure-off",
+                ]
+            )
             if browser_settings.get("disable_web_security", False):
                 args.append("--disable-web-security")
             if browser_settings.get("low_resource_mode", False):
@@ -759,7 +774,12 @@ class PlaywrightWorker:
         channel = browser_settings.get("browser_channel", "playwright")
         custom_path = browser_settings.get("browser_custom_path", "")
 
-        logger.debug("启动浏览器 (headless={}, pure_mode={}, channel={})", headless, pure_mode, channel)
+        logger.debug(
+            "启动浏览器 (headless={}, pure_mode={}, channel={})",
+            headless,
+            pure_mode,
+            channel,
+        )
 
         self._playwright = await async_playwright().start()
 
@@ -794,12 +814,21 @@ class PlaywrightWorker:
 
         logger.info("浏览器启动成功")
 
-    async def _launch_browser(self, playwright, channel: str, custom_path: str, headless: bool, launch_args: list):
+    async def _launch_browser(
+        self,
+        playwright,
+        channel: str,
+        custom_path: str,
+        headless: bool,
+        launch_args: list,
+    ):
         """根据 channel 启动对应的浏览器。"""
         if channel == "custom" and custom_path:
             if not Path(custom_path).exists():
                 raise FileNotFoundError(f"自定义浏览器路径不存在: {custom_path}")
-            custom_engine = (self._last_browser_settings or {}).get("custom_browser_engine", "auto")
+            custom_engine = (self._last_browser_settings or {}).get(
+                "custom_browser_engine", "auto"
+            )
             if custom_engine == "firefox":
                 engine = "firefox"
             elif custom_engine == "webkit":
@@ -984,7 +1013,9 @@ class PlaywrightWorker:
                         continue
                     k_str, v_str = str(k), str(v)
                     if len(k_str) > 256 or len(v_str) > 4096:
-                        logger.warning("请求头过长，已跳过: {} ({}B)", k_str[:32], len(k_str))
+                        logger.warning(
+                            "请求头过长，已跳过: {} ({}B)", k_str[:32], len(k_str)
+                        )
                         continue
                     if "\r" in k_str or "\n" in k_str:
                         logger.warning("请求头 key 含换行符，已跳过: {}", k_str[:32])
@@ -1054,12 +1085,27 @@ def shutdown_worker(timeout: float = 5) -> None:
 # ── 孤儿浏览器清理 ──
 
 
+def _is_orphan(proc: Any) -> bool:
+    """判断进程是否为孤儿（父进程已不存在）。
+
+    返回 True 表示父进程为 None 或已退出，可安全清理。
+    """
+    import psutil
+
+    try:
+        parent = proc.parent()
+        return parent is None or not parent.is_running()
+    except psutil.NoSuchProcess:
+        return True
+
+
 def cleanup_orphan_browsers() -> None:
     """清理孤儿 Playwright 浏览器进程。
 
     扫描并杀掉由 Campus-Auth 启动但已失去 Python 父进程的浏览器实例。
     仅清理 Playwright 管理的浏览器（可执行路径或命令行包含 "ms-playwright"），
     不会误杀用户自行安装的 Chrome/Edge/Brave 等浏览器。
+    同时验证父进程存活状态，避免误杀仍在运行的浏览器进程。
     """
     import psutil
 
@@ -1070,11 +1116,8 @@ def cleanup_orphan_browsers() -> None:
             exe = (info.get("exe") or "").lower()
             cmdline = " ".join(info.get("cmdline") or []).lower()
             is_playwright_managed = "ms-playwright" in exe or "ms-playwright" in cmdline
-            is_browser = any(
-                kw in exe or kw in cmdline
-                for kw in ("chrom", "firefox")
-            )
-            if is_playwright_managed and is_browser:
+            is_browser = any(kw in exe or kw in cmdline for kw in ("chrom", "firefox"))
+            if is_playwright_managed and is_browser and _is_orphan(proc):
                 proc.kill()
                 killed += 1
                 logger.debug("已终止孤儿浏览器进程 PID={}", info["pid"])
