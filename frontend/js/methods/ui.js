@@ -209,7 +209,6 @@ export const uiMethods = {
   },
   setSettingsTab(tabId) {
     if (this.currentSettingsTab === tabId) return;
-    if (this.configDirty && !confirm('当前设置有未保存的修改，确定要离开吗？')) return;
     this.currentSettingsTab = tabId;
   },
   // 编辑器关闭确认
@@ -226,12 +225,16 @@ export const uiMethods = {
     this.newLogCount = 0;
   },
   // 导航到指定页面
-  navigateTo(page) {
+  navigateTo(page, keepMoreMenu = false) {
     if (this.currentPage === 'settings' && page !== 'settings' && this.configDirty) {
-      if (!confirm('当前设置有未保存的修改，确定要离开吗？')) return;
+      if (!confirm('当前设置有未保存的修改，确定要离开吗？\n离开后未保存的修改将丢失。')) return;
+      const snapshot = JSON.parse(this._lastSavedConfig);
+      this.config = snapshot;
+      this.saveFailed = false;
+      this.editingPassword = false;
     }
     this.currentPage = page;
-    this.showMoreNav = false;
+    if (!keepMoreMenu) this.showMoreNav = false;
   },
   addCustomVar() {
     // 确保 custom_variables 是对象
