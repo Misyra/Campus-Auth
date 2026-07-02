@@ -2,6 +2,11 @@
 
 ## 2026-07-03
 
+### fix: Windows icacls 用户名处理域环境格式
+
+- `app/utils/crypto.py`：`_get_or_create_key()` 中 icacls 命令执行前，对用户名执行 `split("\\")[-1]` 提取，兼容域环境 `DOMAIN\user` 格式
+- `tests/test_utils/test_crypto.py`：新增 `TestIcaclsDomainUsername` 测试类（3 个用例：域格式提取、普通用户名不变、getpass.getuser 域格式回退）
+
 ### fix: 密钥长度异常时备份原文件再生成新密钥
 
 - `app/utils/crypto.py`：提取 `_backup_key_file()` 函数，密钥长度异常（`len(key) != 32`）时调用备份，替换原 except 分支中的内联备份代码
@@ -4201,3 +4206,11 @@
 ## 2026-07-03: 轻量模式注册 SIGINT 处理器 (Task 6.6)
 
 - app/services/launcher.py: launch_lightweight 增加 signal.signal(signal.SIGINT, _signal_handler) 注册，使 Ctrl+C 触发正常的 finally 清理路径而非直接终止
+
+## 2026-07-03: dir_size_mb 返回完整/不完整标记 (Task 7.3)
+
+- `app/utils/files.py`：新增 `DirSizeResult(NamedTuple)` 包含 `size_mb` 和 `complete` 字段，`dir_size_mb` 返回类型从 `float` 改为 `DirSizeResult`，OSError 时标记 `complete=False`
+- `app/api/ocr.py`：`_estimate_pkg_size_mb` 提取 `.size_mb`
+- `app/services/uninstall.py`：`detect()` 提取 `.size_mb`
+- `tests/test_utils/test_files.py`：新增 `TestDirSizeMb` 测试类（7 个用例：不存在路径、空目录、文件路径、目录含文件、嵌套目录、OSError 标记、字符串路径）
+- `tests/test_services/test_system_services.py`：`TestDirSizeMb` 更新为使用 `DirSizeResult` 断言
