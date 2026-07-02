@@ -45,7 +45,7 @@ def _estimate_pkg_size_mb(pkg_name: str) -> float:
     if pkg_path.name == "__init__.py":
         pkg_path = pkg_path.parent
 
-    return dir_size_mb(pkg_path)
+    return dir_size_mb(pkg_path).size_mb
 
 
 @router.get("/api/ocr/status", response_model=OcrStatusResponse)

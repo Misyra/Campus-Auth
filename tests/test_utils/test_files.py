@@ -1,6 +1,7 @@
 """app/utils/files.py 测试
 
-测试 save_screenshot 函数的 local_path 初始化修复。
+测试 save_screenshot 函数的 local_path 初始化修复，
+以及 dir_size_mb 的 DirSizeResult 完整性标记。
 """
 
 from __future__ import annotations
@@ -121,3 +122,94 @@ class TestSaveScreenshot:
             result = await save_screenshot(mock_page, "")
 
         assert result is None
+
+
+# =====================================================================
+# dir_size_mb / DirSizeResult
+# =====================================================================
+
+
+class TestDirSizeMb:
+    """dir_size_mb 函数测试。"""
+
+    def test_nonexistent_path_returns_zero_complete(self, tmp_path):
+        """不存在的路径应返回 DirSizeResult(0.0, True)。"""
+        from app.utils.files import DirSizeResult, dir_size_mb
+
+        result = dir_size_mb(tmp_path / "nonexistent")
+        assert isinstance(result, DirSizeResult)
+        assert result.size_mb == 0.0
+        assert result.complete is True
+
+    def test_empty_dir(self, tmp_path):
+        """空目录应返回 DirSizeResult(0.0, True)。"""
+        from app.utils.files import DirSizeResult, dir_size_mb
+
+        result = dir_size_mb(tmp_path)
+        assert isinstance(result, DirSizeResult)
+        assert result.size_mb == 0.0
+        assert result.complete is True
+
+    def test_file_path(self, tmp_path):
+        """文件路径应返回该文件大小。"""
+        from app.utils.files import DirSizeResult, dir_size_mb
+
+        (tmp_path / "test.txt").write_bytes(b"x" * (1024 * 1024 + 1))
+        result = dir_size_mb(tmp_path / "test.txt")
+        assert isinstance(result, DirSizeResult)
+        assert result.size_mb > 0
+        assert result.complete is True
+
+    def test_dir_with_files(self, tmp_path):
+        """目录内有文件时应正确计算大小。"""
+        from app.utils.files import DirSizeResult, dir_size_mb
+
+        (tmp_path / "a.txt").write_bytes(b"x" * (1024 * 1024 + 1))
+        (tmp_path / "b.txt").write_bytes(b"y" * (1024 * 1024 + 1))
+        result = dir_size_mb(tmp_path)
+        assert isinstance(result, DirSizeResult)
+        assert result.size_mb > 0
+        assert result.complete is True
+
+    def test_nested_dirs(self, tmp_path):
+        """嵌套目录应递归计算。"""
+        from app.utils.files import DirSizeResult, dir_size_mb
+
+        sub = tmp_path / "sub"
+        sub.mkdir()
+        (sub / "deep.txt").write_bytes(b"x" * (1024 * 1024 + 1))
+        result = dir_size_mb(tmp_path)
+        assert isinstance(result, DirSizeResult)
+        assert result.size_mb > 0
+        assert result.complete is True
+
+    def test_oserror_marks_incomplete(self, tmp_path):
+        """遍历过程中遇到 OSError 应标记 complete=False。"""
+        from app.utils.files import dir_size_mb
+
+        # 创建一个目录，在遍历时会触发 OSError
+        target = tmp_path / "target"
+        target.mkdir()
+        (target / "ok.txt").write_bytes(b"data")
+
+        original_rglob = type(target).rglob
+
+        def patched_rglob(self, pattern):
+            for item in original_rglob(self, pattern):
+                if item.name == "ok.txt":
+                    raise OSError("permission denied")
+                yield item
+
+        with patch.object(type(target), "rglob", patched_rglob):
+            result = dir_size_mb(target)
+
+        assert result.complete is False
+
+    def test_string_path(self, tmp_path):
+        """字符串路径参数应正常工作。"""
+        from app.utils.files import DirSizeResult, dir_size_mb
+
+        result = dir_size_mb(str(tmp_path))
+        assert isinstance(result, DirSizeResult)
+        assert result.size_mb == 0.0
+        assert result.complete is True

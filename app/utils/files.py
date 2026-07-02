@@ -4,6 +4,7 @@ import tempfile
 import time
 from datetime import datetime
 from pathlib import Path
+from typing import NamedTuple
 
 from .logging import get_logger
 
@@ -102,29 +103,37 @@ async def save_screenshot(
         return None
 
 
-def dir_size_mb(path: Path | str) -> float:
+class DirSizeResult(NamedTuple):
+    """dir_size_mb 的返回结果。"""
+
+    size_mb: float
+    complete: bool
+
+
+def dir_size_mb(path: Path | str) -> DirSizeResult:
     """递归计算目录或文件的磁盘占用（MB）。
 
     使用 rglob + stat 遍历所有文件，累加大小后转换为 MB。
-    OSError（权限不足等）的文件会被跳过。
+    遍历过程中遇到 OSError（权限不足等）时标记为不完整。
 
     Args:
         path: 目录或文件路径。
 
     Returns:
-        占用大小（MB），保留 1 位小数。路径不存在时返回 0.0。
+        DirSizeResult(size_mb, complete)。路径不存在时返回 DirSizeResult(0.0, True)。
     """
     p = Path(path)
     if not p.exists():
-        return 0.0
+        return DirSizeResult(0.0, True)
     if p.is_file():
-        return round(p.stat().st_size / (1024 * 1024), 1)
+        return DirSizeResult(round(p.stat().st_size / (1024 * 1024), 1), True)
 
     total = 0
+    complete = True
     try:
         for f in p.rglob("*"):
             if f.is_file():
                 total += f.stat().st_size
     except OSError:
-        pass
-    return round(total / (1024 * 1024), 1)
+        complete = False
+    return DirSizeResult(round(total / (1024 * 1024), 1), complete)
