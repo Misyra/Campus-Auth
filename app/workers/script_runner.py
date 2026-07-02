@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import contextlib
-import ntpath
 import os
 import platform
+import re
 import sys
 import tempfile
 import time
@@ -20,6 +20,9 @@ logger = get_logger("script_runner", source="backend")
 
 # 默认脚本超时（秒）
 DEFAULT_TIMEOUT = 60
+
+# 正则提取解释器名：匹配字母前缀 + 可选版本号（如 python3、python3.12）
+_EXEC_NAME_RE = re.compile(r"^([a-zA-Z]+)(?:\d+\.?\d*)?$")
 
 # 解释器 → 临时文件后缀映射
 _BINARY_EXT_MAP = {
@@ -41,6 +44,25 @@ _BINARY_EXT_MAP = {
     "zsh": ".sh",
     "fish": ".fish",
 }
+
+
+def _get_interpreter_name(binary: str) -> str:
+    """从解释器路径中提取语言名称（小写）。
+
+    使用 os.path 提取文件名，正则匹配字母前缀。
+    例如: /usr/bin/python3.12 → python, C:\\Python312\\python.exe → python
+    """
+    stem = os.path.splitext(os.path.basename(binary))[0]
+    match = _EXEC_NAME_RE.match(stem)
+    if match:
+        return match.group(1).lower()
+    return stem.lower()
+
+
+def _get_temp_extension(binary: str) -> str:
+    """根据解释器名推断临时文件后缀。"""
+    lang = _get_interpreter_name(binary)
+    return _BINARY_EXT_MAP.get(lang, "")
 
 
 def get_default_binary() -> str:
@@ -100,7 +122,7 @@ class ScriptRunner:
             script_file: 可选，指定要执行的脚本文件路径。
                          为 None 时使用 self.script_path（仅文件脚本）。
         """
-        exe_name = ntpath.splitext(ntpath.basename(self.binary_path))[0].lower()
+        exe_name = _get_interpreter_name(self.binary_path)
 
         # 指定了脚本文件（临时文件或普通文件）：统一按文件执行
         if script_file is not None:
@@ -153,8 +175,7 @@ class ScriptRunner:
 
     def _content_temp_file(self, content: str) -> str:
         """将 JSON 内容写入临时文件，返回文件路径。"""
-        exe_name = ntpath.splitext(ntpath.basename(self.binary_path))[0].lower()
-        ext = _BINARY_EXT_MAP.get(exe_name, "")
+        ext = _get_temp_extension(self.binary_path)
         tf = tempfile.NamedTemporaryFile(
             "w",
             suffix=ext,
@@ -196,9 +217,7 @@ class ScriptRunner:
             self._cache_available_binaries = detect_available_binaries()
         available = [b["path"] for b in self._cache_available_binaries]
         if self.binary_path not in available:
-            logger.debug(
-                "binary_path 不在已知列表，已自动添加: {}", self.binary_path
-            )
+            logger.debug("binary_path 不在已知列表，已自动添加: {}", self.binary_path)
             available.append(self.binary_path)
         policy = ShellCommandPolicy(allowlist=available)
 
@@ -238,7 +257,11 @@ class ScriptRunner:
             return True, output
         else:
             # 失败时优先使用 stderr
-            output = stderr_str[:500] or stdout_str[:500] or f"(无输出, exit code {returncode})"
+            output = (
+                stderr_str[:500]
+                or stdout_str[:500]
+                or f"(无输出, exit code {returncode})"
+            )
             logger.warning(
                 "脚本执行失败: {} (耗时 {:.1f}s, exit {})", output, elapsed, returncode
             )
