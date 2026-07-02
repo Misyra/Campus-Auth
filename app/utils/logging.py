@@ -21,7 +21,7 @@ from typing import Any
 
 from loguru import logger
 
-from app.constants import LOG_BUFFER_MAXLEN, STATUS_LOG_MAXLEN
+from app.constants import LOG_BUFFER_MAXLEN, STATUS_LOG_MAXLEN, VALID_LOG_LEVELS
 
 # 移除 loguru 默认的 stderr handler
 logger.remove()
@@ -85,8 +85,6 @@ if "pytest" in sys.modules:
     logger.add(_to_std_logging, level="DEBUG", format="{message}")
 
 # ==================== 日志级别标准化 ====================
-
-VALID_LOG_LEVELS = frozenset({"DEBUG", "INFO", "WARNING", "ERROR"})
 
 
 def normalize_level(level: str | None, default: str = "INFO") -> str:

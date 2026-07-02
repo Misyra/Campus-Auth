@@ -69,10 +69,10 @@ temp/
 resources/background/
 
 # 审计报告和实施计划（本地参考）
-docs/superpowers/
+docs/designs/archive/
 
 # Source assets (in dev/)
-dev/
+/dev/
 
 # Release staging artifacts
 release/stage-win/

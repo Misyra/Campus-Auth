@@ -7,10 +7,7 @@ from enum import StrEnum
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from app.constants import DEFAULT_HTTP_TARGETS, DEFAULT_NETWORK_TARGETS, DEFAULT_URL_CHECK_URLS
-from app.utils.logging import VALID_LOG_LEVELS
-
-_URL_PATTERN = re.compile(r"^https?://")
+from app.constants import DEFAULT_HTTP_TARGETS, DEFAULT_NETWORK_TARGETS, DEFAULT_URL_CHECK_URLS, URL_PATTERN, VALID_LOG_LEVELS
 
 
 class StartupAction(StrEnum):
@@ -99,7 +96,7 @@ class RuntimeFeatures:
 
 def _validate_auth_url(v: str) -> str:
     v = v.strip()
-    if v and not _URL_PATTERN.match(v):
+    if v and not URL_PATTERN.match(v):
         raise ValueError("认证地址必须以 http:// 或 https:// 开头")
     return v
 

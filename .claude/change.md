@@ -2,6 +2,60 @@
 
 ## 2026-07-02
 
+### docs: 文档目录重构与索引补全
+
+**目录重构：**
+- `docs/api-doc.md` → `docs/dev/api-reference.md`
+- `docs/code-style-guide.md` → `docs/dev/code-style-guide.md`
+- `docs/task-manual.md` → `docs/dev/architecture.md`
+- `docs/custom-script-guide.md` → `docs/guides/custom-script-guide.md`
+- `docs/task-writing-guide.md` → `docs/guides/task-writing-guide.md`
+- `docs/update_log.md` → `docs/changelog.md`
+- `docs/superpowers/specs/*` → `docs/designs/specs/*`
+- `docs/superpowers/plans/*` → `docs/designs/archive/*`
+- `dev/claude-code-hooks-guide.md` → `docs/dev/tools/claude-code-hooks.md`
+- `CONTRIBUTING.md` 复制到 `docs/dev/contributing.md`
+
+**新增索引文档：**
+- `docs/README.md` — 文档总索引
+- `docs/guides/README.md` — 用户文档导航
+- `docs/dev/README.md` — 开发者文档导航
+- `docs/designs/README.md` — 设计文档与归档导航
+
+**链接更新：**
+- `README.md`：更新所有 docs 引用路径
+- `CONTRIBUTING.md`：更新 code-style-guide 引用路径
+- `app/api/tools.py`：更新文档服务路径
+- `docs/dev/architecture.md`：更新 task-writing-guide 和 api-reference 引用
+- `docs/guides/custom-script-guide.md`：更新交叉引用
+- `docs/dev/contributing.md`：更新 code-style-guide 引用
+
+### docs: 修复 README 项目结构与实际不符
+
+- 删除不存在的 `app/ui/system_tray.py` 引用，改为 `app/system_tray.py`
+- 删除不存在的 `app/services/task_service.py`、`config_service.py`、`runtime_config.py` 引用
+- 删除不存在的 `app/utils/login.py` 引用
+- 补充遗漏的 `login_orchestrator.py`、`login_handler.py`、`login_runner.py`、`config_builder.py`、`scheduler_service.py`、`retry_policy.py`、`launcher.py` 等
+- 补充遗漏的 API 路由文件：`browsers.py`、`install_playwright.py`、`icons.py`、`ws.py`
+- 补充 `app/tasks/` 下的 `manager.py`、`browser_runner.py`、`step_handlers.py`、`validator.py`
+- 更新"主要模块说明"部分
+
+### docs: 创建 CLAUDE.md
+
+- 新增项目级 CLAUDE.md，包含技术栈、开发命令、代码规范、项目结构、架构要点、测试规范、Git 规范、常见陷阱
+
+### refactor: 消除模块间不当耦合
+
+- `VALID_LOG_LEVELS` 从 `app/utils/logging.py` 移至 `app/constants.py`，解除 `schemas → utils/logging` 依赖
+- `URL_PATTERN` 从 `app/schemas.py` 移至 `app/constants.py`，消除私有符号跨模块导入
+- `app/utils/config_utils.py` 改为从 `app.constants` 导入 `URL_PATTERN`
+- `_runtime_config_to_worker_dict` 改为公开函数 `runtime_config_to_worker_dict`，消除私有函数导入
+- 清理 `app/workers/manager/` 空目录残留
+
+### docs: 添加系统架构文档
+
+- `docs/architecture.md`：新增系统架构图、启动流程、数据流、线程模型、设计模式说明
+
 ### refactor: 迁移 background 目录到 resources
 
 - `frontend/background/` → `resources/background/`：移动背景图片存储目录

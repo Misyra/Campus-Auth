@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 
 _ENV_PROJECT_ROOT = os.getenv("CAMPUS_AUTH_PROJECT_ROOT", "").strip()
@@ -41,3 +42,9 @@ DEFAULT_TASK_TIMEOUT_MS = 30000  # 任务默认超时（毫秒）
 # ── 容量常量 ──
 LOG_BUFFER_MAXLEN = 500  # 日志环形缓冲
 STATUS_LOG_MAXLEN = 200  # 状态日志缓冲
+
+# ── 日志级别 ──
+VALID_LOG_LEVELS = frozenset({"DEBUG", "INFO", "WARNING", "ERROR"})
+
+# ── 正则 ──
+URL_PATTERN = re.compile(r"^https?://")

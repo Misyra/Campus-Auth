@@ -67,13 +67,13 @@ def download_task_recorder():
 @router.get("/api/docs/task-writing-guide")
 def download_task_writing_guide():
     """下载任务编写指南文档"""
-    return _serve_doc("docs/task-writing-guide.md", "text/markdown", "task-writing-guide.md")
+    return _serve_doc("docs/guides/task-writing-guide.md", "text/markdown", "task-writing-guide.md")
 
 
 @router.get("/api/docs/task-manual")
 def download_task_manual():
     """下载任务手册文档"""
-    return _serve_doc("docs/task-manual.md", "text/markdown", "task-manual.md")
+    return _serve_doc("docs/dev/architecture.md", "text/markdown", "task-manual.md")
 
 
 # ── 背景图片管理 ──
