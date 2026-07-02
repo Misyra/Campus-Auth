@@ -14,6 +14,17 @@
 - `tests/test_config/test_container.py`：新增 autouse fixture mock `shutdown_decision_executor`，避免测试污染模块级 executor
 - `tests/test_app/test_application_fix.py`：新增 autouse fixture mock `shutdown_decision_executor`
 
+### fix: IPv6 地址解析改用标准库 ipaddress
+
+- `app/network/parsers.py`：新增 `_looks_like_ipv6()` 函数，使用 `ipaddress.IPv6Address` 替代冒号计数法判断 IPv6 地址；`parse_ping_targets()` 中调用该函数替换原有 `colon_count >= 2` 逻辑
+- `tests/test_network/test_parsers.py`：新增 TestLooksLikeIPv6（10 个用例）和 TestParsePingTargetsIPv6（5 个用例）
+
+### perf: Windows 网关检测优先使用 route print，减少 PowerShell 冷启动
+
+- `app/network/detect.py`：新增 `_parse_windows_route_print()` 解析 route print 输出；新增 `_get_windows_gateway_route_print()` 调用 route print 命令；`_detect_gateway_windows()` 重构为三层回退：route print → PowerShell → ipconfig
+- `tests/test_network/test_detect.py`：新增 15 个测试用例（解析逻辑、子进程调用、集成回退流程）
+- `tests/test_core/test_network_detect_internals.py`：更新现有测试以适配新的三层回退顺序；新增 route print 成功测试
+
 ### fix: 登录去重命中时回调 on_complete，避免手动登录挂起
 
 - `app/services/engine.py`：LoginBridge.submit_login 去重分支（handle.future in _registered_futures）补调 on_complete(False, msg)
