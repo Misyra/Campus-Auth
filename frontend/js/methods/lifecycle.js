@@ -248,6 +248,12 @@ export const lifecycleMethods = {
     this.ws.onclose = () => {
       this.frontendLogger.setWebSocket(null);
       this.frontendLogger.warn('websocket', '连接已关闭');
+      // 关闭时清理 ping 定时器，避免无意义的发送尝试
+      if (this._wsPingTimer) {
+        clearInterval(this._wsPingTimer);
+        this.timers = this.timers.filter(t => t !== this._wsPingTimer);
+        this._wsPingTimer = null;
+      }
       if (this._wsDestroyed) return;
       if (this.wsRetryCount >= this.wsMaxRetries) {
         this.wsReconnecting = false;
