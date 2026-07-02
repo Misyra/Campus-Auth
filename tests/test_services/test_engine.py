@@ -369,7 +369,10 @@ class TestHandleLogin:
         """无配置时返回 False。"""
         svc = engine_factory(raw=True)
         svc._runtime_config = RuntimeConfig()
-        svc._orchestrator.validate.return_value = "登录配置不完整（请先设置认证地址、用户名和密码）"
+        # 校验失败由 orchestrator.submit 内部处理，返回 rejected handle
+        mock_handle = MagicMock()
+        mock_handle.rejected_reason = "登录配置不完整（请先设置认证地址、用户名和密码）"
+        svc._orchestrator.submit.return_value = mock_handle
         cmd = EngineCommand(type=EngineCmdType.LOGIN, response_event=threading.Event())
         svc._handle_login(cmd)
         success, message = cmd.response_data
@@ -381,7 +384,9 @@ class TestHandleLogin:
         svc._runtime_config = RuntimeConfig(
             credentials=LoginCredentials(password="p", auth_url="http://test.com"),
         )
-        svc._orchestrator.validate.return_value = "登录配置不完整（请先设置认证地址、用户名和密码）"
+        mock_handle = MagicMock()
+        mock_handle.rejected_reason = "登录配置不完整（请先设置认证地址、用户名和密码）"
+        svc._orchestrator.submit.return_value = mock_handle
         cmd = EngineCommand(type=EngineCmdType.LOGIN, response_event=threading.Event())
         svc._handle_login(cmd)
         success, message = cmd.response_data
@@ -393,7 +398,9 @@ class TestHandleLogin:
         svc._runtime_config = RuntimeConfig(
             credentials=LoginCredentials(username="u", auth_url="http://test.com"),
         )
-        svc._orchestrator.validate.return_value = "登录配置不完整（请先设置认证地址、用户名和密码）"
+        mock_handle = MagicMock()
+        mock_handle.rejected_reason = "登录配置不完整（请先设置认证地址、用户名和密码）"
+        svc._orchestrator.submit.return_value = mock_handle
         cmd = EngineCommand(type=EngineCmdType.LOGIN, response_event=threading.Event())
         svc._handle_login(cmd)
         success, message = cmd.response_data
@@ -404,7 +411,9 @@ class TestHandleLogin:
         svc._runtime_config = RuntimeConfig(
             credentials=LoginCredentials(username="u", password="p"),
         )
-        svc._orchestrator.validate.return_value = "登录配置不完整（请先设置认证地址、用户名和密码）"
+        mock_handle = MagicMock()
+        mock_handle.rejected_reason = "登录配置不完整（请先设置认证地址、用户名和密码）"
+        svc._orchestrator.submit.return_value = mock_handle
         cmd = EngineCommand(type=EngineCmdType.LOGIN, response_event=threading.Event())
         svc._handle_login(cmd)
         success, message = cmd.response_data
@@ -417,7 +426,6 @@ class TestHandleLogin:
                 username="u", password="p", auth_url="http://test.com",
             ),
         )
-        svc._orchestrator.validate.return_value = None
         mock_handle = MagicMock()
         mock_handle.rejected_reason = None
         mock_future = Future()
@@ -437,7 +445,6 @@ class TestHandleLogin:
                 username="u", password="p", auth_url="http://test.com",
             ),
         )
-        svc._orchestrator.validate.return_value = None
         mock_handle = MagicMock()
         mock_handle.rejected_reason = None
         mock_handle.future = None
@@ -453,7 +460,6 @@ class TestHandleLogin:
                 username="u", password="p", auth_url="http://test.com",
             ),
         )
-        svc._orchestrator.validate.return_value = None
         mock_handle = MagicMock()
         mock_handle.rejected_reason = "提交被拒绝"
         svc._orchestrator.submit.return_value = mock_handle

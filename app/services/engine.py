@@ -204,14 +204,23 @@ class LoginBridge:
         self,
         is_manual: bool = False,
         config_snapshot: RuntimeConfig | None = None,
+        on_complete: Callable[[bool, str], None] | None = None,
     ) -> bool:
-        """提交登录到 LoginOrchestrator。"""
+        """提交登录到 LoginOrchestrator。
+
+        Args:
+            on_complete: 登录完成回调（含被拒、取消、异常所有终态）。
+                None 时走 auto 路径的 retry_policy 逻辑；非 None 时走 manual 路径，
+                由调用方自行处理重试（manual 不参与 retry_policy）。
+        """
         # 清理已完成的 Future 引用，防止极端情况下残留
         with self._futures_lock:
             self._registered_futures = {f for f in self._registered_futures if not f.done()}
 
         orchestrator = self._get_orchestrator()
         if orchestrator is None:
+            if on_complete is not None:
+                on_complete(False, "登录服务未初始化")
             return False
 
         config = config_snapshot if config_snapshot is not None else self._get_runtime_config()
@@ -225,19 +234,24 @@ class LoginBridge:
                 ok, reason = check_login_prerequisites(m, config.credentials.auth_url)
                 if not ok:
                     self._logger.warning("登录前置检查未通过: {}", reason)
+                    if on_complete is not None:
+                        on_complete(False, reason)
                     return False
 
         source = "manual" if is_manual else "auto"
         handle = orchestrator.submit(source=source, config=config)
 
         if handle.rejected_reason is not None:
-            # 手动登录的响应由 _handle_login 设置，此处仅记录自动登录的拒绝
-            if not is_manual:
-                self._logger.warning("登录被拒绝: {}", handle.rejected_reason)
+            self._logger.warning("登录被拒绝: {}", handle.rejected_reason)
+            if on_complete is not None:
+                on_complete(False, handle.rejected_reason)
             return False
 
         if handle.future is None:
             # 复用了旧 handle（去重命中），不算新提交
+            msg = "登录任务已在执行中，请稍后再试"
+            if on_complete is not None:
+                on_complete(False, msg)
             return False
 
         # 防止去重命中时重复注册回调
@@ -251,16 +265,17 @@ class LoginBridge:
             self._status_update_callback()
             try:
                 ok, msg = f.result()
-                tag = "手动登录" if is_manual else "自动登录"
-                if ok:
-                    if not is_manual:
+                if on_complete is not None:
+                    # manual 路径：直接回调，不参与 retry_policy
+                    on_complete(ok, msg)
+                elif not is_manual:
+                    # auto 路径：维护 retry_policy 状态
+                    if ok:
                         self._retry_policy.on_login_done(success=True)
                         self._on_login_success()
-                else:
-                    if not is_manual:
+                    else:
                         delay = self._retry_policy.on_login_done(success=False)
                         if delay is None:
-                            # 超过最大重试次数，不再尝试登录，等待网络检测恢复后重置
                             self._on_retry_exhausted()
                             logger.warning(
                                 "登录重试次数已用尽（{}/{}），等待网络恢复（下次检测 {}s 后）",
@@ -279,12 +294,16 @@ class LoginBridge:
                                 self._retry_policy.max_retries,
                                 int(delay), next_time,
                             )
-                            # 通过回调设置下次重试时间
                             self._on_retry_scheduled(delay)
+                # is_manual=True 且无 on_complete：仅更新状态，不动 retry_policy
             except CancelledError:
                 logger.warning("登录任务已取消 (source={})", source)
+                if on_complete is not None:
+                    on_complete(False, "登录已取消")
             except Exception as e:
                 logger.exception("登录任务异常: {}", e)
+                if on_complete is not None:
+                    on_complete(False, f"登录内部错误: {e}")
 
         with self._futures_lock:
             self._registered_futures.add(handle.future)
@@ -633,46 +652,19 @@ class ScheduleEngine:
     def _handle_login(self, cmd: EngineCommand) -> None:
         """执行一次性登录（手动触发，异步等待完成）。
 
-        提交登录任务后立即返回，由 done_callback 通知 API 线程结果。
-        引擎线程不再阻塞，可继续处理 STOP/RELOAD/SHUTDOWN 等命令。
+        委托 LoginBridge.submit_login，通过 on_complete 回调统一处理
+        被拒/已完成/异步完成所有终态，避免与 auto 路径分叉。
         """
-        if self._orchestrator is None:
-            cmd.response_data = (False, "登录服务未初始化")
-            if cmd.response_event:
-                cmd.response_event.set()
-            return
-        err = self._orchestrator.validate(self._runtime_config)
-        if err is not None:
-            cmd.response_data = (False, err)
-            if cmd.response_event:
-                cmd.response_event.set()
-            return
-
-        handle = self._orchestrator.submit(source="manual", config=self._runtime_config)
-        if handle.rejected_reason is not None:
-            cmd.response_data = (False, handle.rejected_reason)
-            if cmd.response_event:
-                cmd.response_event.set()
-            return
-        if handle.future is None:
-            cmd.response_data = (False, "登录任务已在执行中，请稍后再试")
-            if cmd.response_event:
-                cmd.response_event.set()
-            return
-
-        # 非阻塞：注册回调，由回调通知 API 线程
-        def _on_login_done(f: Future) -> None:
-            try:
-                ok, msg = f.result()
-            except CancelledError:
-                ok, msg = False, "登录已取消"
-            except Exception as e:
-                ok, msg = False, f"登录内部错误: {e}"
+        def _on_complete(ok: bool, msg: str) -> None:
             cmd.response_data = (ok, msg)
             if cmd.response_event:
                 cmd.response_event.set()
 
-        handle.future.add_done_callback(_on_login_done)
+        self._login_bridge.submit_login(
+            is_manual=True,
+            config_snapshot=self._runtime_config,
+            on_complete=_on_complete,
+        )
 
     def cancel_login(self) -> tuple[bool, str]:
         """取消当前正在执行的登录。"""
