@@ -173,5 +173,10 @@ async def delete_background(filename: str) -> ApiResponse:
     filepath = BG_DIR / safe_name
     if not filepath.exists():
         raise HTTPException(status_code=404, detail="文件不存在")
-    filepath.unlink()
+    try:
+        filepath.unlink()
+    except PermissionError as exc:
+        raise HTTPException(status_code=409, detail=f"文件被占用，无法删除: {exc}") from exc
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"删除文件失败: {exc}") from exc
     return ApiResponse(success=True, message="背景图片已删除")

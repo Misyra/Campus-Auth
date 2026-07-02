@@ -154,6 +154,26 @@ class TestDeleteBackground:
         resp = test_client.delete("/api/background/no_such.jpg")
         assert resp.status_code == 404
 
+    def test_delete_permission_error(self, client):
+        """文件被占用时返回 409。"""
+        test_client, bg_dir, _ = client
+        (bg_dir / "locked.jpg").write_bytes(b"data")
+
+        with patch.object(Path, "unlink", side_effect=PermissionError("文件被占用")):
+            resp = test_client.delete("/api/background/locked.jpg")
+        assert resp.status_code == 409
+        assert "文件被占用" in resp.json()["detail"]
+
+    def test_delete_os_error(self, client):
+        """其他 OS 错误返回 500。"""
+        test_client, bg_dir, _ = client
+        (bg_dir / "err.jpg").write_bytes(b"data")
+
+        with patch.object(Path, "unlink", side_effect=OSError("磁盘错误")):
+            resp = test_client.delete("/api/background/err.jpg")
+        assert resp.status_code == 500
+        assert "删除文件失败" in resp.json()["detail"]
+
 
 # ── 下载任务录制器脚本 ──
 
