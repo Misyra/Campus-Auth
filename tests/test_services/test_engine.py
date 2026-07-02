@@ -1475,6 +1475,19 @@ class TestTogglePureMode:
         assert svc.pure_mode is True
         svc._profile_service.update.assert_called_once()
 
+    def test_toggle_pure_mode_syncs_runtime_config(self, engine_factory):
+        """toggle_pure_mode 应同步更新 _runtime_config.browser.pure_mode。"""
+        svc = engine_factory(raw=True)
+        svc._profile_service = MagicMock()
+        svc._runtime_config = RuntimeConfig()
+        svc._pure_mode = True
+
+        svc.toggle_pure_mode()
+        assert svc._runtime_config.browser.pure_mode is False
+
+        svc.toggle_pure_mode()
+        assert svc._runtime_config.browser.pure_mode is True
+
 
 # =====================================================================
 # 属性

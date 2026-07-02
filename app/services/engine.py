@@ -1001,6 +1001,13 @@ class ScheduleEngine:
                     }),
                 )
             )
+            self._runtime_config = self._runtime_config.model_copy(
+                update={
+                    "browser": self._runtime_config.browser.model_copy(
+                        update={"pure_mode": new_value}
+                    )
+                }
+            )
         return new_value
 
     def get_runtime_config(self) -> RuntimeConfig:
