@@ -90,7 +90,7 @@ class WebSocketManager:
         # O(n²) 在 n≤2 时等价于 O(1)。无需改为 set/dict。
         to_close = []
         async with self._lock:
-            for ws, result in zip(connections, results, strict=False):
+            for ws, result in zip(connections, results, strict=True):
                 if isinstance(result, Exception) and ws in self._connections:
                     self._connections.remove(ws)
                     to_close.append(ws)
