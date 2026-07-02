@@ -57,7 +57,7 @@ class TestRemoveUserDataSafety:
                 with patch("app.services.uninstall.shutil.rmtree"):
                     with patch("app.services.uninstall.logger") as mock_logger:
                         uninstall._remove_user_data()
-                        mock_logger.warning.assert_called_once()
+                        mock_logger.info.assert_called_once()
                         # 日志中应包含目录路径
-                        call_args = mock_logger.warning.call_args
+                        call_args = mock_logger.info.call_args
                         assert ".campus_network_auth" in str(call_args)
