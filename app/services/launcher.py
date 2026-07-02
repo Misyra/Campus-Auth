@@ -336,6 +336,7 @@ def launch_lightweight(ctx: ApplicationContext, logger):
         logger.debug("收到退出信号 (轻量模式)，开始关闭服务")
         _web_server_shutdown_event.set()
 
+    signal.signal(signal.SIGINT, _signal_handler)
     if hasattr(signal, "SIGTERM"):
         signal.signal(signal.SIGTERM, _signal_handler)
 
