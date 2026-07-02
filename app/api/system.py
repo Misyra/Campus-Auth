@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import sys
 import time
 
 import httpx
@@ -53,7 +54,7 @@ def health() -> HealthResponse:
     return HealthResponse(
         status="ok",
         version=get_project_version(PROJECT_ROOT),
-        python_version=f"{os.sys.version_info.major}.{os.sys.version_info.minor}.{os.sys.version_info.micro}",
+        python_version=f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
         memory={
             "rss_mb": round(mem.rss / 1024 / 1024, 1),
             "vms_mb": round(mem.vms / 1024 / 1024, 1),
@@ -74,7 +75,10 @@ async def check_update() -> UpdateCheckResponse:
 
     async with _update_lock:
         # 缓存命中直接返回
-        if _update_cache and (time.monotonic() - _update_cache_time) < _UPDATE_CACHE_TTL:
+        if (
+            _update_cache
+            and (time.monotonic() - _update_cache_time) < _UPDATE_CACHE_TTL
+        ):
             return UpdateCheckResponse(**_update_cache, current=current)
 
         try:
@@ -187,9 +191,7 @@ def shutdown_server(
     # 通过 shutdown_event 触发 lifespan 正常关闭
     bg_tasks.add_task(_trigger_shutdown_event, request)
 
-    return ApiResponse(
-        success=True, message="服务器正在关闭，请稍候，页面将自动断开"
-    )
+    return ApiResponse(success=True, message="服务器正在关闭，请稍候，页面将自动断开")
 
 
 def _trigger_shutdown_event(request: Request) -> None:
