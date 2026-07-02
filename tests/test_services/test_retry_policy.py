@@ -42,6 +42,17 @@ class TestMonitoredPolicy:
         assert policy.delay_before(100) == 100.0
         assert policy.delay_before(1000) == 100.0
 
+    def test_delay_before_zero(self):
+        """attempt=0 不应越界，返回第一个延迟值。"""
+        policy = MonitoredPolicy()
+        assert policy.delay_before(0) == 5.0
+
+    def test_delay_before_negative(self):
+        """attempt 为负数时返回第一个延迟值。"""
+        policy = MonitoredPolicy()
+        assert policy.delay_before(-1) == 5.0
+        assert policy.delay_before(-100) == 5.0
+
     # -- on_network_check -----------------------------------------------
 
     def test_initial_state_no_transition(self):
