@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import atexit
 import socket
 from collections.abc import Iterable, Sequence
-from concurrent.futures import as_completed
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from urllib.parse import urlparse
 
@@ -12,14 +13,18 @@ from app.utils.logging import get_logger
 from app.utils.time_utils import is_in_pause_period
 
 from .probes import (
-    executor as _executor,
-)
-from .probes import (
     is_local_network_connected,
     is_network_available_http,
     is_network_available_socket,
     is_network_available_url,
 )
+
+# 外层决策调度专用线程池（与 probes.py 的 8-worker 内层探测池分离）
+# 避免外层任务占用内层 worker 导致线程池饥饿。
+_decision_executor = ThreadPoolExecutor(
+    max_workers=3, thread_name_prefix="net_decision"
+)
+atexit.register(_decision_executor.shutdown, wait=False, cancel_futures=True)
 
 
 @dataclass(slots=True)
@@ -42,8 +47,12 @@ def check_pause(pause: PauseSettings) -> tuple[bool, str]:
     """暂停时段检查。"""
     if is_in_pause_period(pause):
         logger.debug("暂停时段，跳过检测")
-        logger.debug("暂停配置: enabled={}, start={}, end={}",
-                      pause.enabled, pause.start_hour, pause.end_hour)
+        logger.debug(
+            "暂停配置: enabled={}, start={}, end={}",
+            pause.enabled,
+            pause.start_hour,
+            pause.end_hour,
+        )
         return (True, "pause_period")
     return (False, "")
 
@@ -75,7 +84,9 @@ def check_network_status(monitor: MonitorSettings) -> tuple[bool, str, str]:
     from app.network.parsers import parse_ping_targets
 
     try:
-        test_sites = parse_ping_targets(monitor.ping_targets) if monitor.ping_targets else None
+        test_sites = (
+            parse_ping_targets(monitor.ping_targets) if monitor.ping_targets else None
+        )
     except ValueError:
         logger.warning("网络检测目标配置格式错误，跳过 TCP 检测")
         test_sites = None
@@ -152,6 +163,7 @@ def is_network_available(
 
     if enable_http and not test_urls:
         from app.constants import DEFAULT_HTTP_TARGETS
+
         test_urls = DEFAULT_HTTP_TARGETS.split(",")
     urls_list = list(test_urls) if enable_http and test_urls else []
 
@@ -162,7 +174,7 @@ def is_network_available(
         "开" if enable_url else "关",
     )
 
-    pool = _executor
+    pool = _decision_executor
     futures = {}
     if enable_tcp:
         futures[
@@ -264,3 +276,8 @@ def _is_auth_url_reachable(
 
     logger.debug("认证地址不可达: {}", auth_url)
     return False
+
+
+def shutdown_decision_executor(wait: bool = True) -> None:
+    """关闭决策层线程池，在应用关闭时调用。"""
+    _decision_executor.shutdown(wait=wait)

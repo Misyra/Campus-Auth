@@ -2,6 +2,14 @@
 
 ## 2026-07-03
 
+### fix: 网络决策层使用独立 executor，避免嵌套提交导致线程池饥饿
+
+- `app/network/decision.py`：新增 `_decision_executor`（3-worker 独立线程池），`is_network_available()` 改用该池调度外层决策任务，与 `probes.py` 的 8-worker 内层探测池分离；新增 `shutdown_decision_executor()` 函数
+- `app/container.py`：`ServiceContainer.shutdown()` 中注册 `_decision_executor` 关闭
+- `tests/test_network/test_decision.py`：新增 12 个测试（executor 隔离性、饥饿模拟、关闭行为、check_network_status 联动）
+- `tests/test_config/test_container.py`：新增 autouse fixture mock `shutdown_decision_executor`，避免测试污染模块级 executor
+- `tests/test_app/test_application_fix.py`：新增 autouse fixture mock `shutdown_decision_executor`
+
 ### fix: 登录去重命中时回调 on_complete，避免手动登录挂起
 
 - `app/services/engine.py`：LoginBridge.submit_login 去重分支（handle.future in _registered_futures）补调 on_complete(False, msg)
