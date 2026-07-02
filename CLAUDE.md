@@ -349,7 +349,12 @@ Type 列表：
 
 ### 版本号
 
-版本号存储在 `pyproject.toml` 的 `[project]` 段，由 `app/version.py` 中的 `get_project_version()` 读取。升级版本号时需同步修改所有相关位置，详见 `.claude/projects/E--Campus-Auth/memory/project_version_locations.md`。
+版本号存储在 `pyproject.toml` 的 `[project]` 段，由 `app/version.py` 中的 `get_project_version()` 读取。升级版本号时需同步修改以下位置：
+
+1. `pyproject.toml` — `version = "x.x.x"`
+2. `resources/tools/task-recorder.user.js` — 第 4 行 `@version` 和第 22 行 `const VERSION`
+3. `docs/changelog.md` — 新增版本条目
+4. `.claude/change.md` — 新增修改记录
 
 ### 修改日志
 
