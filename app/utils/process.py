@@ -142,11 +142,18 @@ def is_service_running() -> tuple[bool, int | None]:
     return True, pid
 
 
-def is_local_port_in_use(port: int) -> bool:
-    """检查本地端口是否被占用。"""
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.settimeout(0.4)
-        return sock.connect_ex(("127.0.0.1", port)) == 0
+def is_local_port_in_use(port: int, host: str = "127.0.0.1") -> bool:
+    """检查本地端口是否被占用。
+
+    自动检测 IPv6 地址（host 中包含 ":" 时使用 AF_INET6）。
+    """
+    family = socket.AF_INET6 if ":" in host else socket.AF_INET
+    with socket.socket(family, socket.SOCK_STREAM) as s:
+        try:
+            s.bind((host, port))
+        except OSError:
+            return True
+    return False
 
 
 def write_pid(mode: str | None = None) -> None:

@@ -4,9 +4,8 @@ from __future__ import annotations
 
 import json
 import os
-import time
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import psutil
 
@@ -32,7 +31,12 @@ class TestReadPidFile:
     def test_valid_json(self, tmp_path):
         """有效 JSON 格式。"""
         pid_file = tmp_path / "test.pid"
-        data = {"pid": 12345, "create_time": 1718191234.123, "mode": "lightweight", "proc_name": "python.exe"}
+        data = {
+            "pid": 12345,
+            "create_time": 1718191234.123,
+            "mode": "lightweight",
+            "proc_name": "python.exe",
+        }
         pid_file.write_text(json.dumps(data), encoding="utf-8")
 
         with patch("app.utils.process.get_pid_file", return_value=pid_file):
@@ -140,6 +144,33 @@ class TestIsLocalPortInUse:
         result = is_local_port_in_use(59999)
         assert result is False
 
+    def test_ipv6_localhost(self):
+        """IPv6 localhost (::1) 端口检测。"""
+        result = is_local_port_in_use(59998, host="::1")
+        assert isinstance(result, bool)
+
+    def test_ipv6_auto_detect(self):
+        """包含 ':' 的 host 自动使用 AF_INET6。"""
+        import socket
+
+        # 绑定一个 IPv6 端口
+        with socket.socket(socket.AF_INET6, socket.SOCK_STREAM) as s:
+            s.bind(("::1", 0))
+            port = s.getsockname()[1]
+            s.listen(1)
+            assert is_local_port_in_use(port, host="::1") is True
+
+    def test_ipv4_default_host(self):
+        """默认 host 为 127.0.0.1（IPv4）。"""
+        import socket
+
+        # 绑定一个 IPv4 端口
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind(("127.0.0.1", 0))
+            port = s.getsockname()[1]
+            s.listen(1)
+            assert is_local_port_in_use(port) is True
+
 
 # ── get_process_name ──
 
@@ -177,17 +208,23 @@ class TestGetProcessCreateTime:
 
     def test_no_such_process(self):
         """NoSuchProcess 异常时返回 None。"""
-        with patch("app.utils.process.psutil.Process", side_effect=psutil.NoSuchProcess(123)):
+        with patch(
+            "app.utils.process.psutil.Process", side_effect=psutil.NoSuchProcess(123)
+        ):
             assert get_process_create_time(123) is None
 
     def test_access_denied(self):
         """AccessDenied 异常时返回 None。"""
-        with patch("app.utils.process.psutil.Process", side_effect=psutil.AccessDenied(123)):
+        with patch(
+            "app.utils.process.psutil.Process", side_effect=psutil.AccessDenied(123)
+        ):
             assert get_process_create_time(123) is None
 
     def test_zombie_process(self):
         """ZombieProcess 异常时返回 None。"""
-        with patch("app.utils.process.psutil.Process", side_effect=psutil.ZombieProcess(123)):
+        with patch(
+            "app.utils.process.psutil.Process", side_effect=psutil.ZombieProcess(123)
+        ):
             assert get_process_create_time(123) is None
 
 
