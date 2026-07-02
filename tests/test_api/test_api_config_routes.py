@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 
 from app.schemas import (
     BrowserSettings,
+    LoggingSettings,
     LoginCredentials,
     MonitorSettings,
     RuntimeConfig,
@@ -105,3 +106,55 @@ class TestSaveConfig:
         resp = test_client.put("/api/config", json=payload)
         assert resp.status_code == 200
         assert resp.json()["success"] is True
+
+
+class TestSetLogLevel:
+    """测试 PUT /api/config/log-level 端点。"""
+
+    @patch("app.utils.logging.LogConfigCenter")
+    def test_set_log_level_syncs_runtime_config(self, mock_log_center_cls, api_client):
+        """设置日志级别后应同步更新 engine._runtime_config。"""
+        test_client, mock_services = api_client
+
+        # 模拟 LogConfigCenter
+        mock_center = MagicMock()
+        mock_center.get_config.return_value = {"level": "INFO"}
+        mock_log_center_cls.get_instance.return_value = mock_center
+
+        # 模拟 engine._runtime_config 为 frozen RuntimeConfig
+        mock_engine = MagicMock()
+        initial_config = RuntimeConfig(logging=LoggingSettings(level="INFO"))
+        mock_engine._runtime_config = initial_config
+        mock_services.engine = mock_engine
+
+        resp = test_client.put("/api/config/log-level", json={"level": "DEBUG"})
+        assert resp.status_code == 200
+        assert resp.json()["success"] is True
+
+        # 验证 engine._runtime_config 被重新赋值（frozen 模型只能整体替换）
+        assert mock_engine._runtime_config is not initial_config
+
+    @patch("app.utils.logging.LogConfigCenter")
+    def test_set_log_level_invalid_level_rejected(self, mock_log_center_cls, api_client):
+        """无效日志级别应返回 400。"""
+        test_client, _ = api_client
+
+        resp = test_client.put("/api/config/log-level", json={"level": "INVALID"})
+        assert resp.status_code == 400
+
+    @patch("app.utils.logging.LogConfigCenter")
+    def test_set_log_level_updates_profile_service(self, mock_log_center_cls, api_client):
+        """设置日志级别后应更新 profile_service。"""
+        test_client, mock_services = api_client
+
+        mock_center = MagicMock()
+        mock_center.get_config.return_value = {"level": "WARNING"}
+        mock_log_center_cls.get_instance.return_value = mock_center
+
+        mock_engine = MagicMock()
+        mock_engine._runtime_config = RuntimeConfig(logging=LoggingSettings(level="INFO"))
+        mock_services.engine = mock_engine
+
+        resp = test_client.put("/api/config/log-level", json={"level": "WARNING"})
+        assert resp.status_code == 200
+        mock_services.profile_service.update.assert_called_once()

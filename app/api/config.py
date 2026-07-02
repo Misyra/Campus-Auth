@@ -8,10 +8,18 @@ from fastapi import APIRouter, HTTPException, Request
 
 from app.deps import MonitorServiceDep, ProfileServiceDep
 from app.schemas import (
-    ApiResponse, AppSettings, BrowserSettings,
-    ConfigPatchRequest, ConfigSaveRequest,
-    LogLevelRequest, LogLevelResponse, LoggingSettings,
-    MonitorSettings, PauseSettings, RetrySettings, StealthScriptResponse,
+    ApiResponse,
+    AppSettings,
+    BrowserSettings,
+    ConfigPatchRequest,
+    ConfigSaveRequest,
+    LoggingSettings,
+    LogLevelRequest,
+    LogLevelResponse,
+    MonitorSettings,
+    PauseSettings,
+    RetrySettings,
+    StealthScriptResponse,
 )
 from app.services.profile_service import save_global_and_profile
 from app.utils.logging import get_logger
@@ -55,6 +63,11 @@ def set_log_level(payload: LogLevelRequest, request: Request) -> ApiResponse:
     profile_service = request.app.state.services.profile_service
     profile_service.update(
         lambda d: setattr(d.global_config, "logging", d.global_config.logging.model_copy(update={"level": actual}))
+    )
+    # 同步更新引擎运行时配置，使监控线程立即感知新级别
+    engine = request.app.state.services.engine
+    engine._runtime_config = engine._runtime_config.model_copy(
+        update={"logging": engine._runtime_config.logging.model_copy(update={"level": actual})}
     )
     return ApiResponse(success=True, message=f"已设置全局日志级别为 {actual}")
 

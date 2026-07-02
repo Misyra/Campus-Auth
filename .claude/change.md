@@ -4111,3 +4111,8 @@
 - app/api/ws.py: 在 `websocket_logs_handler` 的 `if/elif` 链末尾新增 `else` 分支，对未知消息类型记录 `warning` 日志
 - tests/test_api/test_ws.py: 新增 4 个测试（未知类型、None 类型、缺少 type 字段、已知类型不触发警告）
 
+## 2026-07-03: set_log_level 同步更新运行时配置 (Task 4.8)
+
+- app/api/config.py: `set_log_level` 在更新 profile_service 后同步更新 `engine._runtime_config` 的 logging.level，使用 `model_copy(update=...)` 确保 frozen 模型的不可变性
+- tests/test_api/test_api_config_routes.py: 新增 `TestSetLogLevel` 测试类（3 个用例：同步运行时配置、无效级别拒绝、更新 profile_service）
+
