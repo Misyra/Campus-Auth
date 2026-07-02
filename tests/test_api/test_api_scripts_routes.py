@@ -237,7 +237,7 @@ class TestScriptThreadPool:
         executor = captured_executor.get("executor")
         assert executor is not None
         assert isinstance(executor, ThreadPoolExecutor)
-        assert executor._thread_name_prefix == "script_runner"
+        assert executor._thread_name_prefix == "script_api"
 
     @pytest.mark.asyncio
     async def test_executor_is_reused(self):
@@ -246,4 +246,4 @@ class TestScriptThreadPool:
 
         assert _script_executor is not None
         assert isinstance(_script_executor, ThreadPoolExecutor)
-        assert _script_executor._thread_name_prefix == "script_runner"
+        assert _script_executor._thread_name_prefix == "script_api"

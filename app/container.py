@@ -185,6 +185,11 @@ class ServiceContainer:
 
         shutdown_decision_executor(wait=True)
 
+        # 关闭 scripts API 模块级 executor
+        from app.api.scripts import shutdown_script_executor
+
+        shutdown_script_executor()
+
         self.task_executor.shutdown(wait=True, timeout=10)
 
         # 复用 stop_web_services — 消除重复代码并修复 _ws_drain_task = None 遗漏 bug

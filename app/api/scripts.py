@@ -14,7 +14,12 @@ from app.workers.script_runner import ScriptRunner, detect_available_binaries
 
 router = APIRouter()
 api_logger = get_logger("api", source="backend")
-_script_executor = ThreadPoolExecutor(max_workers=4, thread_name_prefix="script_runner")
+_script_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="script_api")
+
+
+def shutdown_script_executor() -> None:
+    """关闭脚本 API 模块级线程池。"""
+    _script_executor.shutdown(wait=True)
 
 
 @router.get("/api/scripts", response_model=list[TaskSummary])
