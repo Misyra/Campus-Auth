@@ -36,8 +36,10 @@ _update_lock = asyncio.Lock()
 # ── 健康检查 / 更新检测 ──
 
 
-def _safe_psutil_call(fn, default=-1):
+def _safe_psutil_call(fn, default=None):
     """安全调用 psutil 方法，受限环境返回默认值。"""
+    if default is None:
+        default = []
     try:
         return fn()
     except (psutil.AccessDenied, psutil.ZombieProcess, psutil.NoSuchProcess):
