@@ -4153,3 +4153,7 @@
 - frontend/js/app-options.js: 新增三个 watcher 监听 `enable_tcp_check`、`enable_http_check`、`urlCheckEnabled`，触发守卫逻辑
 - frontend/partials/pages/settings/settings-monitor.html: 移除三个 checkbox 的 `@change` 处理器，保留 `v-model` 绑定
 
+## 2026-07-03: URL 检测默认数组使用深拷贝，避免污染 DEFAULT_CONFIG (Task 5.2)
+
+- frontend/js/data/config.js: `defaultUrlCheckUrls` 改为使用 `[...DEFAULT_CONFIG.monitor.url_check_urls]` 创建独立副本，防止数组突变污染全局默认配置
+
