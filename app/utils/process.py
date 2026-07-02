@@ -146,9 +146,11 @@ def is_local_port_in_use(port: int, host: str = "127.0.0.1") -> bool:
     """检查本地端口是否被占用。
 
     自动检测 IPv6 地址（host 中包含 ":" 时使用 AF_INET6）。
+    设置 0.5 秒超时防止在异常网络环境下长时间阻塞。
     """
     family = socket.AF_INET6 if ":" in host else socket.AF_INET
     with socket.socket(family, socket.SOCK_STREAM) as s:
+        s.settimeout(0.5)
         try:
             s.bind((host, port))
         except OSError:

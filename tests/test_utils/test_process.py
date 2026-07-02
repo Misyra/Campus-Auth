@@ -145,9 +145,20 @@ class TestIsLocalPortInUse:
         assert result is False
 
     def test_ipv6_localhost(self):
-        """IPv6 localhost (::1) 端口检测。"""
-        result = is_local_port_in_use(59998, host="::1")
-        assert isinstance(result, bool)
+        """IPv6 localhost (::1) 端口检测 — 绑定已用端口返回 True。"""
+        import socket
+
+        with socket.socket(socket.AF_INET6, socket.SOCK_STREAM) as s:
+            s.bind(("::1", 0))
+            port = s.getsockname()[1]
+            s.listen(1)
+            assert is_local_port_in_use(port, host="::1") is True
+
+    def test_ipv6_closed_port_returns_false(self):
+        """IPv6 未绑定端口返回 False。"""
+        # 使用高位端口，确认未被占用时返回 False
+        result = is_local_port_in_use(59997, host="::1")
+        assert result is False
 
     def test_ipv6_auto_detect(self):
         """包含 ':' 的 host 自动使用 AF_INET6。"""
