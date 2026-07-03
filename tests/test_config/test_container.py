@@ -290,6 +290,41 @@ class TestShutdown:
 
         asyncio.run(_run())
 
+    def test_shutdown_handles_cross_loop_ws_drain_task(
+        self, container_for_shutdown
+    ):
+        """跨事件循环的 ws_drain_task 不应引发 RuntimeError。"""
+
+        # 在另一个线程中创建 task，模拟守护线程创建的 ws_drain_task
+        other_task = None
+
+        def _create_task_in_other_loop():
+            nonlocal other_task
+
+            async def _dummy():
+                while True:
+                    await asyncio.sleep(1)
+
+            loop = asyncio.new_event_loop()
+            other_task = loop.create_task(_dummy())
+            loop.run_until_complete(asyncio.sleep(0.01))
+            # 保持 loop 存活，否则 task 会被销毁
+            return loop
+
+        t_loop = _create_task_in_other_loop()
+        try:
+            container_for_shutdown._ws_drain_task = other_task
+            container_for_shutdown._web_services_started = True
+
+            # 从当前 loop 调用 shutdown，不应抛 RuntimeError
+            asyncio.run(container_for_shutdown.shutdown())
+
+            assert container_for_shutdown._ws_drain_task is None
+        finally:
+            t_loop.call_soon_threadsafe(t_loop.stop)
+            t_loop.run_forever()
+            t_loop.close()
+
     def test_shutdown_handles_no_drain_task(self, container_for_shutdown):
         """ws_drain_task 为 None 时 shutdown 不应报错。"""
         container_for_shutdown._ws_drain_task = None
