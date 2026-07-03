@@ -255,10 +255,6 @@ export const appearanceMethods = {
     }
   },
 
-  getBgColors() {
-    return BG_COLORS;
-  },
-
   // 选择背景图片（上传到服务器）
   async selectBackgroundImage() {
     const file = await pickFile('image/*');
@@ -354,10 +350,5 @@ export const appearanceMethods = {
   // 关闭背景图放大预览
   closeBgLightbox() {
     this.bgLightbox.visible = false;
-  },
-
-  // 获取预设主题色列表
-  getAccentColors() {
-    return ACCENT_COLORS;
   },
 };
