@@ -476,6 +476,7 @@ class TestCleanupOrphanBrowsers:
             "exe": "C:/ms-playwright/chromium-1234/chrome.exe",
             "cmdline": ["chrome.exe", "--headless"],
         }
+        mock_proc.parent.return_value = None  # 孤儿进程，无父进程
 
         with patch("psutil.process_iter", return_value=[mock_proc]):
             cleanup_orphan_browsers()

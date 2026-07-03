@@ -222,7 +222,7 @@ class TestIsLocalPortInUse:
         mock_sock = MagicMock()
         mock_sock.__enter__ = MagicMock(return_value=mock_sock)
         mock_sock.__exit__ = MagicMock(return_value=False)
-        mock_sock.connect_ex.return_value = 0
+        mock_sock.bind.side_effect = OSError("Address already in use")
         mock_socket_cls.return_value = mock_sock
 
         assert is_local_port_in_use(8080) is True
@@ -234,7 +234,6 @@ class TestIsLocalPortInUse:
         mock_sock = MagicMock()
         mock_sock.__enter__ = MagicMock(return_value=mock_sock)
         mock_sock.__exit__ = MagicMock(return_value=False)
-        mock_sock.connect_ex.return_value = 111  # ECONNREFUSED
         mock_socket_cls.return_value = mock_sock
 
         assert is_local_port_in_use(8080) is False
