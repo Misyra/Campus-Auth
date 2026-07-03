@@ -12,9 +12,12 @@ import pytest
 
 @pytest.fixture(autouse=True)
 def _mock_decision_executor_shutdown(monkeypatch):
-    """避免 container.shutdown() 真正关闭模块级 _decision_executor。"""
+    """避免 container.shutdown() 真正关闭模块级 _decision_executor 和 probes。"""
     monkeypatch.setattr(
         "app.network.decision.shutdown_decision_executor", MagicMock()
+    )
+    monkeypatch.setattr(
+        "app.network.probes.shutdown_probes", MagicMock()
     )
 
 
