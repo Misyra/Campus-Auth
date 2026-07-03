@@ -11,7 +11,6 @@ from app.schemas import RuntimeConfig
 from app.services.login_orchestrator import (
     LoginHandle,
     LoginOrchestrator,
-    _DISPATCHING,
     resolve_worker_timeout,
     validate_login_config,
 )
@@ -428,7 +427,7 @@ class TestSubmitLockScope:
         assert call_count[0] == 1
 
     def test_dispatch_exception_clears_sentinel(self):
-        """如果 _dispatch 抛异常，slot 应被清除，不卡在 _DISPATCHING。"""
+        """如果 _dispatch 抛异常，slot 应被清除，不卡在 dispatching 占位状态。"""
         orch = LoginOrchestrator(
             worker_getter=MagicMock(),
             get_runtime_config=lambda: VALID_CONFIG,
@@ -438,7 +437,7 @@ class TestSubmitLockScope:
         with pytest.raises(RuntimeError):
             orch.submit(source="auto", config=VALID_CONFIG)
 
-        # slot 应为 None，不是 _DISPATCHING
+        # slot 应为 None（不再是 dispatching 占位状态）
         assert orch._slot is None
 
 
