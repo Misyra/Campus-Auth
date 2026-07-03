@@ -105,22 +105,24 @@ class VariableResolver:
         与 resolve() 不同，此方法将解析后的值进行 JSON 编码，
         确保可以安全嵌入 JavaScript 代码而不会产生语法错误。
         示例：password "admin'123" → '"admin\'123"'（合法的 JS 字符串字面量）
+
+        使用白名单替换：仅替换已知的 template_vars 和 runtime_vars，
+        避免误替换 JavaScript 代码中的 {{}} 语法（如 Vue/Handlebars 模板）。
         """
         if not isinstance(value, str) or "{{" not in value:
             return value
 
-        def replacer(match: re.Match) -> str:
-            var_name = match.group(1)
-            # runtime_vars 中的值直接序列化，避免双重解析
-            if var_name in self.runtime_vars:
-                raw = self.runtime_vars[var_name]
+        # 白名单：仅替换已知变量，不使用正则全局匹配
+        known_vars = {**self.template_vars, **self.runtime_vars}
+        for name, raw in known_vars.items():
+            placeholder = f"{{{{{name}}}}}"
+            if placeholder in value:
                 if raw is None:
-                    return "null"
-                return json.dumps(raw, ensure_ascii=False)
-            # 未解析变量：走 resolve → json.dumps 加引号
-            resolved = self.resolve(match.group(0))
-            if resolved == match.group(0):
-                return json.dumps(match.group(0))
-            return json.dumps(str(resolved))
+                    replacement = "null"
+                elif not isinstance(raw, str):
+                    replacement = json.dumps(raw, ensure_ascii=False)
+                else:
+                    replacement = json.dumps(raw, ensure_ascii=False)
+                value = value.replace(placeholder, replacement)
 
-        return self.TEMPLATE_PATTERN.sub(replacer, value)
+        return value
