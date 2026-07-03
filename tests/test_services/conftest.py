@@ -101,31 +101,50 @@ def engine_factory():
             ws_manager=svc._ws_manager,
         )
 
-        # LoginBridge — 登录委托
-        from app.services.engine import LoginBridge
-        svc._login_bridge = LoginBridge(
-            get_orchestrator=lambda: svc._orchestrator,
-            get_runtime_config=lambda: svc._runtime_config,
-            retry_policy=svc._retry_policy,
-            status_update_callback=svc._update_status_snapshot,
-            logger=svc._logger,
-            wakeup_event=svc._wakeup_event,
-            get_monitor_check_interval=lambda: svc._monitor_check_interval,
-        )
-        # 桥接回调：模拟 engine 的 _bridge_retry_scheduled / _bridge_login_success / _bridge_retry_exhausted
-        def _bridge_retry_scheduled(delay: float) -> None:
-            with svc._retry_time_lock:
-                svc._next_retry_time = time.time() + delay
-            svc._wakeup_event.set()
-        def _bridge_login_success() -> None:
-            with svc._retry_time_lock:
-                svc._next_retry_time = 0
-        def _bridge_retry_exhausted() -> None:
-            with svc._retry_time_lock:
-                svc._next_retry_time = 0
-        svc._login_bridge._on_retry_scheduled = _bridge_retry_scheduled
-        svc._login_bridge._on_login_success = _bridge_login_success
-        svc._login_bridge._on_retry_exhausted = _bridge_retry_exhausted
+        # LoginBridge — 使用 MagicMock 解耦内部实现
+        svc._login_bridge = MagicMock()
+
+        def _fake_submit_login(is_manual=False, config_snapshot=None, on_complete=None):
+            """模拟 LoginBridge.submit_login：委托 orchestrator 并调用 on_complete。"""
+            orchestrator = svc._orchestrator
+            config = config_snapshot if config_snapshot is not None else svc._runtime_config
+            source = "manual" if is_manual else "auto"
+            handle = orchestrator.submit(source=source, config=config)
+            if handle.rejected_reason is not None:
+                if on_complete is not None:
+                    on_complete(False, handle.rejected_reason)
+                return False
+            if handle.future is None:
+                if on_complete is not None:
+                    on_complete(False, "登录任务已在执行中，请稍后再试")
+                return False
+
+            def _on_done(f):
+                try:
+                    ok, msg = f.result()
+                except Exception as exc:
+                    ok, msg = False, str(exc)
+                if on_complete is not None:
+                    on_complete(ok, msg)
+                elif not is_manual:
+                    # auto 路径：维护 retry_policy 状态（与 LoginBridge 一致）
+                    if ok:
+                        svc._retry_policy.on_login_done(success=True)
+                    else:
+                        delay = svc._retry_policy.on_login_done(success=False)
+                        if delay is None:
+                            with svc._retry_time_lock:
+                                svc._next_retry_time = 0
+                        else:
+                            with svc._retry_time_lock:
+                                svc._next_retry_time = time.time() + delay
+                            svc._wakeup_event.set()
+
+            handle.future.add_done_callback(_on_done)
+            return True
+
+        svc._login_bridge.submit_login.side_effect = _fake_submit_login
+        svc._login_bridge.cancel_login.return_value = (True, "登录已取消")
         svc._next_retry_time = 0
 
         return svc
