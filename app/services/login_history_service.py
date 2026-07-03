@@ -15,6 +15,8 @@ from app.utils.logging import get_logger
 
 logger = get_logger("login_history", source="backend")
 
+MAX_HISTORY_SIZE = 200
+
 
 class LoginHistoryEntry(BaseModel):
     """单条登录历史记录"""
@@ -131,7 +133,7 @@ class LoginHistoryService:
                 return 0
 
     def _cleanup_old(self, max_age_days: int = 30) -> None:
-        """清理超过 max_age_days 天的旧记录。
+        """清理超过 max_age_days 天的旧记录，最多保留 MAX_HISTORY_SIZE 条。
 
         使用独立的 _cleanup_lock 防止并发清理，且不持有主写入锁 _lock，
         避免清理期间阻塞并发写入。
@@ -154,6 +156,9 @@ class LoginHistoryService:
                                 kept.append(line)
                         except Exception:
                             kept.append(line)
+                # 最多保留 MAX_HISTORY_SIZE 条（保留末尾，即最新记录）
+                if len(kept) > MAX_HISTORY_SIZE:
+                    kept = kept[-MAX_HISTORY_SIZE:]
                 content = "\n".join(kept)
                 if kept:
                     content += "\n"
