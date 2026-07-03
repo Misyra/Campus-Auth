@@ -18,6 +18,8 @@ logger = get_logger("task_manager", source="backend")
 
 _DANGEROUS_STEP_TYPES = {"eval", "custom_js"}
 
+SCRIPT_TASK_TYPE = "script"
+
 _INVALID_ID_MSG = "任务ID只能包含字母、数字、下划线和连字符，长度不超过64"
 
 
@@ -410,7 +412,7 @@ class TaskManager:
             return False
 
         save_data = {
-            "type": "script",
+            "type": SCRIPT_TASK_TYPE,
             "name": config.get("name", task_id),
             "description": config.get("description", ""),
             "binary_path": config.get("binary_path", ""),
@@ -558,7 +560,7 @@ class TaskManager:
     def save_task_with_validation(self, task_id: str, config: dict[str, Any]) -> tuple[bool, str]:
         """保存任务（含危险步骤检查和 ID 校验）。"""
         task_type = config.get("type", "browser")
-        if task_type == "script":
+        if task_type == SCRIPT_TASK_TYPE:
             return self._save_script_task_validated(task_id, config)
 
         if not config.get("name"):
