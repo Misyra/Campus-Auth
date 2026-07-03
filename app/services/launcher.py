@@ -310,9 +310,7 @@ def launch_lightweight(ctx: ApplicationContext, logger):
         port = resolve_port()
         tray_icon = create_tray(
             port=port,
-            on_exit=lambda: (
-                os.kill(os.getpid(), signal.SIGTERM) if hasattr(signal, "SIGTERM") else os._exit(0)
-            ),
+            on_exit=lambda: _web_server_shutdown_event.set(),
             on_open_console=lambda: _open_console(
                 container,
                 logger,
@@ -324,8 +322,8 @@ def launch_lightweight(ctx: ApplicationContext, logger):
         if tray_icon:
             logger.info("系统托盘已启动")
 
-    # [7] 修复：注册 SIGTERM 处理器，确保托盘退出（on_exit 发送 SIGTERM）时
-    # 触发正常的 finally 清理路径，而非 Python 默认的直接终止
+    # [7] 修复：注册 SIGTERM 处理器，确保收到外部信号时
+    # 触发正常的 finally 清理路径（cleanup_pid），而非 Python 默认的直接终止
     _signal_received = False
 
     def _signal_handler(signum, _frame):
