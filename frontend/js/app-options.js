@@ -285,6 +285,10 @@ export const appOptions = {
       }
     };
     this._mediaQuery.addEventListener('change', this._onSystemThemeChange);
+    // 若设置了随机壁纸 URL，每次启动重新下载该链接以更新背景
+    if (this.appearance.wallpaper_api_url) {
+      this.refreshWallpaperFromUrl();
+    }
   },
   beforeUnmount() {
     this._wsDestroyed = true;
