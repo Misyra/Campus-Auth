@@ -1,4 +1,4 @@
-import { DEFAULT_APPEARANCE } from '../constants.js';
+import { DEFAULT_APPEARANCE, DEFAULT_CUSTOM_COLORS } from '../constants.js';
 
 // 外观设置数据
 export function appearanceData() {
@@ -14,8 +14,21 @@ export function appearanceData() {
     }
   }
 
+  // 从 localStorage 加载自定义颜色
+  const savedColors = localStorage.getItem('appearance.custom_colors');
+  let customColors = { ...DEFAULT_CUSTOM_COLORS };
+  if (savedColors) {
+    try {
+      customColors = { ...DEFAULT_CUSTOM_COLORS, ...JSON.parse(savedColors) };
+    } catch (e) {
+      console.warn('自定义颜色解析失败，使用默认值:', e);
+      localStorage.removeItem('appearance.custom_colors');
+    }
+  }
+
   return {
     appearance,
+    customColors,
     randomWallpaperDialog: { visible: false, url: '', loading: false },
     bgLightbox: { visible: false },
   };
