@@ -7,11 +7,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 
-async def _dummy_shutdown():
-    """替代已废弃的 asyncio.coroutine()。"""
-    pass
-
-
 class TestShutdownContainer:
     """shutdown_container 幂等性测试。"""
 
@@ -20,9 +15,11 @@ class TestShutdownContainer:
         from app.services.launcher import shutdown_container
 
         mock_container = MagicMock()
-        mock_container.shutdown = MagicMock(return_value=_dummy_shutdown())
 
-        with patch("app.services.launcher.asyncio.run") as mock_run:
+        with (
+            patch("app.services.launcher.asyncio.run") as mock_run,
+            patch("app.services.launcher.asyncio.wait_for"),
+        ):
             shutdown_container(mock_container, MagicMock())
             mock_run.assert_called_once()
 
@@ -33,7 +30,10 @@ class TestShutdownContainer:
         mock_container = MagicMock()
         logger = MagicMock()
 
-        with patch("app.services.launcher.asyncio.run"):
+        with (
+            patch("app.services.launcher.asyncio.run"),
+            patch("app.services.launcher.asyncio.wait_for"),
+        ):
             shutdown_container(mock_container, logger)
             shutdown_container(mock_container, logger)
 
