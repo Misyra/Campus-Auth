@@ -133,6 +133,15 @@ class TestLoginHandle:
         f.done.return_value = True
         assert h.done() is True
 
+    def test_result_returns_cancelled_when_future_cancelled(self):
+        """CancelledError 应被捕获并返回 (False, '登录已取消')。"""
+        from concurrent.futures import CancelledError
+
+        f = MagicMock()
+        f.result.side_effect = CancelledError()
+        h = LoginHandle(future=f, source="auto", cancel_event=threading.Event())
+        assert h.result() == (False, "登录已取消")
+
 
 # ── Fixtures ──
 

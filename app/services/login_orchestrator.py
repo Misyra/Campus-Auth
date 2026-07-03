@@ -13,7 +13,7 @@ from __future__ import annotations
 import threading
 import time
 from collections.abc import Callable
-from concurrent.futures import Future, ThreadPoolExecutor
+from concurrent.futures import CancelledError, Future, ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -108,7 +108,10 @@ class LoginHandle:
             return False, self.rejected_reason
         if self.future is None:
             return False, "登录未提交"
-        return self.future.result(timeout=timeout)
+        try:
+            return self.future.result(timeout=timeout)
+        except CancelledError:
+            return False, "登录已取消"
 
     def cancel(self) -> None:
         """取消此次登录。"""
