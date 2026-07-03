@@ -35,7 +35,7 @@ func getUvFilename() string {
 	return "uv-x86_64-pc-windows-msvc.zip"
 }
 
-var mirrors = []string{
+var uvMirrors = []string{
 	"https://ghfast.top/",
 	"https://gh-proxy.com/",
 	"https://ghproxy.net/",
@@ -52,10 +52,17 @@ func main() {
 	exePath, err := os.Executable()
 	if err == nil {
 		exeDir := filepath.Dir(exePath)
-		// 如果 exe 在项目根目录（有 pyproject.toml），使用 exe 所在目录
 		if _, err := os.Stat(filepath.Join(exeDir, "pyproject.toml")); err == nil {
 			projectRoot = exeDir
 		}
+	}
+
+	// 校验是否在项目根目录
+	if _, err := os.Stat(filepath.Join(projectRoot, "pyproject.toml")); err != nil {
+		fmt.Println("错误: 请将此程序放在 Campus-Auth 项目根目录下运行")
+		fmt.Println("      （需要与 pyproject.toml 同一目录）")
+		pause(false)
+		os.Exit(1)
 	}
 
 	uvDir := filepath.Join(projectRoot, ".uv")
@@ -161,7 +168,7 @@ func downloadUv(uvDir, uvExe string) error {
 
 	archive := filepath.Join(uvDir, "uv.zip")
 
-	for _, mirror := range mirrors {
+	for _, mirror := range uvMirrors {
 		url := mirror + githubURL
 		if mirror == "" {
 			fmt.Println("  尝试: GitHub 官方")

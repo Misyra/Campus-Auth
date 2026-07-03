@@ -1,5 +1,14 @@
 # 修改日志
 
+## 2026-07-04
+
+### feat: 新增 Git 仓库克隆/更新工具和启动程序
+
+- `resources/tools/git-puller/main.go`：新增 git-puller 工具，自动检测/安装 Git，尝试多个镜像源（GitClone、CNPMJS、GHProxy、GitHub 官方）克隆/更新仓库，支持分支选择，默认推荐 main 分支
+- `resources/tools/start/start.go`：将原 `start.go` 迁移到 `resources/tools/start/`，自动下载 uv、安装依赖、启动应用
+- 两个工具均校验项目根目录（检测 pyproject.toml），编译后 exe 放在项目根目录运行
+- 移除原 `start.go`，源码统一归入 `resources/tools/` 目录
+
 ## 2026-07-03
 
 ### fix: toggle_auto_switch 端点添加异常处理
