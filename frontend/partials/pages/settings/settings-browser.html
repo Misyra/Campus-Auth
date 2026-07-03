@@ -1,7 +1,10 @@
 <div v-if="currentSettingsTab === 'browser'" class="settings-panel-grid">
   <!-- 浏览器选择 -->
   <section class="card settings-panel">
-    <div class="card-header">
+    <div class="settings-card-header">
+      <svg class="settings-card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/><line x1="21.17" y1="8" x2="12" y2="8"/><line x1="3.95" y1="6.06" x2="8.54" y2="14"/>
+      </svg>
       <h2>浏览器类型</h2>
     </div>
     <div class="card-body">
@@ -70,7 +73,10 @@
   </section>
 
   <section class="card settings-panel">
-    <div class="card-header">
+    <div class="settings-card-header">
+      <svg class="settings-card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/>
+      </svg>
       <h2>基本设置</h2>
     </div>
     <div class="card-body">
@@ -130,7 +136,10 @@
   </section>
 
   <section class="card settings-panel">
-    <div class="card-header">
+    <div class="settings-card-header">
+      <svg class="settings-card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+      </svg>
       <h2>安全与反检测</h2>
     </div>
     <div class="card-body">
@@ -172,14 +181,17 @@
           v-model="config.browser.stealth_custom_script"
           rows="10"
           placeholder="留空使用内置默认脚本..."
-          style="font-family: monospace; font-size: 12px; resize: vertical;"
+          class="settings-monospace-textarea"
         ></textarea>
       </div>
     </div>
   </section>
 
   <section class="card settings-panel">
-    <div class="card-header">
+    <div class="settings-card-header">
+      <svg class="settings-card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+      </svg>
       <h2>纯净模式与高级设置</h2>
     </div>
     <div class="card-body">

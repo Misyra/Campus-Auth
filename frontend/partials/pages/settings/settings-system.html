@@ -1,11 +1,13 @@
 <div v-if="currentSettingsTab === 'system'" class="settings-panel-grid">
   <section class="card settings-panel">
-    <div class="card-header">
+    <div class="settings-card-header">
+      <svg class="settings-card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><polyline points="14 2 14 8 20 8"/>
+      </svg>
       <h2>日志设置</h2>
     </div>
-    <div class="card-body settings-log-columns">
+    <div class="card-body settings-grid-2col">
       <div>
-        <h4 class="settings-section-heading">日志管理</h4>
         <div class="form-row">
           <div class="form-group">
             <div class="field-label-row">
@@ -28,7 +30,6 @@
       </div>
 
       <div>
-        <h4 class="settings-section-heading">日志级别</h4>
         <div class="form-group">
           <div class="field-label-row">
             <label>全局日志级别</label>
@@ -45,11 +46,13 @@
   </section>
 
   <section class="card settings-panel">
-    <div class="card-header">
-      <h2>启动与界面</h2>
+    <div class="settings-card-header">
+      <svg class="settings-card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/>
+      </svg>
+      <h2>启动行为</h2>
     </div>
     <div class="card-body">
-      <h4 class="settings-section-heading">启动行为</h4>
       <div class="form-group">
         <div class="field-label-row">
           <label for="settings-startup-action">启动后执行</label>
@@ -63,8 +66,6 @@
         <span class="hint">{{ startupActionHint }}</span>
       </div>
 
-      <div class="settings-section-divider"></div>
-      <h4 class="settings-section-heading">开机自启动</h4>
       <div class="toggle-group">
         <div class="toggle-with-help">
           <label class="toggle toggle-help-inline">
@@ -88,8 +89,8 @@
         ></custom-select>
       </div>
 
-      <template v-if="autostart.lightweight">
-        <div class="toggle-group" style="margin-top: 12px;">
+      <template v-if="autostart.enabled && autostart.lightweight">
+        <div class="toggle-group settings-toggle-spacer">
           <div class="toggle-with-help">
             <label class="toggle toggle-help-inline">
               <input type="checkbox" v-model="config.app_settings.lightweight_tray" />
@@ -100,9 +101,17 @@
           </div>
         </div>
       </template>
+    </div>
+  </section>
 
-      <div class="settings-section-divider"></div>
-      <h4 class="settings-section-heading">界面行为</h4>
+  <section class="card settings-panel">
+    <div class="settings-card-header">
+      <svg class="settings-card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>
+      </svg>
+      <h2>界面行为</h2>
+    </div>
+    <div class="card-body">
       <div class="toggle-group">
         <div class="toggle-with-help">
           <label class="toggle toggle-help-inline">
@@ -132,7 +141,10 @@
   </section>
 
   <section class="card settings-panel">
-    <div class="card-header">
+    <div class="settings-card-header">
+      <svg class="settings-card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/>
+      </svg>
       <h2>网络与端口</h2>
     </div>
     <div class="card-body">

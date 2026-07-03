@@ -1,7 +1,10 @@
 <div v-if="currentSettingsTab === 'monitor'" class="settings-panel-grid">
   <section class="card settings-panel">
-    <div class="card-header">
-      <h2>检测设置</h2>
+    <div class="settings-card-header">
+      <svg class="settings-card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/>
+      </svg>
+      <h2>检测与重试</h2>
     </div>
     <div class="card-body">
       <div class="form-row">
@@ -36,16 +39,42 @@
           </label>
         </div>
       </div>
+      <div class="form-row settings-toggle-spacer">
+        <div class="form-group">
+          <div class="field-label-row">
+            <label for="settings-login-timeout">登录请求超时（秒）</label>
+            <span class="field-help" tabindex="0" role="note" data-tip="点击「手动登录」后，前端等待后端完成登录流程的最长时间。超时后前端会提示失败，但后端可能仍在执行。自动登录不受此限制。">?</span>
+          </div>
+          <input id="settings-login-timeout" v-model.number="config.browser.login_timeout" type="number" min="10" max="600" />
+        </div>
+        <div class="form-group">
+          <div class="field-label-row">
+            <label for="settings-max-retries">最大登录重试次数</label>
+            <span class="field-help" tabindex="0" role="note" data-tip="登录失败后最多重试几次，超出后等待下次网络检测周期再试。监控模式上限 5 次，自动登录成功后退出模式上限 3 次。">?</span>
+          </div>
+          <input id="settings-max-retries" v-model.number="config.retry.max_retries" type="number" min="1" max="5" />
+        </div>
+      </div>
+      <div class="form-group">
+        <div class="field-label-row">
+          <label for="settings-retry-interval">重试间隔（秒）</label>
+          <span class="field-help" tabindex="0" role="note" data-tip="登录失败后等待的基础秒数。实际等待时间按指数退避计算：首次 0 秒，第二次以此间隔 ×1，第三次 ×2，以此类推。">?</span>
+        </div>
+        <input id="settings-retry-interval" v-model.number="config.retry.retry_interval" type="number" min="1" max="300" />
+      </div>
     </div>
   </section>
 
   <section class="card settings-panel settings-panel--wide">
-    <div class="card-header">
+    <div class="settings-card-header">
+      <svg class="settings-card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><circle cx="12" cy="20" r="1"/>
+      </svg>
       <h2>网络检测方式</h2>
       <span class="field-help" tabindex="0" role="note" data-tip="网络状态检测用于判断当前网络是否可用，多种方式并发执行，必须全部通过才算联网正常。登录前检测在触发自动登录前执行额外检查。">?</span>
     </div>
     <div class="card-body">
-      <div class="settings-detect-columns">
+      <div class="settings-grid-2col">
       <!-- 左列：网络状态检测 -->
       <div class="settings-detect-col">
         <h4 class="settings-detect-heading">网络状态检测</h4>
@@ -61,7 +90,7 @@
             </label>
           </div>
         </div>
-        <div v-if="config.monitor.enable_tcp_check" class="form-group" style="margin-top: -4px;">
+        <div v-if="config.monitor.enable_tcp_check" class="form-group settings-toggle-compact">
           <div class="field-label-row">
             <label for="settings-network-targets">TCP 检测目标</label>
             <span
@@ -81,7 +110,7 @@
         </div>
 
         <!-- HTTP 检测 -->
-        <div class="toggle-group" style="margin-top: 12px;">
+        <div class="toggle-group settings-toggle-spacer">
           <div class="toggle-with-help">
             <label class="toggle toggle-help-inline">
               <input type="checkbox" v-model="config.monitor.enable_http_check" />
@@ -91,7 +120,7 @@
             </label>
           </div>
         </div>
-        <div v-if="config.monitor.enable_http_check" class="form-group" style="margin-top: -4px;">
+        <div v-if="config.monitor.enable_http_check" class="form-group settings-toggle-compact">
           <div class="field-label-row">
             <label for="settings-http-targets">HTTP 检测目标</label>
             <span
@@ -111,7 +140,7 @@
         </div>
 
         <!-- 网址响应检测 -->
-        <div class="toggle-group" style="margin-top: 12px;">
+        <div class="toggle-group settings-toggle-spacer">
           <div class="toggle-with-help">
             <label class="toggle toggle-help-inline">
               <input type="checkbox" v-model="urlCheckEnabled" />
@@ -121,7 +150,7 @@
             </label>
           </div>
         </div>
-        <div v-if="urlCheckEnabled" class="form-group" style="margin-top: -4px;">
+        <div v-if="urlCheckEnabled" class="form-group settings-toggle-compact">
           <div class="field-label-row">
             <label for="settings-url-check-urls">检测地址</label>
             <span class="field-help" tabindex="0" role="note" data-tip="每行一个，格式：URL|预期内容。响应内容包含预期文本则判定网络正常。">?</span>
@@ -154,7 +183,7 @@
         </div>
 
         <!-- 登录网址检测 -->
-        <div class="toggle-group" style="margin-top: 12px;">
+        <div class="toggle-group settings-toggle-spacer">
           <div class="toggle-with-help">
             <label class="toggle toggle-help-inline">
               <input type="checkbox" v-model="config.monitor.check_auth_url" />
@@ -164,7 +193,7 @@
             </label>
           </div>
         </div>
-        <div v-if="config.monitor.check_auth_url" class="form-group" style="margin-top: -4px;">
+        <div v-if="config.monitor.check_auth_url" class="form-group settings-toggle-compact">
           <div class="field-label-row">
             <label for="settings-auth-url-targets">检测目标</label>
             <span
@@ -188,38 +217,10 @@
   </section>
 
   <section class="card settings-panel">
-    <div class="card-header">
-      <h2>重试策略</h2>
-    </div>
-    <div class="card-body">
-      <div class="form-row">
-        <div class="form-group">
-          <div class="field-label-row">
-            <label for="settings-login-timeout">登录请求超时（秒）</label>
-            <span class="field-help" tabindex="0" role="note" data-tip="点击「手动登录」后，前端等待后端完成登录流程的最长时间。超时后前端会提示失败，但后端可能仍在执行。自动登录不受此限制。">?</span>
-          </div>
-          <input id="settings-login-timeout" v-model.number="config.browser.login_timeout" type="number" min="10" max="600" />
-        </div>
-        <div class="form-group">
-          <div class="field-label-row">
-            <label for="settings-max-retries">最大登录重试次数</label>
-            <span class="field-help" tabindex="0" role="note" data-tip="登录失败后最多重试几次，超出后等待下次网络检测周期再试。监控模式上限 5 次，自动登录成功后退出模式上限 3 次。">?</span>
-          </div>
-          <input id="settings-max-retries" v-model.number="config.retry.max_retries" type="number" min="1" max="5" />
-        </div>
-      </div>
-      <div class="form-group">
-        <div class="field-label-row">
-          <label for="settings-retry-interval">重试间隔（秒）</label>
-          <span class="field-help" tabindex="0" role="note" data-tip="登录失败后等待的基础秒数。实际等待时间按指数退避计算：首次 0 秒，第二次以此间隔 ×1，第三次 ×2，以此类推。">?</span>
-        </div>
-        <input id="settings-retry-interval" v-model.number="config.retry.retry_interval" type="number" min="1" max="300" />
-      </div>
-    </div>
-  </section>
-
-  <section class="card settings-panel">
-    <div class="card-header">
+    <div class="settings-card-header">
+      <svg class="settings-card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+      </svg>
       <h2>暂停时段</h2>
     </div>
     <div class="card-body">
