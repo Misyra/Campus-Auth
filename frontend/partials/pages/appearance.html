@@ -38,7 +38,7 @@
         </div>
         <div class="appearance-bg-thumb-actions">
           <button type="button" class="btn btn-secondary btn-sm" @click="selectBackgroundImage">选择图片</button>
-          <button type="button" class="btn btn-secondary btn-sm" @click="openRandomWallpaperDialog">随机壁纸</button>
+          <button type="button" class="btn btn-secondary btn-sm" @click="openRandomWallpaperDialog">从链接下载</button>
         </div>
       </div>
 
@@ -255,9 +255,9 @@
     </div>
   </div>
 
-  <!-- 随机壁纸弹窗 -->
+  <!-- 从链接下载壁纸弹窗 -->
   <div v-if="randomWallpaperDialog.visible" class="random-wallpaper-overlay" @click.self="closeRandomWallpaperDialog">
-    <div class="random-wallpaper-modal" role="dialog" aria-modal="true" aria-label="随机壁纸">
+    <div class="random-wallpaper-modal" role="dialog" aria-modal="true" aria-label="从链接下载壁纸">
       <div class="random-wallpaper-header">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-lg">
           <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
@@ -265,9 +265,9 @@
           <path d="M14 14l1-1a2 2 0 012.8 0L21 16"/>
           <circle cx="8.5" cy="8.5" r="1.5"/>
         </svg>
-        <h3>随机壁纸</h3>
+        <h3>从链接下载壁纸</h3>
       </div>
-      <p class="random-wallpaper-hint">输入图片链接地址，将下载并设置为背景；下次启动时会自动重新下载该链接（如 https://picsum.photos/1920/1080）</p>
+      <p class="random-wallpaper-hint">输入图片链接地址，将下载并设置为背景（如 https://picsum.photos/1920/1080）</p>
       <input
         type="text"
         class="form-input"
