@@ -186,12 +186,14 @@ class TestCompositeCancelEvent:
         死锁场景：is_set() 持有 _lock → 调用 super().set() 获取 _cond；
         wait() 持有 _cond → 调用 is_set() 获取 _lock。
         修复后 super().set() 在锁外调用，锁顺序不再颠倒。
+
+        测试策略：动态控制 source 事件，使 wait() 实际阻塞、is_set() 实际扫描，
+        产生真实的锁竞争。
         """
         cce = CompositeCancelEvent()
         source = threading.Event()
         cce.add_source(source)
-        # 先 set 源，使 wait() 能立即返回，避免阻塞干扰死锁检测
-        source.set()
+        # source 未设置，使 wait() 阻塞、is_set() 扫描源，产生真实锁竞争
         errors: list[Exception] = []
 
         def run_wait() -> None:
@@ -217,6 +219,10 @@ class TestCompositeCancelEvent:
 
         for t in threads:
             t.start()
+        # 让线程运行一段时间，期间 source 未设置，wait() 会阻塞、is_set() 会扫描
+        time.sleep(0.2)
+        # 设置 source 让所有线程完成
+        source.set()
         # 超时 10 秒即判定死锁
         for t in threads:
             t.join(timeout=10)
