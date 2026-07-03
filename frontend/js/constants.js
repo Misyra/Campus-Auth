@@ -181,8 +181,7 @@ export const DEFAULT_APPEARANCE = {
   sidebar_accent: '',
   backdrop_filter: false, // 毛玻璃效果
   accent_color: '#22d3ee',
-  zoom: 100,
-  theme: 'light', // dark | light
+  theme: 'light', // light | dark | auto
 };
 
 // 预设背景色
@@ -194,6 +193,14 @@ export const BG_COLORS = [
   { value: '#1b2838', label: 'Steam 暗' },
   { value: '#0d1117', label: 'GitHub 暗' },
 ];
+
+// 自定义颜色默认结构（按类型分组，持久化到 localStorage 'appearance.custom_colors'）
+export const DEFAULT_CUSTOM_COLORS = {
+  accent: [],
+  bg: [],
+  sidebar: [],
+  sidebar_accent: [],
+};
 
 // 预设主题色
 export const ACCENT_COLORS = [
