@@ -2,6 +2,13 @@
 
 ## 2026-07-04
 
+### feat: 为网络探测层添加网卡绑定支持（TCP/HTTP/物理检查）
+
+- `app/network/probes.py`：`is_network_available_socket` 新增 `source_ip` 参数，传递 `source_address=(source_ip, 0)` 给 `socket.create_connection`；新增绑定 Client 池 `_get_bound_client`（按 IP 缓存，最多 4 个，LRU 淘汰），`is_network_available_http` 和 `is_network_available_url` 新增 `source_ip` 参数；`is_local_network_connected` 新增 `interface_name` 参数，绑定网卡不可用时回退检查所有物理网卡；`shutdown_probes` 清理绑定 Client
+- `app/network/decision.py`：新增 `_resolve_source_ip` 辅助函数，从 `MonitorSettings.bind_interface_name` 解析 IP；`is_network_available` 新增 `source_ip` 参数并透传给三个探测函数；`check_login_prerequisites` 传递 `interface_name` 给物理检查、`source_ip` 给认证可达性检查；`_is_auth_url_reachable` 支持 `source_address` 绑定
+- `tests/test_network/test_probes.py`：新增 `TestTcpProbeSourceIp`（2 个用例）、`TestPhysicalCheckFallback`（4 个用例）、`TestBoundClientPool`（5 个用例）
+- `tests/test_network/test_decision.py`：新增 `TestResolveSourceIp`（3 个用例）、`TestCheckNetworkStatusPassesSourceIp`（1 个用例）
+
 ### feat: 扩展网关检测支持按网卡名索引
 
 - `app/network/detect.py`：新增 3 个通用解析辅助函数 `_parse_windows_all_routes`、`_parse_linux_route_entry`、`_parse_darwin_netstat_routes`，从 route print / /proc/net/route / netstat -rn 输出中提取所有默认路由（网关+接口）

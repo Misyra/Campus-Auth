@@ -12,6 +12,7 @@ from app.utils.concurrent import cancel_pending
 from app.utils.logging import get_logger
 from app.utils.time_utils import is_pause_enabled
 
+from .interfaces import InterfaceManager
 from .probes import (
     is_local_network_connected,
     is_network_available_http,
@@ -38,6 +39,29 @@ class NetworkCheckResult:
 
 
 logger = get_logger("network_decision", source="backend")
+
+# ── 绑定网卡解析 ──
+
+_interface_mgr: InterfaceManager | None = None
+
+
+def _get_interface_mgr() -> InterfaceManager:
+    """获取 InterfaceManager 单例。"""
+    global _interface_mgr
+    if _interface_mgr is None:
+        _interface_mgr = InterfaceManager()
+    return _interface_mgr
+
+
+def _resolve_source_ip(monitor: MonitorSettings) -> str | None:
+    """从 MonitorSettings 解析绑定网卡的 source_ip。"""
+    name = monitor.bind_interface_name
+    if not name:
+        return None
+    ip = _get_interface_mgr().resolve_ip(name)
+    if ip is None:
+        logger.error("绑定网卡 {} 不可用，回退到系统默认路由", name)
+    return ip
 
 
 # ── 公共 API：三个职责清晰的检查函数 ──
@@ -93,6 +117,8 @@ def check_network_status(monitor: MonitorSettings) -> tuple[bool, str, str]:
 
     test_urls = monitor.test_urls if monitor.test_urls else None
 
+    source_ip = _resolve_source_ip(monitor)
+
     ok = is_network_available(
         test_sites=test_sites,
         test_urls=test_urls,
@@ -100,6 +126,7 @@ def check_network_status(monitor: MonitorSettings) -> tuple[bool, str, str]:
         enable_tcp=enable_tcp,
         enable_http=enable_http,
         url_checks=url_checks,
+        source_ip=source_ip,
     )
 
     if ok:
@@ -129,15 +156,22 @@ def check_login_prerequisites(
         (False, "local_disconnected")     — 物理网络未连接
         (False, "auth_url_unreachable")   — 认证地址不可达
     """
+    source_ip = _resolve_source_ip(monitor)
+    interface_name = monitor.bind_interface_name
+
     # 物理网络连接检查
-    if monitor.enable_local_check and not is_local_network_connected():
+    if monitor.enable_local_check and not is_local_network_connected(
+        interface_name=interface_name
+    ):
         logger.debug("物理网络未连接，跳过登录")
         return (False, "local_disconnected")
 
     # 认证地址可达性检查
     if monitor.check_auth_url:
         extra_targets = monitor.auth_url_targets if monitor.auth_url_targets else None
-        if not _is_auth_url_reachable(auth_url, extra_targets=extra_targets):
+        if not _is_auth_url_reachable(
+            auth_url, extra_targets=extra_targets, source_ip=source_ip
+        ):
             logger.debug("认证地址不可达，跳过登录")
             return (False, "auth_url_unreachable")
 
@@ -154,6 +188,7 @@ def is_network_available(
     enable_tcp: bool = True,
     enable_http: bool = True,
     url_checks: Sequence[tuple[str, str]] | None = None,
+    source_ip: str | None = None,
 ) -> bool:
     """底层网络状态检测，不包含物理网络检查。"""
     enable_url = bool(url_checks)
@@ -179,7 +214,10 @@ def is_network_available(
     if enable_tcp:
         futures[
             pool.submit(
-                is_network_available_socket, test_sites=test_sites, timeout=timeout
+                is_network_available_socket,
+                test_sites=test_sites,
+                timeout=timeout,
+                source_ip=source_ip,
             )
         ] = "tcp"
     if enable_http:
@@ -189,6 +227,7 @@ def is_network_available(
                 test_urls=urls_list,
                 timeout=max(timeout, 2.0),
                 follow_redirects=not enable_tcp,
+                source_ip=source_ip,
             )
         ] = "http"
     if enable_url:
@@ -197,6 +236,7 @@ def is_network_available(
                 is_network_available_url,
                 url_checks=url_checks,
                 timeout=max(timeout, 3.0),
+                source_ip=source_ip,
             )
         ] = "url"
 
@@ -226,6 +266,7 @@ def is_network_available(
 def _is_auth_url_reachable(
     auth_url: str,
     extra_targets: Sequence[str] | None = None,
+    source_ip: str | None = None,
 ) -> bool:
     """检查认证地址及附加目标的 TCP 可达性。
 
@@ -237,7 +278,8 @@ def _is_auth_url_reachable(
 
     def _check_host_port(host: str, port: int, label: str) -> bool:
         try:
-            with socket.create_connection((host, port), timeout=3):
+            sa = (source_ip, 0) if source_ip else None
+            with socket.create_connection((host, port), timeout=3, source_address=sa):
                 logger.debug("认证可达性检测通过: {}", label)
                 return True
         except Exception as exc:
