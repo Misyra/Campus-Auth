@@ -2,6 +2,12 @@
 
   <!-- 当前使用任务 + 快捷操作 -->
   <section class="card task-overview-card">
+    <div class="settings-card-header">
+      <svg class="settings-card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+      </svg>
+      <h2>任务概览</h2>
+    </div>
     <div class="card-body">
       <div class="task-overview-compact">
         <div class="task-overview-left">
@@ -51,18 +57,11 @@
 
   <!-- 任务录制器 -->
   <section class="card">
-    <div class="card-header">
-      <h2>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:18px;height:18px;color:var(--accent);vertical-align:-3px;margin-right:6px;">
-          <circle cx="12" cy="12" r="10"/>
-          <circle cx="12" cy="12" r="3"/>
-          <line x1="12" y1="2" x2="12" y2="6"/>
-          <line x1="12" y1="18" x2="12" y2="22"/>
-          <line x1="2" y1="12" x2="6" y2="12"/>
-          <line x1="18" y1="12" x2="22" y2="12"/>
-        </svg>
-        任务录制器
-      </h2>
+    <div class="settings-card-header">
+      <svg class="settings-card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/>
+      </svg>
+      <h2>任务录制器</h2>
     </div>
     <div class="card-body">
       <div class="task-recorder-section">
@@ -101,8 +100,11 @@
 
   <!-- OCR 依赖管理 -->
   <section class="card settings-panel">
-    <div class="card-header">
-      <h2>OCR 验证码识别依赖</h2>
+    <div class="settings-card-header">
+      <svg class="settings-card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M9 15l2 2 4-4"/>
+      </svg>
+      <h2>OCR 依赖</h2>
       <button v-if="!ocrStatus.installed" class="btn btn-primary btn-sm" type="button" @click="installOcr" :disabled="busy.ocr">
         {{ busy.ocr ? '安装中...' : '安装 OCR 依赖' }}
       </button>
