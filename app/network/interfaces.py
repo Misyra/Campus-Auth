@@ -2,14 +2,22 @@
 
 from __future__ import annotations
 
+import platform
 import socket
+import subprocess
 import time
 from dataclasses import dataclass
 
 import psutil
 
+from app.network.detect import (
+    _parse_darwin_netstat_routes,
+    _parse_linux_route_entry,
+    _parse_windows_all_routes,
+)
 from app.network.probes import _is_virtual_nic
 from app.utils.logging import get_logger
+from app.utils.platform import CREATE_NO_WINDOW_FLAG
 
 logger = get_logger("interfaces", source="backend")
 
@@ -54,8 +62,83 @@ class InterfaceManager:
         # 无 IPv4 的排除
         return bool(self._get_ipv4(name))
 
+    def _build_ip_to_name_map(self) -> dict[str, str]:
+        """构建 IP → 网卡名映射。"""
+        mapping: dict[str, str] = {}
+        for name, addrs in psutil.net_if_addrs().items():
+            for addr in addrs:
+                if addr.family == _AF_INET:
+                    mapping[addr.address] = name
+        return mapping
+
+    def get_gateways_by_name(self) -> dict[str, str]:
+        """返回 {网卡名: 网关IP} 映射。"""
+        ip_to_name = self._build_ip_to_name_map()
+        system = platform.system()
+        if system == "Windows":
+            return self._gateways_windows(ip_to_name)
+        if system == "Linux":
+            return self._gateways_linux(ip_to_name)
+        return self._gateways_macos(ip_to_name)
+
+    def _gateways_windows(self, ip_map: dict[str, str]) -> dict[str, str]:
+        """Windows: 通过 route print 获取所有默认路由，按接口 IP 匹配网卡名。"""
+        try:
+            result = subprocess.run(
+                ["route", "print", "0.0.0.0"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+                creationflags=CREATE_NO_WINDOW_FLAG,
+            )
+            if result.returncode != 0:
+                return {}
+            routes = _parse_windows_all_routes(result.stdout)
+            gateways: dict[str, str] = {}
+            for gw, iface_ip in routes:
+                name = ip_map.get(iface_ip)
+                if name:
+                    gateways[name] = gw
+            return gateways
+        except Exception as exc:
+            logger.debug("Windows 网关解析失败: {}", exc)
+            return {}
+
+    def _gateways_linux(self, ip_map: dict[str, str]) -> dict[str, str]:
+        """Linux: 解析 /proc/net/route 获取所有默认路由。"""
+        try:
+            gateways: dict[str, str] = {}
+            with open("/proc/net/route") as f:
+                for line in f:
+                    entry = _parse_linux_route_entry(line)
+                    if entry is not None:
+                        iface, gw = entry
+                        if gw != "0.0.0.0":
+                            gateways[iface] = gw
+            return gateways
+        except Exception as exc:
+            logger.debug("Linux 网关解析失败: {}", exc)
+            return {}
+
+    def _gateways_macos(self, ip_map: dict[str, str]) -> dict[str, str]:
+        """macOS: 解析 netstat -rn 获取所有默认路由。"""
+        try:
+            result = subprocess.run(
+                ["netstat", "-rn"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if result.returncode != 0:
+                return {}
+            return _parse_darwin_netstat_routes(result.stdout)
+        except Exception as exc:
+            logger.debug("macOS 网关解析失败: {}", exc)
+            return {}
+
     def list_interfaces(self) -> list[InterfaceInfo]:
         """枚举物理网卡列表。"""
+        gateways = self.get_gateways_by_name()
         result: list[InterfaceInfo] = []
         stats_all = psutil.net_if_stats()
         for name, stats in stats_all.items():
@@ -63,7 +146,7 @@ class InterfaceManager:
                 info = InterfaceInfo(
                     name=name,
                     ip=self._get_ipv4(name),
-                    gateway="",
+                    gateway=gateways.get(name, ""),
                     is_up=stats.isup,
                 )
                 result.append(info)

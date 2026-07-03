@@ -2,6 +2,13 @@
 
 ## 2026-07-04
 
+### feat: 扩展网关检测支持按网卡名索引
+
+- `app/network/detect.py`：新增 3 个通用解析辅助函数 `_parse_windows_all_routes`、`_parse_linux_route_entry`、`_parse_darwin_netstat_routes`，从 route print / /proc/net/route / netstat -rn 输出中提取所有默认路由（网关+接口）
+- `app/network/interfaces.py`：`InterfaceManager` 新增 `get_gateways_by_name()` 方法及三平台实现，`list_interfaces()` 调用该方法填充 `gateway` 字段
+- `tests/test_network/test_interfaces.py`：新增 `TestInterfaceManagerGateway`（10 个用例），现有 list_interfaces 测试添加 gateway mock
+- `tests/test_network/test_detect.py`：新增 3 个测试类（16 个用例），覆盖新增的通用解析函数
+
 ### feat: 新增 InterfaceInfo 数据模型和 bind_interface_name 配置字段
 
 - `app/network/interfaces.py`：新增 `InterfaceInfo` frozen dataclass（含 slots），包含 `name`、`ip`、`gateway`、`is_up` 四个字段，用于统一网络接口信息表示

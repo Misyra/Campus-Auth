@@ -100,6 +100,67 @@ def _parse_windows_route_print(output: str) -> str | None:
     return None
 
 
+def _parse_windows_all_routes(output: str) -> list[tuple[str, str]]:
+    """解析 route print 输出，提取所有默认路由的 (网关IP, 接口IP) 对。
+
+    用于按网卡名索引网关的场景：接口 IP 可通过 psutil 映射到网卡名。
+    """
+    routes: list[tuple[str, str]] = []
+    for line in output.splitlines():
+        parts = line.split()
+        if len(parts) >= 4 and parts[0] == "0.0.0.0" and parts[1] == "0.0.0.0":
+            gateway, interface_ip = parts[2], parts[3]
+            if _is_valid_ipv4(gateway) and gateway != "0.0.0.0":
+                routes.append((gateway, interface_ip))
+    return routes
+
+
+def _parse_linux_route_entry(line: str) -> tuple[str, str] | None:
+    """解析 /proc/net/route 单行，提取默认路由的 (接口名, 网关IP)。
+
+    与 _parse_linux_gateway 的区别：同时返回接口名，用于按网卡索引网关。
+    """
+    parts = line.split()
+    if len(parts) < 3:
+        return None
+    iface, dest, gateway = parts[0], parts[1], parts[2]
+    if len(dest) < 8 or len(gateway) < 8:
+        return None
+    if dest != "00000000":
+        return None
+    ip = _hex_to_ipv4(gateway)
+    if ip is None or not _is_valid_ipv4(ip):
+        return None
+    return (iface, ip)
+
+
+def _parse_darwin_netstat_routes(output: str) -> dict[str, str]:
+    """解析 netstat -rn 输出，提取 {接口名: 网关IP} 映射。
+
+    macOS 的 netstat -rn 输出直接包含接口名（Netif 列），
+    无需通过 IP→名称映射。
+    """
+    routes: dict[str, str] = {}
+    in_internet = False
+    for line in output.splitlines():
+        stripped = line.strip()
+        if stripped == "Internet:":
+            in_internet = True
+            continue
+        if not in_internet:
+            continue
+        if stripped.startswith("Internet6:"):
+            break
+        parts = stripped.split()
+        # 格式：Destination  Gateway  Flags  Netif  [Expire]
+        if len(parts) >= 4 and parts[0] == "default":
+            gateway = parts[1]
+            netif = parts[3]
+            if _is_valid_ipv4(gateway) and gateway != "0.0.0.0":
+                routes[netif] = gateway
+    return routes
+
+
 def _get_windows_gateway_route_print() -> str | None:
     """使用 route print 0.0.0.0 检测默认网关（快速，无冷启动）。"""
     try:
