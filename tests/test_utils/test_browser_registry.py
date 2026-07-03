@@ -82,8 +82,9 @@ def test_edge_path_returns_none_when_not_found():
 
 
 @patch("app.utils.browser_registry._edge_path")
+@patch("app.utils.browser_registry._check_command_exists", return_value=False)
 @patch("app.utils.browser_registry.PLATFORM", "windows")
-def test_detect_edge_windows_with_executable(mock_edge_path):
+def test_detect_edge_windows_with_executable(_mock_cmd, mock_edge_path):
     """Windows 上 _edge_path 返回路径时 Edge 应标记为已安装。"""
     mock_edge_path.return_value = Path(
         "C:/Program Files/Microsoft/Edge/Application/msedge.exe"

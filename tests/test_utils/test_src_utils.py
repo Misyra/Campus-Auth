@@ -155,10 +155,9 @@ class TestSystemTrayMethods:
 
     def test_create_menu_returns_menu(self):
         tray = SystemTray()
-        # 延迟导入：需要先初始化 _pystray
-        import pystray
-
-        tray._pystray = pystray
+        mock_pystray = MagicMock()
+        mock_pystray.Menu.return_value = MagicMock()
+        tray._pystray = mock_pystray
         menu = tray._create_menu()
         assert menu is not None
 
@@ -690,8 +689,6 @@ class TestCreateMenu:
 
     def test_menu_created(self):
         """菜单创建成功。"""
-        import pystray
-
         mock_menu_instance = MagicMock()
         mock_pystray = MagicMock()
         mock_pystray.Menu.return_value = mock_menu_instance
