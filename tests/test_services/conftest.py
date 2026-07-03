@@ -93,7 +93,7 @@ def engine_factory():
         svc._profile_service.set_active_profile.return_value = (True, "ok")
         svc.project_root = MagicMock()
         svc._logger = MagicMock()
-        svc._update_status_snapshot = MagicMock()
+        svc._update_status_snapshot = ScheduleEngine._update_status_snapshot.__get__(svc)
 
         # StatusManager — 状态快照与广播
         svc._status_manager = StatusManager(

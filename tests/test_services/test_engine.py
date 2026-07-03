@@ -1005,7 +1005,7 @@ class TestRunScheduleTick:
 class TestUpdateStatusSnapshot:
     def test_update_no_core(self, engine_factory):
         svc = engine_factory(raw=True)
-        svc._update_status_snapshot = ScheduleEngine._update_status_snapshot.__get__(svc)
+
         svc._status_manager._queue_status_broadcast = MagicMock()
         svc._monitor_core = None
         svc._update_status_snapshot(force=True)
@@ -1014,7 +1014,7 @@ class TestUpdateStatusSnapshot:
 
     def test_update_with_core_connected(self, engine_factory):
         svc = engine_factory(raw=True)
-        svc._update_status_snapshot = ScheduleEngine._update_status_snapshot.__get__(svc)
+
         svc._status_manager._queue_status_broadcast = MagicMock()
         mock_core = MagicMock()
         mock_core.monitoring = True
@@ -1035,7 +1035,7 @@ class TestUpdateStatusSnapshot:
 
     def test_update_with_core_disconnected(self, engine_factory):
         svc = engine_factory(raw=True)
-        svc._update_status_snapshot = ScheduleEngine._update_status_snapshot.__get__(svc)
+
         svc._status_manager._queue_status_broadcast = MagicMock()
         mock_core = MagicMock()
         mock_core.monitoring = True
@@ -1053,7 +1053,7 @@ class TestUpdateStatusSnapshot:
 
     def test_update_throttled(self, engine_factory):
         svc = engine_factory(raw=True)
-        svc._update_status_snapshot = ScheduleEngine._update_status_snapshot.__get__(svc)
+
         svc._status_manager._queue_status_broadcast = MagicMock()
         svc._status_manager._last_snapshot_time = time.time()
         svc._monitor_core = MagicMock()
@@ -1064,7 +1064,7 @@ class TestUpdateStatusSnapshot:
 
     def test_update_force_skips_throttle(self, engine_factory):
         svc = engine_factory(raw=True)
-        svc._update_status_snapshot = ScheduleEngine._update_status_snapshot.__get__(svc)
+
         svc._status_manager._queue_status_broadcast = MagicMock()
         svc._status_manager._last_snapshot_time = time.time()
         mock_core = MagicMock()
@@ -1083,7 +1083,7 @@ class TestUpdateStatusSnapshot:
 
     def test_update_core_exception(self, engine_factory):
         svc = engine_factory(raw=True)
-        svc._update_status_snapshot = ScheduleEngine._update_status_snapshot.__get__(svc)
+
         svc._status_manager._queue_status_broadcast = MagicMock()
         mock_core = MagicMock()
         mock_core.monitoring = True
