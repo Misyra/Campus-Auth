@@ -157,9 +157,16 @@ class ServiceContainer:
             self._log_handler_id = None
 
         if self._ws_drain_task:
-            self._ws_drain_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await self._ws_drain_task
+            try:
+                loop = asyncio.get_running_loop()
+                if self._ws_drain_task.get_loop() is loop:
+                    self._ws_drain_task.cancel()
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await self._ws_drain_task
+                else:
+                    container_logger.debug("WS drain task 属于其他事件循环，跳过 await")
+            except Exception:
+                pass
             self._ws_drain_task = None
 
         self._web_services_started = False
