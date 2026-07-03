@@ -2,6 +2,10 @@
 
 ## 2026-07-04
 
+### fix: 修复网络探测测试因 source_address 参数不匹配导致的 4 个失败
+
+- `tests/test_core/test_network_probes.py`：`test_success_on_second_target` mock 的 `side_effect` 函数签名补充 `source_address=None` 参数；`test_successful_connection`、`test_https_default_port`、`test_http_default_port` 三个断言补充 `source_address=None` 以匹配 NIC 绑定功能引入的 `socket.create_connection` 新参数
+
 ### feat: 集成 SOCKS5 代理生命周期和 IP 变化检测到 MonitorCore
 
 - `app/services/monitor_service.py`：`init_monitoring()` 新增 `_start_bind_proxy()` 调用，启动 SOCKS5 Forwarder；`stop_monitoring()` 新增 `_stop_bind_proxy()` 调用；新增 `bind_proxy_url` 属性暴露代理 URL；新增 `_check_bind_ip_change()` 在 `check_once()` 中检测 DHCP IP 变化并自动更新代理绑定
