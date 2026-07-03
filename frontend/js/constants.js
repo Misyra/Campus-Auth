@@ -182,7 +182,7 @@ export const DEFAULT_APPEARANCE = {
   backdrop_filter: false, // 毛玻璃效果
   accent_color: '#22d3ee',
   zoom: 100,
-  theme: 'dark', // dark | light
+  theme: 'light', // dark | light
 };
 
 // 预设背景色
