@@ -2,6 +2,10 @@
 
 ## 2026-07-03
 
+### fix: Worker 超时后 slot 过早释放缓解
+
+- `app/services/login_orchestrator.py`：`_run()` 的 `except Exception` 处理中，检测超时异常（中文"超时"或英文"timed out"）时主动设置 `cancel_event` 并等待 0.5 秒，给 Worker 响应取消信号的时间窗口，降低新登录进入仍忙碌 Worker 的概率
+
 ### fix: 修复 Windows 托盘退出时 PID 文件残留
 
 - `app/services/launcher.py`：将轻量模式 `on_exit` lambda 从 `os.kill(os.getpid(), signal.SIGTERM)` 改为直接设置 `_web_server_shutdown_event.set()`，确保托盘退出走正常优雅退出路径，finally 块中的 `cleanup_pid()` 能够执行

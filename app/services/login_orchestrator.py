@@ -339,6 +339,10 @@ class LoginOrchestrator:
                 return False, "登录需要额外依赖，请检查 Playwright 安装状态"
             except Exception as exc:
                 duration_ms = int((time.perf_counter() - start) * 1000)
+                # 超时场景：给 Worker 短暂时间响应 cancel_event
+                if "超时" in str(exc) or "timed out" in str(exc).lower():
+                    cancel_event.set()
+                    time.sleep(0.5)
                 if source != "browser":
                     self._record_history(False, duration_ms, error=str(exc))
                 logger.exception("登录执行异常: {}", exc)
