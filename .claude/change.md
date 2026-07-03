@@ -2,6 +2,33 @@
 
 ## 2026-07-03
 
+### fix: 轻量模式托盘开关在未开启自启动时异常显示
+
+- `frontend/partials/pages/settings/settings-system.html`：轻量模式托盘开关的 `v-if` 条件从 `autostart.lightweight` 改为 `autostart.enabled && autostart.lightweight`，防止自启动关闭时开关仍然显示
+
+### style: 全局颜色对比度优化
+
+- `frontend/styles/base.css`：深色/浅色模式文字色、边框色、卡片背景透明度全面调整，提升 WCAG AA 可读性
+- 深色模式：`--text-muted` 提亮至 `#8293a9`，`--text-tertiary` 提亮至 `#6b7c93`，`--border` alpha 0.1→0.15，`--bg-card` alpha 0.45→0.6，`--bg-glass` alpha 0.35→0.5，`--bg-glass-heavy` alpha 0.65→0.8
+- 浅色模式：`--text-secondary` 加深至 `#374151`，`--text-muted` 加深至 `#4b5e73`，`--text-tertiary` 加深至 `#6b7280`，`--border` alpha 0.18→0.25，`--bg-card` alpha 0.6→0.75，`--bg-glass` alpha 0.55→0.7，`--bg-glass-heavy` alpha 0.7→0.85，`--accent` 覆盖为 `#0891b2`，`--accent-hover` 覆盖为 `#0e7490`
+
+### refactor: 设置页面统一视觉重构
+
+- `frontend/styles/pages/settings.css`：新增 `.settings-card-header`、`.settings-card-icon`、`.settings-grid-2col`、`.settings-toggle-spacer`、`.settings-toggle-compact`、`.settings-monospace-textarea` 统一样式类，新增 `@media (max-width: 700px)` 响应式断点
+- `frontend/partials/pages/settings/settings-monitor.html`：IA 4→3 卡片（合并"检测设置"+"重试策略"→"检测与重试"），添加图标头部，`.settings-detect-columns` → `.settings-grid-2col`，内联 style → CSS 类
+- `frontend/partials/pages/settings/settings-system.html`：IA 3→4 卡片（拆分"启动与界面"→"启动行为"+"界面行为"），添加图标头部，`.settings-log-columns` → `.settings-grid-2col`，移除 `.settings-section-divider`
+- `frontend/partials/pages/settings/settings-account.html`：添加图标头部（用户图标、代码图标）
+- `frontend/partials/pages/settings/settings-browser.html`：添加图标头部（棱镜、滑块、盾牌、星形），textarea 内联 style → `.settings-monospace-textarea`
+- `frontend/partials/pages/settings/settings-tasks.html`：添加图标头部（四宫格、录制、文件勾选），移除录制器 SVG 内联 style
+
+### style: 增大设置页面「立即保存」按钮尺寸
+
+- `frontend/styles/pages/settings.css`：`.save-btn` 增加 `padding: 14px 28px`、`font-size: 15px`、`min-height: 48px`、`min-width: 130px`，图标从 15px 增至 18px
+
+### style: 将默认主题从深色改为浅色
+
+- `frontend/js/constants.js`：`DEFAULT_APPEARANCE.theme` 默认值从 `'dark'` 改为 `'light'`
+
 ### refactor: 测试模块清理 — 删除无用测试、合并 fix 文件、重命名
 
 - 删除 16 个无价值的"存在性"测试（`assert callable`、`assert hasattr`、`assert isinstance`）
