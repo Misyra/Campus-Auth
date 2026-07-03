@@ -448,8 +448,10 @@ class TestDetectSsidWindowsEncodingFallback:
     @patch("app.network.detect.is_linux", return_value=False)
     @patch("app.network.detect.is_windows", return_value=True)
     @patch("app.network.detect.subprocess.run")
+    @patch("app.network.detect.locale.getpreferredencoding", return_value="utf-8")
     def test_gbk_ssid(
         self,
+        mock_locale: MagicMock,
         mock_run: MagicMock,
         mock_is_windows: MagicMock,
         mock_is_linux: MagicMock,
