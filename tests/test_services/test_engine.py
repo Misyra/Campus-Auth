@@ -1816,31 +1816,38 @@ class TestPureModeLockConsolidation:
     """_pure_mode 统一由 _reload_lock 保护。"""
 
     def test_toggle_pure_mode_thread_safe(self):
-        """toggle_pure_mode 和 pure_mode 读取应互斥。"""
+        """toggle_pure_mode 和 pure_mode 读取应互斥（共享计数器验证）。"""
         engine = ScheduleEngine.__new__(ScheduleEngine)
         engine._reload_lock = threading.Lock()
         engine._pure_mode = False
         engine._profile_service = MagicMock()
 
-        results = []
+        counter = 0
         barrier = threading.Barrier(2)
 
-        def toggle():
+        def toggle_worker():
+            nonlocal counter
             barrier.wait()
-            engine._pure_mode = True
+            for _ in range(100):
+                with engine._reload_lock:
+                    counter += 1
+                    counter -= 1
 
-        def read():
+        def read_worker():
+            nonlocal counter
             barrier.wait()
-            with engine._reload_lock:
-                results.append(engine._pure_mode)
+            for _ in range(100):
+                with engine._reload_lock:
+                    counter += 1
+                    counter -= 1
 
-        t1 = threading.Thread(target=toggle)
-        t2 = threading.Thread(target=read)
+        t1 = threading.Thread(target=toggle_worker)
+        t2 = threading.Thread(target=read_worker)
         t1.start(); t2.start()
         t1.join(); t2.join()
 
-        # 读取结果应为 True 或 False（不崩溃即可，关键是没有死锁）
-        assert len(results) == 1
+        # 互斥锁保护下，计数器最终应为 0
+        assert counter == 0
 
 
 class TestStartThreadQueueCleanup:
