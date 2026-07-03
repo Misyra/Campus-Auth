@@ -1,5 +1,7 @@
 """登录模板变量构建工具"""
 
+import re
+
 from .logging import get_logger
 
 logger = get_logger("env", source="backend")
@@ -68,12 +70,15 @@ def build_login_template_vars(
             else:
                 template_vars[k] = str(v)
 
-    # 在所有变量注入后解析 task_url 模板
+    # 在所有变量注入后解析 task_url 模板（单次替换，避免双重替换）
     if task_url:
-        resolved_url = task_url
-        for k, v in template_vars.items():
-            resolved_url = resolved_url.replace("{{" + k + "}}", v)
-        template_vars["LOGIN_URL"] = resolved_url
+        _VAR_PATTERN = re.compile(r"\{\{(\w+)\}\}")
+
+        def _replacer(match: re.Match) -> str:
+            name = match.group(1)
+            return template_vars.get(name, match.group(0))
+
+        template_vars["LOGIN_URL"] = _VAR_PATTERN.sub(_replacer, task_url)
 
     if not template_vars.get("LOGIN_URL", "").strip() and auth_url:
         template_vars["LOGIN_URL"] = auth_url
