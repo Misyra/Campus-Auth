@@ -1118,3 +1118,160 @@ class TestMainArgparse:
         out = capsys.readouterr().out
         assert "Campus-Auth" in out
         assert "--no-browser" in out
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  TestBuildAppConfigExceptionLogging (from test_main_fix)
+# ══════════════════════════════════════════════════════════════════════
+
+
+class TestBuildAppConfigExceptionLogging:
+    """验证 _build_app_config 在加载配置失败时记录日志而非静默吞异常。"""
+
+    def test_load_failure_logs_warning(self):
+        """加载配置异常时应记录 warning 日志。"""
+        from main import _build_app_config
+
+        mock_logger = MagicMock()
+        with (
+            patch(
+                "app.services.profile_service.ProfileService",
+                side_effect=RuntimeError("test error"),
+            ),
+            patch(
+                "app.utils.logging.get_logger",
+                return_value=mock_logger,
+            ),
+        ):
+            _build_app_config()
+            mock_logger.warning.assert_called()
+            args, kwargs = mock_logger.warning.call_args
+            assert "加载配置失败" in args[0]
+            assert kwargs.get("exc_info") is True
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  TestOnExitLambda (from test_main_fix)
+# ══════════════════════════════════════════════════════════════════════
+
+
+class TestOnExitLambda:
+    """验证 SystemTray on_exit 不包含 cleanup_pid。"""
+
+    def test_on_exit_does_not_call_cleanup_pid(self):
+        """on_exit lambda 执行时不应调用 cleanup_pid。"""
+        import inspect
+
+        from app.services import launcher as launcher_mod
+
+        source = inspect.getsource(launcher_mod)
+        lines = source.split("\n")
+        for i, line in enumerate(lines):
+            if "on_exit=lambda" in line:
+                lambda_text = line
+                for j in range(i + 1, min(i + 5, len(lines))):
+                    if "tray_icon.start()" in lines[j]:
+                        break
+                    lambda_text += lines[j]
+                assert "cleanup_pid" not in lambda_text, (
+                    f"Line {i}: on_exit lambda 引用了 cleanup_pid"
+                )
+
+    def test_on_exit_uses_signal_or_os_exit(self):
+        """on_exit lambda 使用 SIGTERM 或 os._exit(0)。"""
+        import inspect
+
+        from app.services import launcher as launcher_mod
+
+        source = inspect.getsource(launcher_mod)
+        lines = source.split("\n")
+        on_exit_lines = []
+        capture = False
+        for line in lines:
+            if "on_exit=lambda" in line:
+                capture = True
+            if capture:
+                on_exit_lines.append(line)
+                if "tray_icon.start()" in line:
+                    capture = False
+        on_exit_text = "\n".join(on_exit_lines)
+        assert "SIGTERM" in on_exit_text or "os._exit" in on_exit_text, (
+            "on_exit lambda 应使用 SIGTERM 或 os._exit"
+        )
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  TestLoginOnceAllDisabled (from test_main_fix)
+# ══════════════════════════════════════════════════════════════════════
+
+
+class TestLoginOnceAllDisabled:
+    """验证 LOGIN_ONCE 模式下 all_disabled 时跳过登录。"""
+
+    def test_login_once_all_disabled_skips_login(self):
+        """当所有网络检测方式禁用时，LOGIN_ONCE 应跳过登录（假定已连接）。"""
+        from app.schemas import LoginResult, RuntimeConfig
+        from app.services.login_runner import (
+            run_login_then_exit as _run_login_then_exit,
+        )
+
+        with (
+            patch("app.services.login_runner.load_login_config") as mock_load,
+            patch("app.network.decision.check_network_status") as mock_check,
+            patch("app.services.login_runner.execute_login_with_retries") as mock_exec,
+        ):
+            mock_load.return_value = (RuntimeConfig(), None)
+            mock_check.return_value = (False, "all_disabled", "none")
+
+            result = _run_login_then_exit(None, MagicMock())
+            assert result == LoginResult.SUCCESS
+            mock_exec.assert_not_called()
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  TestLightweightFallbackCleanup (from test_main_fix)
+# ══════════════════════════════════════════════════════════════════════
+
+
+class TestLightweightFallbackCleanup:
+    """F14: Web 已标记 started 但 Uvicorn 未就绪时仍应执行兜底清理。"""
+
+    def _simulate_finally_block(self, web_server_state, container):
+        """提取 finally 块逻辑用于测试。"""
+        _web_ready = (
+            web_server_state["started"]
+            and web_server_state["server_ref"][0] is not None
+        )
+        if not _web_ready:
+            container.task_executor.shutdown(wait=False)
+            container.engine.shutdown()
+
+    def test_server_not_started_calls_shutdown(self):
+        """Web 未启动时应调用 shutdown。"""
+        state = {"started": False, "server_ref": [None]}
+        container = MagicMock()
+
+        self._simulate_finally_block(state, container)
+
+        container.task_executor.shutdown.assert_called_once_with(wait=False)
+        container.engine.shutdown.assert_called_once()
+
+    def test_server_started_but_ref_none_calls_shutdown(self):
+        """Web 已标记 started 但 server_ref 仍为 None（子线程崩溃）时应兜底 shutdown。"""
+        state = {"started": True, "server_ref": [None]}
+        container = MagicMock()
+
+        self._simulate_finally_block(state, container)
+
+        container.task_executor.shutdown.assert_called_once_with(wait=False)
+        container.engine.shutdown.assert_called_once()
+
+    def test_server_started_and_ref_set_skips_shutdown(self):
+        """Web 已启动且 Uvicorn 就绪时不应调用 shutdown（由 Uvicorn 事件循环处理）。"""
+        state = {"started": True, "server_ref": [MagicMock()]}
+        container = MagicMock()
+
+        self._simulate_finally_block(state, container)
+
+        container.task_executor.shutdown.assert_not_called()
+        container.engine.shutdown.assert_not_called()

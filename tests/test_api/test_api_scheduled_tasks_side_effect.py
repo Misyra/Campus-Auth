@@ -1,7 +1,6 @@
-"""验证 scheduled_tasks.py 两个修复点的测试。
+"""验证 scheduled_tasks.py toggle 端点无副作用。
 
-1. toggle 端点不原地修改 get_task 返回的数据（避免副作用）
-2. 依赖注入使用 Depends 模式（已有测试覆盖端点功能，此处补充 toggle 副作用测试）
+toggle 端点不原地修改 get_task 返回的数据，避免副作用。
 """
 
 from __future__ import annotations
