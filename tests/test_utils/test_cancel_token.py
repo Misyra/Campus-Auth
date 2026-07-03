@@ -179,3 +179,48 @@ class TestCompositeCancelEvent:
         cce.set()
         cce.clear()
         assert not cce.is_set()
+
+    def test_no_deadlock_wait_concurrent_with_is_set(self) -> None:
+        """wait() 和 is_set() 并发调用不应死锁。
+
+        死锁场景：is_set() 持有 _lock → 调用 super().set() 获取 _cond；
+        wait() 持有 _cond → 调用 is_set() 获取 _lock。
+        修复后 super().set() 在锁外调用，锁顺序不再颠倒。
+        """
+        cce = CompositeCancelEvent()
+        source = threading.Event()
+        cce.add_source(source)
+        # 先 set 源，使 wait() 能立即返回，避免阻塞干扰死锁检测
+        source.set()
+        errors: list[Exception] = []
+
+        def run_wait() -> None:
+            try:
+                for _ in range(100):
+                    cce.wait(timeout=0.5)
+            except Exception as e:
+                errors.append(e)
+
+        def run_is_set() -> None:
+            try:
+                for _ in range(100):
+                    cce.is_set()
+            except Exception as e:
+                errors.append(e)
+
+        threads = [
+            threading.Thread(target=run_wait),
+            threading.Thread(target=run_is_set),
+            threading.Thread(target=run_wait),
+            threading.Thread(target=run_is_set),
+        ]
+
+        for t in threads:
+            t.start()
+        # 超时 10 秒即判定死锁
+        for t in threads:
+            t.join(timeout=10)
+            if t.is_alive():
+                pytest.fail("死锁检测：线程未在 10 秒内完成，疑似死锁")
+
+        assert not errors, f"并发执行出错: {errors}"

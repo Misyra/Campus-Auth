@@ -36,11 +36,15 @@ class CompositeCancelEvent(threading.Event):
         """惰性扫描：每次调用时检查所有源。"""
         if super().is_set():
             return True
+        should_set = False
         with self._lock:
             for src in self._sources:
                 if src.is_set():
-                    super().set()
-                    return True
+                    should_set = True
+                    break
+        if should_set:
+            super().set()  # 移到锁外，消除锁顺序颠倒
+            return True
         return False
 
     def wait(self, timeout: float | None = None) -> bool:
