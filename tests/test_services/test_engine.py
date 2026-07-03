@@ -29,6 +29,30 @@ from app.services.retry_policy import MonitoredPolicy
 from app.services.scheduler_service import SchedulerService
 
 
+def _make_future_with_callback(result):
+    """创建 Future + callback_done 辅助：包装 add_done_callback 以触发事件。
+
+    Returns:
+        (future, callback_done, handle) — 测试设置 submit 返回值后调用，
+        set_result 触发回调，callback_done.wait() 等待完成。
+    """
+    callback_done = threading.Event()
+    future = Future()
+    _orig_adc = future.add_done_callback
+
+    def _wrapping_adc(cb):
+        def _wrapped(f):
+            cb(f)
+            callback_done.set()
+        _orig_adc(_wrapped)
+
+    future.add_done_callback = _wrapping_adc
+    handle = MagicMock()
+    handle.rejected_reason = None
+    handle.future = future
+    return future, callback_done, handle
+
+
 
 # =====================================================================
 # EngineCmdType 枚举
@@ -663,20 +687,7 @@ class TestNetworkCheckBackoff:
             ),
         )
         svc._retry_policy._attempt = 3
-        callback_done = threading.Event()
-        future = Future()
-        _orig_adc = future.add_done_callback
-
-        def _wrapping_adc(cb):
-            def _wrapped(f):
-                cb(f)
-                callback_done.set()
-            _orig_adc(_wrapped)
-
-        future.add_done_callback = _wrapping_adc
-        handle = MagicMock()
-        handle.rejected_reason = None
-        handle.future = future
+        future, callback_done, handle = _make_future_with_callback((True, "登录成功"))
         svc._orchestrator.submit.return_value = handle
         svc._do_async_login()
         future.set_result((True, "登录成功"))
@@ -692,20 +703,7 @@ class TestNetworkCheckBackoff:
             ),
         )
         svc._retry_policy._attempt = 0
-        callback_done = threading.Event()
-        future = Future()
-        _orig_adc = future.add_done_callback
-
-        def _wrapping_adc(cb):
-            def _wrapped(f):
-                cb(f)
-                callback_done.set()
-            _orig_adc(_wrapped)
-
-        future.add_done_callback = _wrapping_adc
-        handle = MagicMock()
-        handle.rejected_reason = None
-        handle.future = future
+        future, callback_done, handle = _make_future_with_callback((False, "登录失败"))
         svc._orchestrator.submit.return_value = handle
         svc._do_async_login()
         future.set_result((False, "登录失败"))
@@ -721,20 +719,7 @@ class TestNetworkCheckBackoff:
             ),
         )
         svc._retry_policy._attempt = 2  # 再失败一次就到 attempt=3，delay=20
-        callback_done = threading.Event()
-        future = Future()
-        _orig_adc = future.add_done_callback
-
-        def _wrapping_adc(cb):
-            def _wrapped(f):
-                cb(f)
-                callback_done.set()
-            _orig_adc(_wrapped)
-
-        future.add_done_callback = _wrapping_adc
-        handle = MagicMock()
-        handle.rejected_reason = None
-        handle.future = future
+        future, callback_done, handle = _make_future_with_callback((False, "登录失败"))
         svc._orchestrator.submit.return_value = handle
         svc._do_async_login()
         future.set_result((False, "登录失败"))
@@ -752,20 +737,7 @@ class TestNetworkCheckBackoff:
             ),
         )
         svc._retry_policy._attempt = 2
-        callback_done = threading.Event()
-        future = Future()
-        _orig_adc = future.add_done_callback
-
-        def _wrapping_adc(cb):
-            def _wrapped(f):
-                cb(f)
-                callback_done.set()
-            _orig_adc(_wrapped)
-
-        future.add_done_callback = _wrapping_adc
-        handle = MagicMock()
-        handle.rejected_reason = None
-        handle.future = future
+        future, callback_done, handle = _make_future_with_callback((False, "登录失败"))
         svc._orchestrator.submit.return_value = handle
         svc._do_async_login(is_manual=True)
         future.set_result((False, "登录失败"))
@@ -782,20 +754,7 @@ class TestNetworkCheckBackoff:
             ),
         )
         svc._retry_policy._attempt = 2
-        callback_done = threading.Event()
-        future = Future()
-        _orig_adc = future.add_done_callback
-
-        def _wrapping_adc(cb):
-            def _wrapped(f):
-                cb(f)
-                callback_done.set()
-            _orig_adc(_wrapped)
-
-        future.add_done_callback = _wrapping_adc
-        handle = MagicMock()
-        handle.rejected_reason = None
-        handle.future = future
+        future, callback_done, handle = _make_future_with_callback((True, "登录成功"))
         svc._orchestrator.submit.return_value = handle
         svc._do_async_login(is_manual=True)
         future.set_result((True, "登录成功"))
