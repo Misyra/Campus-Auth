@@ -18,7 +18,8 @@
 
 ### fix: 修复 Windows 托盘退出时 PID 文件残留
 
-- `app/services/launcher.py`：将轻量模式 `on_exit` lambda 从 `os.kill(os.getpid(), signal.SIGTERM)` 改为直接设置 `_web_server_shutdown_event.set()`，确保托盘退出走正常优雅退出路径，finally 块中的 `cleanup_pid()` 能够执行
+- `app/services/launcher.py`：轻量模式 `on_exit` lambda 从 `os.kill(os.getpid(), signal.SIGTERM)` 改为直接设置 `_web_server_shutdown_event.set()`，确保托盘退出走正常优雅退出路径，finally 块中的 `cleanup_pid()` 能够执行
+- `app/services/launcher.py`：完整模式 `on_exit` lambda 从 `os.kill(os.getpid(), signal.SIGTERM)` 改为新增 `_tray_exit()` 辅助函数，直接调用 `cleanup_pid()` 并设置 `_uvicorn_server[0].should_exit = True` 触发优雅关闭，通过 `_shutdown_initiated` 标志防止重复清理
 
 ### fix: 轻量模式托盘开关在未开启自启动时异常显示
 
