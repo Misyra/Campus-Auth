@@ -273,8 +273,9 @@ export const appearanceMethods = {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
 
-      this.appearance.background_url = data.url;
-      this.appearance.background_filename = data.filename;
+      // ApiResponse 信封：{ success, message, data: { filename, url } }
+      this.appearance.background_url = data.data.url;
+      this.appearance.background_filename = data.data.filename;
       this.applyAppearance();
       this.toastOnly(true, '背景图片已设置');
     } catch (err) {
@@ -314,8 +315,9 @@ export const appearanceMethods = {
     try {
       // 调用后端接口，下载远程图片保存到本地
       const { data } = await this.$api.post('/api/background/fetch-url', { url });
-      this.appearance.background_url = data.url;
-      this.appearance.background_filename = data.filename;
+      // ApiResponse 信封：{ success, message, data: { filename, url } }
+      this.appearance.background_url = data.data.url;
+      this.appearance.background_filename = data.data.filename;
       this.appearance.wallpaper_api_url = url;
       this.randomWallpaperDialog.visible = false;
       this.applyAppearance();
