@@ -159,6 +159,12 @@ cd "$PROJECT_ROOT"
 echo "[1/2] 安装依赖..."
 "$UV_CMD" sync
 
+# --install-only: 仅安装环境，不启动应用
+if [[ " $* " == *" --install-only "* ]]; then
+    echo "[OK] 环境准备完成"
+    exit 0
+fi
+
 # 过滤 --install-only 参数，不传递给 main.py
 EXTRA_ARGS=("$@")
 for i in "${!EXTRA_ARGS[@]}"; do
