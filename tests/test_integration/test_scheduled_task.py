@@ -511,10 +511,10 @@ class TestTaskFailureHandling:
         store = TaskHistoryStore(tmp_path / "history")
 
         store.add_record("", "success", "ok", 1.0)
-        store.add_record("123bad", "success", "ok", 1.0)
+        store.add_record("bad id!", "success", "ok", 1.0)
 
         assert store.get_history("") == []
-        assert store.get_history("123bad") == []
+        assert store.get_history("bad id!") == []
 
     def test_multiple_failures_accumulate_history(self, tmp_path: Path):
         """多次失败累积历史记录。"""
