@@ -86,6 +86,41 @@ class TestDeleteProfile:
         assert resp.status_code == 200
         assert resp.json()["success"] is True
 
+    def test_delete_last_profile_stops_monitoring(self, api_client):
+        """删除最后一个方案后应停止监控。"""
+        test_client, mock_services = api_client
+        mock_services.profile_service.delete_profile.return_value = (True, "删除成功")
+        # 模拟所有方案已删除（active_profile 为 None）
+        mock_data = MagicMock()
+        mock_data.active_profile = None
+        mock_services.profile_service.load.return_value = mock_data
+
+        resp = test_client.delete("/api/profiles/default")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["success"] is True
+        assert "所有方案已删除，监控已停止" in data["message"]
+        mock_services.engine.stop_monitoring.assert_called_once()
+        mock_services.engine.apply_profile.assert_not_called()
+
+    def test_delete_profile_applies_new_active(self, api_client):
+        """删除方案后仍有剩余方案时应切换到新的活动方案。"""
+        test_client, mock_services = api_client
+        mock_services.profile_service.delete_profile.return_value = (True, "删除成功")
+        # 模拟还有剩余方案
+        remaining_data = ProfilesData(
+            profiles={"backup": Profile(name="备用方案", username="u", password="ENC:p")},
+            active_profile="backup",
+        )
+        mock_services.profile_service.load.return_value = remaining_data
+
+        resp = test_client.delete("/api/profiles/default")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["success"] is True
+        mock_services.engine.apply_profile.assert_called_once_with("backup")
+        mock_services.engine.stop_monitoring.assert_not_called()
+
 
 class TestSetActiveProfile:
     """测试 POST /api/profiles/active/{profile_id} 端点。"""

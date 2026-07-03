@@ -99,11 +99,16 @@ def delete_profile(
         api_logger.info("删除方案 {} 成功", profile_id)
     else:
         api_logger.warning("删除方案 {} 失败: {}", profile_id, message)
-    # 删除成功后始终通知监控重载配置（安全做法，避免 TOCTOU 竞态）
+    # 删除成功后通知监控重载配置（安全做法，避免 TOCTOU 竞态）
     if ok:
         try:
             new_data = profile_svc.load()
-            monitor_svc.apply_profile(new_data.active_profile)
+            if new_data.active_profile is not None:
+                monitor_svc.apply_profile(new_data.active_profile)
+            else:
+                # 所有方案已删除，停止监控
+                monitor_svc.stop_monitoring()
+                message = f"{message}（所有方案已删除，监控已停止）"
         except Exception:
             api_logger.warning("删除方案后应用方案失败: profile_id={}", profile_id, exc_info=True)
             message = f"{message}（注意：方案已删除但引擎重载失败，请手动重载）"
