@@ -7,6 +7,7 @@ import asyncio
 from fastapi import APIRouter, HTTPException, Query
 
 from app.deps import MonitorServiceDep
+from app.network.interfaces import InterfaceManager
 from app.schemas import ApiResponse, LogEntry, MonitorStatusResponse, PureModeResponse
 from app.utils.logging import get_logger
 
@@ -106,7 +107,31 @@ def toggle_pure_mode(
     try:
         new_value = svc.toggle_pure_mode()
         api_logger.info("切换纯净模式成功: {}", new_value)
-        return ApiResponse(success=True, message=f"纯净模式: {'开启' if new_value else '关闭'}", data={"enabled": new_value})
+        return ApiResponse(
+            success=True,
+            message=f"纯净模式: {'开启' if new_value else '关闭'}",
+            data={"enabled": new_value},
+        )
     except Exception as exc:
         api_logger.warning("切换纯净模式失败: {}", exc)
         raise HTTPException(status_code=500, detail=f"切换纯净模式失败: {exc}") from exc
+
+
+# ── 网卡枚举 ──
+
+
+@router.get("/api/network/interfaces")
+async def get_network_interfaces() -> list[dict[str, object]]:
+    """枚举可用物理网卡。"""
+    mgr = InterfaceManager()
+    interfaces = mgr.list_interfaces()
+    return [
+        {
+            "id": info.name,
+            "name": info.name,
+            "ip": info.ip,
+            "gateway": info.gateway,
+            "is_up": info.is_up,
+        }
+        for info in interfaces
+    ]
