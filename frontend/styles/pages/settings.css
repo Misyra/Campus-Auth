@@ -983,6 +983,18 @@
   margin-top: 0.125rem;
 }
 
+/* 表单内联警告（如网卡未连接提示） */
+.form-warning {
+  margin-top: 6px;
+  padding: 6px 10px;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: var(--radius-md, 6px);
+  color: var(--warning, #f59e0b);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .browser-info-tip {
   display: flex;
   align-items: flex-start;

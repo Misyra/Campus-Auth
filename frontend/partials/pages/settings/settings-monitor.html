@@ -39,6 +39,27 @@
           </label>
         </div>
       </div>
+      <div class="form-group settings-toggle-spacer">
+        <div class="field-label-row">
+          <label for="settings-bind-interface">绑定网卡</label>
+          <button type="button" class="btn btn-icon-only" @click="loadNetworkInterfaces" title="刷新网卡列表" aria-label="刷新网卡列表">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+            </svg>
+          </button>
+          <span class="field-help" tabindex="0" role="note"
+            data-tip="指定网络检测和浏览器流量走哪张网卡。多网卡环境下避免检测走错网卡导致误判。留空则使用系统默认路由。">?</span>
+        </div>
+        <custom-select
+          v-model="config.monitor.bind_interface_name"
+          :options="networkInterfaceOptions"
+          placeholder="自动（系统默认路由）"
+        ></custom-select>
+        <p v-if="selectedInterfaceDown" class="form-warning">
+          所选网卡当前未连接，网络检测将回退到系统默认路由
+        </p>
+      </div>
       <div class="form-row settings-toggle-spacer">
         <div class="form-group">
           <div class="field-label-row">

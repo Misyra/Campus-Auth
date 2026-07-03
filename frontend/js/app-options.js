@@ -76,6 +76,7 @@ export const appOptions = {
       appVersion: 'unknown',
       pythonVersion: '',
       shellCustomMode: false,
+      networkInterfaces: [],
     };
   },
   computed: {
@@ -221,6 +222,18 @@ export const appOptions = {
         { value: '__custom__', label: '自定义路径...' },
       ];
     },
+    networkInterfaceOptions() {
+      return this.networkInterfaces.map(iface => ({
+        value: iface.id,
+        label: `${iface.name} (${iface.ip} / 网关 ${iface.gateway || '无'})`,
+      }));
+    },
+    selectedInterfaceDown() {
+      const name = this.config.monitor.bind_interface_name;
+      if (!name) return false;
+      const iface = this.networkInterfaces.find(i => i.id === name);
+      return iface ? !iface.is_up : true;
+    },
   },
   watch: {
     appearance: {
@@ -248,6 +261,11 @@ export const appOptions = {
     },
     urlCheckEnabled() {
       this._ensureAtLeastOneCheckMethod();
+    },
+    currentSettingsTab(newTab) {
+      if (newTab === 'monitor' && this.networkInterfaces.length === 0) {
+        this.loadNetworkInterfaces();
+      }
     },
     currentPage(newPage) {
       if (this._dangerResolve) {
@@ -320,7 +338,15 @@ export const appOptions = {
     ...scheduledTasksMethods,
     ...profileMethods,
     ...appearanceMethods,
-
     ...dragMethods,
+
+    async loadNetworkInterfaces() {
+      try {
+        const data = await this.$apiService.network.fetchInterfaces();
+        this.networkInterfaces = data;
+      } catch (e) {
+        console.error('Failed to load network interfaces:', e);
+      }
+    },
   },
 };
