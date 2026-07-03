@@ -402,7 +402,10 @@
 }
 
 .save-btn {
-  min-width: 108px;
+  min-width: 130px;
+  padding: 14px 28px;
+  font-size: 15px;
+  min-height: 48px;
   background: linear-gradient(135deg, var(--accent), var(--accent-hover)) !important;
   color: var(--bg-primary) !important;
   border: none !important;
@@ -412,8 +415,8 @@
 }
 
 .save-btn svg {
-  width: 15px;
-  height: 15px;
+  width: 18px;
+  height: 18px;
 }
 
 .save-btn:hover:not(:disabled) {
