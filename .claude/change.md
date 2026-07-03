@@ -2,6 +2,10 @@
 
 ## 2026-07-03
 
+### fix: 修复 Windows 托盘退出时 PID 文件残留
+
+- `app/services/launcher.py`：将轻量模式 `on_exit` lambda 从 `os.kill(os.getpid(), signal.SIGTERM)` 改为直接设置 `_web_server_shutdown_event.set()`，确保托盘退出走正常优雅退出路径，finally 块中的 `cleanup_pid()` 能够执行
+
 ### fix: 轻量模式托盘开关在未开启自启动时异常显示
 
 - `frontend/partials/pages/settings/settings-system.html`：轻量模式托盘开关的 `v-if` 条件从 `autostart.lightweight` 改为 `autostart.enabled && autostart.lightweight`，防止自启动关闭时开关仍然显示
