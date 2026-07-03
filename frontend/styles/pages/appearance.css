@@ -46,8 +46,7 @@
   cursor: pointer;
   padding: 4px 8px;
   border-radius: var(--radius-sm);
-  transition: color 0.2s ease, background 0.2s ease;
-  animation: fadeIn 0.2s ease;
+  transition: color 0.2s ease, background 0.2s ease, opacity 0.2s ease;
 }
 
 .appearance-reset-btn:hover {
@@ -168,7 +167,7 @@
 }
 
 .appearance-color-add {
-  background: transparent !important;
+  background: transparent;
   border: 2px dashed var(--border-hover);
   color: var(--text-muted);
   font-size: 16px;
@@ -320,6 +319,7 @@
   justify-content: center;
   opacity: 0;
   transition: opacity 0.2s ease;
+  -webkit-backdrop-filter: blur(4px);
   backdrop-filter: blur(4px);
 }
 
@@ -448,6 +448,7 @@ body.has-custom-bg::before {
   align-items: center;
   justify-content: center;
   z-index: var(--z-modal);
+  -webkit-backdrop-filter: var(--blur-sm);
   backdrop-filter: var(--blur-sm);
 }
 
