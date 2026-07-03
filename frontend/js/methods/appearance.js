@@ -1,4 +1,4 @@
-import { DEFAULT_APPEARANCE, ACCENT_COLORS, BG_COLORS, LIMITS } from '../constants.js';
+import { DEFAULT_APPEARANCE, DEFAULT_CUSTOM_COLORS, ACCENT_COLORS, BG_COLORS, LIMITS } from '../constants.js';
 import { hexToRgb, adjustColor } from './formatters.js';
 import { pickFile } from './utils.js';
 
@@ -13,9 +13,123 @@ export const appearanceMethods = {
   resetAppearance() {
     if (!confirm('确定要恢复默认外观设置吗？')) return;
     this.appearance = { ...DEFAULT_APPEARANCE };
+    this.customColors = { ...DEFAULT_CUSTOM_COLORS };
     localStorage.removeItem('appearance');
+    localStorage.removeItem('appearance.custom_colors');
     this.applyAppearance();
     this.toastOnly(true, '已恢复默认外观');
+  },
+
+  // 新增自定义颜色（picker 选色后调用）
+  addCustomColor(type, hex) {
+    if (!hex || !DEFAULT_CUSTOM_COLORS.hasOwnProperty(type)) return;
+    hex = hex.toLowerCase();
+    // 去重：系统预设或已存在的自定义色不重复加入
+    const systemColors = type === 'accent' ? ACCENT_COLORS : type === 'bg' ? BG_COLORS : [];
+    if (systemColors.some(c => c.value.toLowerCase() === hex)) return;
+    if (this.customColors[type].some(c => c.toLowerCase() === hex)) return;
+    this.customColors[type].push(hex);
+    localStorage.setItem('appearance.custom_colors', JSON.stringify(this.customColors));
+  },
+
+  // 删除自定义颜色（长按或右键触发）
+  removeCustomColor(type, hex) {
+    if (!DEFAULT_CUSTOM_COLORS.hasOwnProperty(type)) return;
+    const idx = this.customColors[type].findIndex(c => c.toLowerCase() === hex.toLowerCase());
+    if (idx === -1) return;
+    this.customColors[type].splice(idx, 1);
+    localStorage.setItem('appearance.custom_colors', JSON.stringify(this.customColors));
+    // 若该色正被使用，回退到默认色
+    const defaultKey = type === 'accent' ? 'accent_color'
+      : type === 'bg' ? 'background_color'
+      : type === 'sidebar' ? 'sidebar_color'
+      : 'sidebar_accent';
+    if ((this.appearance[defaultKey] || '').toLowerCase() === hex.toLowerCase()) {
+      this.appearance[defaultKey] = DEFAULT_APPEARANCE[defaultKey];
+    }
+  },
+
+  // 重置单张分区卡（cardKey: 'background' | 'theme' | 'card' | 'sidebar'）
+  resetCard(cardKey) {
+    const fields = {
+      background: ['background_url', 'background_filename', 'wallpaper_api_url', 'background_blur', 'background_opacity', 'backdrop_filter', 'card_blur'],
+      theme: ['theme', 'accent_color', 'background_color'],
+      card: ['card_opacity', 'border_intensity'],
+      sidebar: ['sidebar_opacity', 'sidebar_color', 'sidebar_accent'],
+    }[cardKey];
+    if (!fields) return;
+    fields.forEach(f => {
+      this.appearance[f] = DEFAULT_APPEARANCE[f];
+    });
+    // 背景卡重置时清理已上传文件
+    if (cardKey === 'background' && this.appearance.background_filename) {
+      this.$api.delete(`/api/background/${this.appearance.background_filename}`).catch(() => {});
+    }
+    this.applyAppearance();
+    this.toastOnly(true, '已恢复默认');
+  },
+
+  // 判断分区卡是否有项偏离默认
+  cardDirty(cardKey) {
+    const fields = {
+      background: ['background_url', 'background_blur', 'background_opacity', 'backdrop_filter', 'card_blur'],
+      theme: ['theme', 'accent_color', 'background_color'],
+      card: ['card_opacity', 'border_intensity'],
+      sidebar: ['sidebar_opacity', 'sidebar_color', 'sidebar_accent'],
+    }[cardKey] || [];
+    return fields.some(f => this.appearance[f] !== DEFAULT_APPEARANCE[f]);
+  },
+
+  // 触发自定义色 picker（hidden input click）
+  pickCustomColor(type) {
+    const input = document.querySelector(`input[data-color-picker="${type}"]`);
+    if (input) input.click();
+  },
+
+  // picker onchange：选色后加入自定义列表并设为当前值
+  onCustomColorPicked(type, event) {
+    const hex = event.target.value;
+    this.addCustomColor(type, hex);
+    const fieldMap = {
+      accent: 'accent_color',
+      bg: 'background_color',
+      sidebar: 'sidebar_color',
+      sidebar_accent: 'sidebar_accent',
+    };
+    this.appearance[fieldMap[type]] = hex;
+    event.target.value = '#000000'; // 重置 picker
+  },
+
+  // 长按/右键删除自定义色
+  onColorLongPress(type, hex, event) {
+    event.preventDefault();
+    if (confirm(`删除自定义颜色 ${hex}？`)) {
+      this.removeCustomColor(type, hex);
+    }
+  },
+
+  // 移动端长按触发（touchstart 启动 600ms 计时器）
+  startLongPress(type, hex, event) {
+    let timer = setTimeout(() => {
+      this.onColorLongPress(type, hex, event);
+    }, 600);
+    // 触摸结束或移动时取消
+    const cancel = () => {
+      clearTimeout(timer);
+      event.target.removeEventListener('touchend', cancel);
+      event.target.removeEventListener('touchmove', cancel);
+    };
+    event.target.addEventListener('touchend', cancel);
+    event.target.addEventListener('touchmove', cancel);
+  },
+
+  // 获取合并后的颜色列表（系统预设 + 自定义）
+  getColorList(type) {
+    const systemColors = type === 'accent' ? ACCENT_COLORS
+      : type === 'bg' ? BG_COLORS
+      : [];
+    const custom = (this.customColors[type] || []).map(hex => ({ value: hex, label: hex, custom: true }));
+    return [...systemColors, ...custom];
   },
 
   // 应用外观设置到页面
@@ -53,25 +167,15 @@ export const appearanceMethods = {
       }
     }
 
-    // 页面缩放 — 只缩放内容区域，顶栏和侧边栏不受影响
-    const wrapper = document.querySelector('.content-wrapper'); // 无 ref 可用，保留 querySelector
-    if (wrapper) {
-      const scale = (this.appearance.zoom || 100) / 100;
-      if (scale !== 1) {
-        wrapper.style.transform = `scale(${scale})`;
-        wrapper.style.transformOrigin = 'top left';
-        wrapper.style.width = `${100 / scale}%`;
-      } else {
-        wrapper.style.transform = '';
-        wrapper.style.transformOrigin = '';
-        wrapper.style.width = '';
-      }
-    }
-
     // 主题
-    root.setAttribute('data-theme', this.appearance.theme);
+    const themeMode = this.appearance.theme || 'light';
+    let effectiveTheme = themeMode;
+    if (themeMode === 'auto') {
+      effectiveTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    }
+    root.setAttribute('data-theme', effectiveTheme);
 
-    const isLight = this.appearance.theme === 'light';
+    const isLight = effectiveTheme === 'light';
     const _p = (k, v) => root.style.setProperty(k, v);
 
     // 背景色
