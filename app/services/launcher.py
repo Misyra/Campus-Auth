@@ -399,14 +399,24 @@ def launch_full(
     if hasattr(signal, "SIGTERM"):
         signal.signal(signal.SIGTERM, _signal_handler)
 
+    # 托盘退出回调：触发优雅关闭（与信号处理器逻辑一致）
+    def _tray_exit():
+        nonlocal _shutdown_initiated
+        if _shutdown_initiated:
+            return
+        _shutdown_initiated = True
+        cleanup_pid()
+        if _uvicorn_server[0] is not None:
+            _uvicorn_server[0].should_exit = True
+        else:
+            force_exit(0)
+
     # 系统托盘
     tray_icon = None
     if features.tray_enabled:
         tray_icon = create_tray(
             port=port,
-            on_exit=lambda: (
-                os.kill(os.getpid(), signal.SIGTERM) if hasattr(signal, "SIGTERM") else os._exit(0)
-            ),
+            on_exit=_tray_exit,
         )
         if tray_icon:
             logger.info("系统托盘已启动，双击图标打开控制台")
