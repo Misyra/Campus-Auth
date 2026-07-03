@@ -65,8 +65,8 @@ class TestGetScriptPath:
         """无效 ID 返回 None。"""
         mgr = _make_manager(tmp_path)
         assert mgr.get_script_path("") is None
-        assert mgr.get_script_path("123bad") is None
         assert mgr.get_script_path("../escape") is None
+        assert mgr.get_script_path("a" * 65) is None  # 超过 64 字符上限
 
     def test_looks_in_scripts_dir_not_browser(self, tmp_path):
         """仅搜索 scripts/ 目录，不搜索 browser/。"""

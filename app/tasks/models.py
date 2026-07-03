@@ -14,7 +14,7 @@ from app.utils.logging import get_logger
 logger = get_logger("task_models", source="backend")
 
 # 任务ID验证正则
-TASK_ID_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
+TASK_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
 
 
 def _is_valid_step(s: Any) -> bool:

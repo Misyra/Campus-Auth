@@ -18,7 +18,7 @@ logger = get_logger("task_manager", source="backend")
 
 _DANGEROUS_STEP_TYPES = {"eval", "custom_js"}
 
-_INVALID_ID_MSG = "任务ID必须以字母开头，且只能包含字母、数字和下划线"
+_INVALID_ID_MSG = "任务ID只能包含字母、数字、下划线和连字符，长度不超过64"
 
 
 def _with_task_id_validation(func):
