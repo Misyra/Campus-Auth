@@ -4297,3 +4297,13 @@
 
 - `app/utils/cancel_token.py`：`is_set()` 方法中将 `super().set()` 移到 `self._lock` 的 with 块之外，用 `should_set` 标志记录结果，消除 `is_set()` 持有 `_lock` 时调用 `super().set()` 获取 `_cond` 与 `wait()` 持有 `_cond` 时调用 `is_set()` 获取 `_lock` 的锁顺序颠倒死锁
 - `tests/test_utils/test_cancel_token.py`：新增 `test_no_deadlock_wait_concurrent_with_is_set` 测试（4 线程并发调用 `wait(timeout=0.5)` 和 `is_set()` 各 100 次，10 秒超时判定死锁）
+
+## 2026-07-03: LoginHandle.result() 捕获 CancelledError (Task 3: CR-04)
+
+- `app/services/login_orchestrator.py`：导入 `CancelledError`，`LoginHandle.result()` 中 `self.future.result()` 调用包裹在 try/except 块中，捕获 `CancelledError` 并返回 `(False, "登录已取消")`
+- `tests/test_services/test_login_orchestrator.py`：新增 `test_result_returns_cancelled_when_future_cancelled` 测试验证 Future 被取消时返回正确结果
+
+## 2026-07-03: stop_web_services 跨事件循环 await Task 修复 (Task 4: CR-02)
+
+- `app/container.py`：`stop_web_services()` 中 await `_ws_drain_task` 前检查 `task.get_loop() is asyncio.get_running_loop()`，不同循环时跳过 await 仅置空引用，避免 Python 3.12+ 跨循环 await 抛 RuntimeError
+- `tests/test_config/test_container.py`：新增 `test_shutdown_handles_cross_loop_ws_drain_task` 测试（独立线程创建事件循环和 task，从当前循环调用 shutdown 验证无 RuntimeError）
