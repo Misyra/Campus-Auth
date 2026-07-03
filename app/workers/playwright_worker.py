@@ -112,7 +112,7 @@ class PlaywrightWorker:
         self._page: Any = None
         self._debug_page: Any = None
         self._debug_executor: Any = (
-            None  # TaskExecutor 实例，调试步骤执行时在 Worker 线程内使用
+            None  # BrowserTaskRunner 实例，调试步骤执行时在 Worker 线程内使用
         )
         self._last_browser_settings: dict | None = None  # 缓存最近一次浏览器设置
 
@@ -463,14 +463,14 @@ class PlaywrightWorker:
         在 Worker 线程内管理浏览器生命周期：
         1. 健康检查 → 不健康则重建浏览器
         2. 导航到任务 URL
-        3. 创建 TaskExecutor（线程安全 — 所有 Playwright 操作在 Worker 线程内执行）
+        3. 创建 BrowserTaskRunner（线程安全 — 所有 Playwright 操作在 Worker 线程内执行）
         4. 初始截图并返回 URL
 
         注意：_debug_page 与 _page 共享同一 page 对象引用（别名），
         调试会话结束后 _cleanup_debug_session 会将 _debug_page 置 None。
         """
         from app.constants import DEFAULT_STEP_TIMEOUT_MS
-        from app.tasks import TaskConfig, TaskExecutor
+        from app.tasks import BrowserTaskRunner, TaskConfig
 
         config = data.get("config", {})
         task_url = data.get("task_url", "")
@@ -479,7 +479,7 @@ class PlaywrightWorker:
         screenshot_dir = data.get("screenshot_dir", "")
         default_timeout = data.get("default_timeout", DEFAULT_STEP_TIMEOUT_MS)
         navigation_timeout = data.get(
-            "navigation_timeout", TaskExecutor.DEFAULT_NAVIGATION_TIMEOUT
+            "navigation_timeout", BrowserTaskRunner.DEFAULT_NAVIGATION_TIMEOUT
         )
 
         # 守卫：若已有调试会话，先清理
@@ -528,11 +528,11 @@ class PlaywrightWorker:
                 )
                 return WorkerResponse(success=False, error=f"调试页面加载失败: {e}")
 
-        # 创建 TaskExecutor（在 Worker 线程内，page 对象安全）
+        # 创建 BrowserTaskRunner（在 Worker 线程内，page 对象安全）
         if task_data:
             try:
                 task_config = TaskConfig.from_dict(task_data)
-                executor = TaskExecutor(
+                executor = BrowserTaskRunner(
                     task_config,
                     template_vars,
                     screenshot_dir=Path(screenshot_dir) if screenshot_dir else None,
@@ -541,7 +541,7 @@ class PlaywrightWorker:
                 )
                 self._debug_executor = executor
             except Exception as e:
-                logger.exception("创建 TaskExecutor 异常: {}", e)
+                logger.exception("创建 BrowserTaskRunner 异常: {}", e)
                 return WorkerResponse(success=False, error=f"创建任务执行器失败: {e}")
 
         # 初始截图
@@ -584,7 +584,7 @@ class PlaywrightWorker:
     async def _handle_debug_step(self, data: dict) -> WorkerResponse:
         """执行调试下一步。
 
-        在 Worker 线程内调用 TaskExecutor.execute_step_at()，
+        在 Worker 线程内调用 BrowserTaskRunner.execute_step_at()，
         page 对象仅在 Worker 线程内访问，避免跨线程竞争。
         """
         if self._debug_page is None:
@@ -601,7 +601,7 @@ class PlaywrightWorker:
         logger.debug("调试下一步: step_index={}", step_index)
 
         try:
-            # TaskExecutor.execute_step_at 在 Worker 线程内执行，
+            # BrowserTaskRunner.execute_step_at 在 Worker 线程内执行，
             # page 对象安全访问，无需额外同步
             result = await self._debug_executor.execute_step_at(
                 self._debug_page, step_index

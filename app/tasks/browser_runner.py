@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import threading
 import time
 from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+
+from playwright.sync_api import TimeoutError as PlaywrightTimeout
 
 from app.constants import DEFAULT_STEP_TIMEOUT_MS, DEFAULT_TASK_TIMEOUT_MS
 from app.utils.logging import get_logger
@@ -77,10 +78,22 @@ class BrowserTaskRunner:
         try:
             await self._auto_navigate(page)
 
-            # 等待表单元素出现（最长 5s），覆盖 SPA 门户延迟渲染的场景
-            # 如果页面没有表单元素，静默跳过，不阻塞流程
-            with contextlib.suppress(TimeoutError):
-                await page.wait_for_selector("input,textarea", timeout=5000)
+            # 等待页面就绪（最长 5s），覆盖 SPA 门户延迟渲染的场景
+            # 步骤在 iframe 中 → 等待 iframe 加载；否则 → 等待主页面表单元素
+            frames = {s.frame for s in self.config.steps if s.frame}
+            if frames:
+                for frame_selector in frames:
+                    try:
+                        await page.wait_for_selector(
+                            frame_selector, timeout=5000
+                        )
+                    except PlaywrightTimeout:
+                        logger.warning("预热等待超时: {} (5s)，继续执行", frame_selector)
+            else:
+                try:
+                    await page.wait_for_selector("input,textarea", timeout=5000)
+                except PlaywrightTimeout:
+                    logger.warning("预热等待超时: input/textarea (5s)，继续执行")
 
             # reveal_hidden: 强制显示所有隐藏输入框，让后续 fill() 可以直接操作
             if self.config.reveal_hidden and any(
@@ -136,7 +149,7 @@ class BrowserTaskRunner:
             )
             return await self._handle_success(page)
 
-        except (TimeoutError, OSError) as e:
+        except (PlaywrightTimeout, OSError) as e:
             total_elapsed = (time.perf_counter() - task_start) * 1000
             logger.exception(
                 "任务执行异常: {} (耗时 {:.0f}ms): {}", self.config.name, total_elapsed, e
@@ -389,7 +402,7 @@ class BrowserTaskRunner:
                 filename = Path(local_path).name
                 return f"{url_prefix}/{filename}"
             return None
-        except TimeoutError:
+        except PlaywrightTimeout:
             logger.warning("截图失败: 超时 (5s)，已跳过")
             return None
         except Exception as e:
