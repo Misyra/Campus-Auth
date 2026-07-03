@@ -80,3 +80,6 @@ release/stage-win-full/
 
 # Pyright
 pyrightconfig.json
+
+# Brainstorm visual companion (local mockups)
+.superpowers/
