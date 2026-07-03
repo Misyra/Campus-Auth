@@ -16,26 +16,17 @@ if str(PROJECT_ROOT) not in sys.path:
 
 # ── 无显示服务器环境（CI）下 mock pystray ─────────────────
 # pystray 在 Linux/macOS 上需要 GUI 后端，CI 环境中没有可用显示。
-# 使用 autouse session 级 fixture，会话结束后恢复 sys.modules，避免全局污染。
-@pytest.fixture(autouse=True, scope="session")
-def _mock_pystray_headless():
-    """无显示服务器环境下 mock pystray，会话结束后恢复 sys.modules。
+# 使用 function 级 opt-in fixture，测试需要时通过参数注入。
+@pytest.fixture
+def mock_pystray(monkeypatch):
+    """无显示服务器环境下 mock pystray。
 
-    替代原模块级 sys.modules 赋值：原写法在收集阶段即污染全局且无 finalizer；
-    此 fixture 以 session 级 autouse 应用，会话结束 try/finally 恢复原始状态。
+    Windows 上为 no-op；Linux/macOS 上 mock pystray.Icon。
+    测试需要时通过参数注入：def test_xxx(mock_pystray): ...
     """
     if sys.platform == "win32":
-        yield
         return
-    original = sys.modules.get("pystray")
-    sys.modules["pystray"] = MagicMock()
-    try:
-        yield
-    finally:
-        if original is None:
-            sys.modules.pop("pystray", None)
-        else:
-            sys.modules["pystray"] = original
+    monkeypatch.setattr("pystray.Icon", MagicMock())
 
 
 @pytest.fixture
