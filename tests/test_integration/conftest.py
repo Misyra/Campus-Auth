@@ -15,7 +15,10 @@ from app.services.login_orchestrator import LoginOrchestrator
 from app.services.profile_service import ProfileService
 from app.services.task_executor import TaskExecutor
 from app.services.task_registry import TaskHistoryStore, TaskRegistry
+from app.utils.logging import get_logger
 from app.workers.playwright_worker import WorkerResponse
+
+logger = get_logger("test_integration.conftest", source="test")
 
 
 def _write_initial_config(tmp_path: Path, **overrides) -> None:
@@ -113,6 +116,15 @@ def integration_stack(tmp_path, mock_worker):
 
     yield engine, profile_service, task_executor, task_registry, mock_worker
 
-    orchestrator.shutdown(wait=False)
-    engine.shutdown()
-    task_executor.shutdown()
+    try:
+        orchestrator.shutdown(wait=False)
+    except Exception as e:
+        logger.warning("orchestrator shutdown failed: {}", e)
+    try:
+        engine.shutdown()
+    except Exception as e:
+        logger.warning("engine shutdown failed: {}", e)
+    try:
+        task_executor.shutdown()
+    except Exception as e:
+        logger.warning("executor shutdown failed: {}", e)
