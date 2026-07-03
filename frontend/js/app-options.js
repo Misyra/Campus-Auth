@@ -279,9 +279,8 @@ export const appOptions = {
     // 监听系统主题变化（仅当用户选择 'auto' 时生效）
     this._mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
     this._onSystemThemeChange = (e) => {
+      // 系统主题变化时重算 applyAppearance（内部会设置 data-theme）
       if (this.appearance.theme === 'auto') {
-        document.documentElement.setAttribute('data-theme', e.matches ? 'dark' : 'light');
-        // 触发 applyAppearance 重算 isLight 相关变量
         this.applyAppearance();
       }
     };
