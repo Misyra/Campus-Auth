@@ -135,7 +135,7 @@ class TestIsNetworkAvailableSocket:
     def test_success_on_second_target(self):
         call_count = 0
 
-        def side_effect(addr, timeout=None):
+        def side_effect(addr, timeout=None, source_address=None):
             nonlocal call_count
             call_count += 1
             if addr == ("8.8.8.8", 53):
@@ -428,7 +428,7 @@ class TestIsAuthUrlReachable:
             mock_conn.return_value.__enter__ = lambda s: s
             mock_conn.return_value.__exit__ = lambda s, *a: None
             assert _is_auth_url_reachable("http://10.0.0.1:8080/login") is True
-            mock_conn.assert_called_once_with(("10.0.0.1", 8080), timeout=3)
+            mock_conn.assert_called_once_with(("10.0.0.1", 8080), timeout=3, source_address=None)
 
     def test_connection_refused(self):
         from app.network.decision import _is_auth_url_reachable
@@ -462,7 +462,7 @@ class TestIsAuthUrlReachable:
             mock_conn.return_value.__enter__ = lambda s: s
             mock_conn.return_value.__exit__ = lambda s, *a: None
             _is_auth_url_reachable("https://example.com/auth")
-            mock_conn.assert_called_once_with(("example.com", 443), timeout=3)
+            mock_conn.assert_called_once_with(("example.com", 443), timeout=3, source_address=None)
 
     def test_http_default_port(self):
         from app.network.decision import _is_auth_url_reachable
@@ -471,7 +471,7 @@ class TestIsAuthUrlReachable:
             mock_conn.return_value.__enter__ = lambda s: s
             mock_conn.return_value.__exit__ = lambda s, *a: None
             _is_auth_url_reachable("http://example.com/auth")
-            mock_conn.assert_called_once_with(("example.com", 80), timeout=3)
+            mock_conn.assert_called_once_with(("example.com", 80), timeout=3, source_address=None)
 
     def test_extra_targets_reachable(self):
         """extra_targets 中任一目标可达返回 True。"""
