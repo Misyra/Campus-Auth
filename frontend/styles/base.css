@@ -2,16 +2,16 @@
   /* 背景色 */
   --bg-primary: #0f172a;
   --bg-secondary: #1e293b;
-  --bg-card: rgba(15, 23, 42, 0.45);
+  --bg-card: rgba(15, 23, 42, 0.6);
   --bg-card-elevated: rgba(30, 41, 59, 0.7);
   --bg-modal: rgba(30, 41, 59, 0.9);
   --bg-hover: rgba(51, 65, 85, 0.5);
-  --bg-glass: rgba(15, 23, 42, 0.35);
+  --bg-glass: rgba(15, 23, 42, 0.5);
   --bg-glass-light: rgba(15, 23, 42, 0.25);
-  --bg-glass-heavy: rgba(15, 23, 42, 0.65);
+  --bg-glass-heavy: rgba(15, 23, 42, 0.8);
 
   /* 边框色 */
-  --border: rgba(148, 163, 184, 0.1);
+  --border: rgba(148, 163, 184, 0.15);
   --border-hover: rgba(148, 163, 184, 0.2);
   --border-accent: rgba(56, 189, 248, 0.15);
   --border-accent-hover: rgba(56, 189, 248, 0.25);
@@ -20,8 +20,8 @@
   /* 文字色 */
   --text-primary: #f1f5f9;
   --text-secondary: #94a3b8;
-  --text-muted: #64748b;
-  --text-tertiary: #475569;
+  --text-muted: #8293a9;
+  --text-tertiary: #6b7c93;
   --text-on-accent: #ffffff;
 
   /* 主题色 */
@@ -588,24 +588,26 @@ body.no-backdrop-filter .card {
   --bg-primary: #dfe4ec;
   --bg-secondary: #d5dbe5;
   --bg-hover: rgba(186, 196, 210, 0.5);
-  --bg-glass: rgba(255, 255, 255, 0.55);
+  --bg-glass: rgba(255, 255, 255, 0.7);
   --bg-glass-light: rgba(255, 255, 255, 0.4);
-  --bg-glass-heavy: rgba(255, 255, 255, 0.7);
-  --bg-card: rgba(255, 255, 255, 0.6);
+  --bg-glass-heavy: rgba(255, 255, 255, 0.85);
+  --bg-card: rgba(255, 255, 255, 0.75);
   --bg-card-elevated: rgba(255, 255, 255, 0.55);
   --bg-modal: #d5dbe5;
-  --border: rgba(100, 116, 139, 0.18);
+  --border: rgba(100, 116, 139, 0.25);
   --border-hover: rgba(100, 116, 139, 0.3);
   --text-primary: #1e293b;
-  --text-secondary: #475569;
-  --text-muted: #64748b;
+  --text-secondary: #374151;
+  --text-muted: #4b5e73;
   --shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.08), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
   --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.06);
   --shadow-accent: 0 0 10px rgba(34, 211, 238, 0.15);
   --border-accent: rgba(56, 189, 248, 0.2);
   --border-accent-hover: rgba(56, 189, 248, 0.3);
   --border-accent-strong: rgba(56, 189, 248, 0.4);
-  --text-tertiary: #94a3b8;
+  --text-tertiary: #6b7280;
+  --accent: #0891b2;
+  --accent-hover: #0e7490;
   --purple: #8b5cf6;
   --success-bg: rgba(16, 185, 129, 0.1);
   --success-border: rgba(16, 185, 129, 0.25);
