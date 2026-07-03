@@ -321,27 +321,11 @@ export const appearanceMethods = {
       this.appearance.wallpaper_api_url = url;
       this.randomWallpaperDialog.visible = false;
       this.applyAppearance();
-      this.toastOnly(true, '已设置随机壁纸');
+      this.toastOnly(true, '已下载并设置为背景');
     } catch (err) {
       this.toastOnly(false, err.response?.data?.detail || '获取壁纸失败');
     } finally {
       this.randomWallpaperDialog.loading = false;
-    }
-  },
-
-  // 启动时刷新随机壁纸（wallpaper_api_url 存在则重新下载该链接）
-  async refreshWallpaperFromUrl() {
-    const url = this.appearance.wallpaper_api_url;
-    if (!url) return;
-    try {
-      const { data } = await this.$api.post('/api/background/fetch-url', { url });
-      // ApiResponse 信封：{ success, message, data: { filename, url } }
-      this.appearance.background_url = data.data.url;
-      this.appearance.background_filename = data.data.filename;
-      this.applyAppearance();
-    } catch (err) {
-      // 静默失败：网络问题或 URL 失效不应阻塞启动
-      console.warn('刷新随机壁纸失败:', err);
     }
   },
 
