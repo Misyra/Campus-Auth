@@ -585,13 +585,13 @@ class WaitUrlHandler(StepHandler):
             return False, f"wait_url 步骤的 pattern 不是有效的正则表达式: {pattern} ({e})"
 
         logger.debug("[wait_url] pattern={}", pattern)
-        deadline = asyncio.get_running_loop().time() + timeout / 1000
+        deadline = time.monotonic() + timeout / 1000
         while True:
             current_url = page.url
             if compiled.search(current_url):
                 logger.debug("[wait_url] URL 已匹配: {}", current_url)
                 return True, ""
-            remaining = deadline - asyncio.get_running_loop().time()
+            remaining = deadline - time.monotonic()
             if remaining <= 0:
                 logger.warning("[wait_url] 等待超时: 当前URL={}", current_url)
                 return False, f"等待 URL 匹配 '{pattern}' 超时，当前: {current_url}"
