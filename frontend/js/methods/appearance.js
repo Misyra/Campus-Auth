@@ -58,12 +58,14 @@ export const appearanceMethods = {
       sidebar: ['sidebar_opacity', 'sidebar_color', 'sidebar_accent'],
     }[cardKey];
     if (!fields) return;
+    // 先捕获待删除文件名（重置后会丢失）
+    const filenameToDelete = cardKey === 'background' ? this.appearance.background_filename : '';
     fields.forEach(f => {
       this.appearance[f] = DEFAULT_APPEARANCE[f];
     });
-    // 背景卡重置时清理已上传文件
-    if (cardKey === 'background' && this.appearance.background_filename) {
-      this.$api.delete(`/api/background/${this.appearance.background_filename}`).catch(() => {});
+    // 背景卡重置时清理已上传文件（可能已不存在，静默失败）
+    if (filenameToDelete) {
+      this.$api.delete(`/api/background/${filenameToDelete}`).catch(() => {});
     }
     this.applyAppearance();
     this.toastOnly(true, '已恢复默认');
@@ -110,6 +112,8 @@ export const appearanceMethods = {
 
   // 移动端长按触发（touchstart 启动 600ms 计时器）
   startLongPress(type, hex, event) {
+    // 同步阻止默认行为（防止长按文本选择/上下文菜单）
+    event.preventDefault();
     let timer = setTimeout(() => {
       this.onColorLongPress(type, hex, event);
     }, 600);
