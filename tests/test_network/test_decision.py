@@ -222,3 +222,74 @@ class TestCheckNetworkStatusUsesDecisionExecutor:
 
         assert ok is False
         assert status == "all_disabled"
+
+
+class TestResolveSourceIp:
+    """_resolve_source_ip 解析逻辑验证。"""
+
+    def test_no_bind_interface_returns_none(self):
+        """未绑定网卡时返回 None。"""
+        from app.network import decision as decision_mod
+        from app.schemas import MonitorSettings
+
+        monitor = MonitorSettings(bind_interface_name="")
+        assert decision_mod._resolve_source_ip(monitor) is None
+
+    def test_resolves_ip_from_interface(self, monkeypatch):
+        """绑定网卡存在时返回其 IP。"""
+        from app.network import decision as decision_mod
+        from app.schemas import MonitorSettings
+
+        fake_mgr = type(
+            "M", (), {"resolve_ip": lambda self, name: "192.168.1.5"}
+        )()
+        monkeypatch.setattr(decision_mod, "_interface_mgr", fake_mgr)
+
+        monitor = MonitorSettings(bind_interface_name="Ethernet")
+        assert decision_mod._resolve_source_ip(monitor) == "192.168.1.5"
+
+    def test_unresolvable_returns_none(self, monkeypatch):
+        """绑定网卡无 IP 时返回 None。"""
+        from app.network import decision as decision_mod
+        from app.schemas import MonitorSettings
+
+        fake_mgr = type("M", (), {"resolve_ip": lambda self, name: None})()
+        monkeypatch.setattr(decision_mod, "_interface_mgr", fake_mgr)
+
+        monitor = MonitorSettings(bind_interface_name="Ethernet")
+        assert decision_mod._resolve_source_ip(monitor) is None
+
+
+class TestCheckNetworkStatusPassesSourceIp:
+    """check_network_status 传递 source_ip 到 is_network_available。"""
+
+    def test_source_ip_forwarded(self, monkeypatch):
+        """source_ip 应传递给 is_network_available。"""
+        from app.network import decision as decision_mod
+        from app.schemas import MonitorSettings
+
+        called_with: dict = {}
+
+        def fake_is_network_available(**kwargs):
+            called_with.update(kwargs)
+            return True
+
+        fake_mgr = type(
+            "M", (), {"resolve_ip": lambda self, name: "10.0.0.1"}
+        )()
+        monkeypatch.setattr(decision_mod, "_interface_mgr", fake_mgr)
+        monkeypatch.setattr(
+            decision_mod, "is_network_available", fake_is_network_available
+        )
+
+        monitor = MonitorSettings(
+            enable_tcp_check=True,
+            enable_http_check=False,
+            ping_targets=["8.8.8.8:53"],
+            test_urls=[],
+            url_check_urls=[],
+            bind_interface_name="Ethernet",
+        )
+        decision_mod.check_network_status(monitor)
+
+        assert called_with.get("source_ip") == "10.0.0.1"

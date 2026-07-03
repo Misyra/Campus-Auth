@@ -63,6 +63,53 @@ def _close_probe_client() -> None:
             _probe_client = None
 
 
+# ── 绑定源 IP 的 httpx Client 池 ──
+
+_bound_clients: dict[str, httpx.Client] = {}
+_bound_clients_lock = threading.Lock()
+_MAX_BOUND_CLIENTS = 4
+
+
+def _get_bound_client(source_ip: str, block_proxy: bool) -> httpx.Client:
+    """获取绑定指定源 IP 的 httpx Client，按 IP 缓存复用。"""
+    with _bound_clients_lock:
+        if source_ip in _bound_clients:
+            client = _bound_clients[source_ip]
+            if not client.is_closed:
+                return client
+        # 超限关闭最旧的
+        while len(_bound_clients) >= _MAX_BOUND_CLIENTS:
+            oldest_key = next(iter(_bound_clients))
+            _bound_clients.pop(oldest_key).close()
+
+        client = httpx.Client(
+            transport=httpx.HTTPTransport(local_address=source_ip),
+            verify=False,
+            follow_redirects=True,
+            trust_env=not block_proxy,
+            limits=httpx.Limits(max_connections=4, max_keepalive_connections=2),
+        )
+        _bound_clients[source_ip] = client
+        return client
+
+
+def close_bound_client(old_ip: str) -> None:
+    """IP 变化时关闭旧 Client。"""
+    with _bound_clients_lock:
+        client = _bound_clients.pop(old_ip, None)
+        if client and not client.is_closed:
+            client.close()
+
+
+def _close_all_bound_clients() -> None:
+    """关闭时清理所有绑定 Client。"""
+    with _bound_clients_lock:
+        for client in _bound_clients.values():
+            if not client.is_closed:
+                client.close()
+        _bound_clients.clear()
+
+
 def shutdown_probes() -> None:
     """关闭探测模块：设置停止标志、关闭 HTTP 客户端、等待 in-flight 请求完成。
 
@@ -71,6 +118,7 @@ def shutdown_probes() -> None:
     """
     _shutdown_event.set()
     _close_probe_client()
+    _close_all_bound_clients()
     executor.shutdown(wait=True, cancel_futures=True)
 
 
@@ -115,9 +163,21 @@ def _is_virtual_nic(name: str) -> bool:
     return name.lower().startswith(_VIRTUAL_NIC_PREFIXES)
 
 
-def is_local_network_connected() -> bool:
-    """检查本地网络是否有实际连接（有线或无线）。"""
+def is_local_network_connected(interface_name: str = "") -> bool:
+    """检查本地网络是否有实际连接（有线或无线）。
+
+    参数:
+        interface_name: 指定网卡名称，为空时检查所有物理网卡。
+            指定时优先检查该网卡，不可用时回退到检查所有物理网卡。
+    """
     try:
+        if interface_name:
+            stats = psutil.net_if_stats().get(interface_name)
+            if stats is not None and stats.isup:
+                logger.debug("绑定网卡已连接: {}", interface_name)
+                return True
+            logger.error("绑定网卡 {} 不可用，回退检查物理网络", interface_name)
+        # 原逻辑：任一物理网卡 up
         for name, stats in psutil.net_if_stats().items():
             if (
                 stats.isup
@@ -136,6 +196,7 @@ def is_local_network_connected() -> bool:
 def is_network_available_socket(
     test_sites: Sequence[tuple[str, int]] | None = None,
     timeout: float = 1.5,
+    source_ip: str | None = None,
 ) -> bool:
     if _shutdown_event.is_set():
         return False
@@ -149,7 +210,10 @@ def is_network_available_socket(
     def _connect_one(host: str, port: int) -> tuple[str, bool, str]:
         start = time.perf_counter()
         try:
-            with socket.create_connection((host, port), timeout=timeout):
+            sa = (source_ip, 0) if source_ip else None
+            with socket.create_connection(
+                (host, port), timeout=timeout, source_address=sa
+            ):
                 elapsed = (time.perf_counter() - start) * 1000
                 return (f"{host}:{port}", True, f"({elapsed:.0f}ms)")
         except Exception as exc:
@@ -169,6 +233,7 @@ def is_network_available_socket(
 def is_network_available_url(
     url_checks: Sequence[tuple[str, str]] | None = None,
     timeout: float = 3.0,
+    source_ip: str | None = None,
 ) -> bool:
     """通过网址响应检测 URL 检测网络连通性。
 
@@ -195,7 +260,12 @@ def is_network_available_url(
         start = time.perf_counter()
         try:
             block = is_block_proxy()
-            resp = _get_probe_client(block).get(url, timeout=timeout)
+            client = (
+                _get_bound_client(source_ip, block)
+                if source_ip
+                else _get_probe_client(block)
+            )
+            resp = client.get(url, timeout=timeout)
             elapsed = (time.perf_counter() - start) * 1000
             body = resp.text.strip()
             if expected in body:
@@ -228,6 +298,7 @@ def is_network_available_http(
     test_urls: Iterable[str] | None = None,
     timeout: float = 2.0,
     follow_redirects: bool = True,
+    source_ip: str | None = None,
 ) -> bool:
     """通过 HTTP(S) 请求检测网络连通性。
 
@@ -253,7 +324,12 @@ def is_network_available_http(
         start = time.perf_counter()
         try:
             block = is_block_proxy()
-            resp = _get_probe_client(block).get(
+            client = (
+                _get_bound_client(source_ip, block)
+                if source_ip
+                else _get_probe_client(block)
+            )
+            resp = client.get(
                 url, timeout=timeout, follow_redirects=follow_redirects
             )
             elapsed = (time.perf_counter() - start) * 1000
