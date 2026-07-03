@@ -55,7 +55,7 @@ def test_edge_path_returns_x86_path_when_exists():
         patch.dict(
             "os.environ",
             {
-                "PROGRAMFILES(x86)": "C:/Program Files (x86)",
+                "PROGRAMFILES(X86)": "C:/Program Files (x86)",
                 "PROGRAMFILES": "C:/Program Files",
             },
         ),
@@ -71,7 +71,7 @@ def test_edge_path_returns_none_when_not_found():
         patch.dict(
             "os.environ",
             {
-                "PROGRAMFILES(x86)": "C:/Program Files (x86)",
+                "PROGRAMFILES(X86)": "C:/Program Files (x86)",
                 "PROGRAMFILES": "C:/Program Files",
             },
         ),
