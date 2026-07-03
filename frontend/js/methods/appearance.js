@@ -329,6 +329,22 @@ export const appearanceMethods = {
     }
   },
 
+  // 启动时刷新随机壁纸（wallpaper_api_url 存在则重新下载该链接）
+  async refreshWallpaperFromUrl() {
+    const url = this.appearance.wallpaper_api_url;
+    if (!url) return;
+    try {
+      const { data } = await this.$api.post('/api/background/fetch-url', { url });
+      // ApiResponse 信封：{ success, message, data: { filename, url } }
+      this.appearance.background_url = data.data.url;
+      this.appearance.background_filename = data.data.filename;
+      this.applyAppearance();
+    } catch (err) {
+      // 静默失败：网络问题或 URL 失效不应阻塞启动
+      console.warn('刷新随机壁纸失败:', err);
+    }
+  },
+
   // 清除背景图片
   async clearBackgroundImage() {
     if (this.appearance.background_filename) {

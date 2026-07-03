@@ -45,17 +45,17 @@
       <!-- 滑块组 -->
       <div class="appearance-sliders appearance-sliders-col">
         <div class="appearance-slider-item">
-          <label for="bg-blur">模糊</label>
+          <label for="bg-blur">背景模糊</label>
           <input id="bg-blur" type="range" v-model.number="appearance.background_blur" min="0" max="30" step="1" />
           <span>{{ appearance.background_blur }}px</span>
         </div>
         <div class="appearance-slider-item">
-          <label for="bg-opacity">遮罩</label>
+          <label for="bg-opacity">背景可见度</label>
           <input id="bg-opacity" type="range" v-model.number="appearance.background_opacity" min="0" max="0.8" step="0.05" />
           <span>{{ Math.round(appearance.background_opacity * 100) }}%</span>
         </div>
         <div class="appearance-slider-item" :class="{ disabled: !appearance.backdrop_filter }">
-          <label for="card-blur">玻璃模糊</label>
+          <label for="card-blur">玻璃模糊度</label>
           <input id="card-blur" type="range" v-model.number="appearance.card_blur" min="0" max="24" step="1" :disabled="!appearance.backdrop_filter" />
           <span>{{ appearance.card_blur }}px</span>
         </div>
@@ -267,7 +267,7 @@
         </svg>
         <h3>随机壁纸</h3>
       </div>
-      <p class="random-wallpaper-hint">输入图片链接地址，每次刷新页面自动更换壁纸（如 https://picsum.photos/1920/1080）</p>
+      <p class="random-wallpaper-hint">输入图片链接地址，将下载并设置为背景；下次启动时会自动重新下载该链接（如 https://picsum.photos/1920/1080）</p>
       <input
         type="text"
         class="form-input"
