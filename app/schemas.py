@@ -306,6 +306,7 @@ class MonitorSettings(BaseModel, frozen=True):
     auth_url_targets: list[str] = Field(default_factory=list)
     url_check_urls: list[str] = Field(default_factory=lambda: _parse_targets(DEFAULT_URL_CHECK_URLS))
     script_timeout: int = Field(default=60, ge=5, le=600)
+    bind_interface_name: str = Field(default="", description="绑定网卡名称，空串表示不绑定")
 
 
 class PauseSettings(BaseModel, frozen=True):

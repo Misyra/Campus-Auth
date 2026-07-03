@@ -120,6 +120,7 @@ export const DEFAULT_CONFIG = {
       "http://detectportal.firefox.com/success.txt|success",
     ],
     script_timeout: 60,
+    bind_interface_name: '',
   },
   pause: {
     enabled: true,
