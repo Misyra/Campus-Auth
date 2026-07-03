@@ -484,6 +484,65 @@ class TestSetExecutor:
 # ── TaskExecutor.login_executor property ──
 
 
+# ── 超时后 cancel_event 设置 ──
+
+
+class TestTimeoutCancelsEvent:
+    """Worker 超时后 _run() 应设置 cancel_event，给 Worker 时间响应取消。"""
+
+    def test_timeout_sets_cancel_event(self):
+        """超时异常触发时，cancel_event（CompositeCancelEvent）应被 set。"""
+        worker = MagicMock()
+        worker.submit.side_effect = TimeoutError("登录超时: Worker 提交超时")
+
+        orch = LoginOrchestrator(
+            worker_getter=lambda: worker,
+            login_history=MagicMock(),
+            profile_service=MagicMock(),
+        )
+        handle = orch.submit(source="auto", config=VALID_CONFIG)
+        assert handle.future is not None
+        success, msg = handle.result(timeout=5)
+        assert success is False
+        # _run() 在超时后设置 handle.cancel_event（CompositeCancelEvent）
+        assert handle.cancel_event.is_set()
+
+    def test_timeout_sets_cancel_event_english_message(self):
+        """英文 timed out 异常也应触发 cancel_event 设置。"""
+        worker = MagicMock()
+        worker.submit.side_effect = TimeoutError("Worker timed out after 300s")
+
+        orch = LoginOrchestrator(
+            worker_getter=lambda: worker,
+            login_history=MagicMock(),
+            profile_service=MagicMock(),
+        )
+        handle = orch.submit(source="auto", config=VALID_CONFIG)
+        assert handle.future is not None
+        success, _ = handle.result(timeout=5)
+        assert success is False
+        assert handle.cancel_event.is_set()
+
+    def test_non_timeout_exception_does_not_set_cancel_event(self):
+        """非超时异常不应设置 cancel_event。"""
+        worker = MagicMock()
+        worker.submit.side_effect = RuntimeError("连接被拒绝")
+
+        orch = LoginOrchestrator(
+            worker_getter=lambda: worker,
+            login_history=MagicMock(),
+            profile_service=MagicMock(),
+        )
+        handle = orch.submit(source="auto", config=VALID_CONFIG)
+        assert handle.future is not None
+        success, _ = handle.result(timeout=5)
+        assert success is False
+        # 非超时异常不应设置 cancel_event
+        # 注意：done_callback 中 clear_sources 会清除源，但 CompositeCancelEvent
+        # 的内部 set 标志不会被 clear_sources 清除，所以 is_set() 仍为 False
+        assert not handle.cancel_event.is_set()
+
+
 class TestTaskExecutorLoginExecutor:
     def test_login_executor_property_exposed(self):
         """TaskExecutor 应暴露 login_executor 只读 property。"""
