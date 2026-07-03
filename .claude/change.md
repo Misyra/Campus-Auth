@@ -2,6 +2,16 @@
 
 ## 2026-07-03
 
+### fix: toggle_auto_switch 端点添加异常处理
+
+- `app/api/profiles.py`：`toggle_auto_switch` 端点中 `set_auto_switch` 调用包裹在 try/except 中，写入失败时记录警告日志并返回 500 + 明确错误信息，而非依赖 FastAPI 默认的通用 500 错误
+- `tests/test_api/test_api_profiles_routes.py`：新增 `test_auto_switch_write_failure` 测试用例，验证写入失败时返回 500 且错误信息包含原始异常内容
+
+### fix: 删除所有方案后停止监控而非调用 apply_profile(None)
+
+- `app/api/profiles.py`：`delete_profile` 端点删除方案后，检查 `active_profile` 是否为 `None`；若所有方案已删除则调用 `stop_monitoring()` 停止监控，而非无意义地调用 `apply_profile(None)`
+- `tests/test_api/test_api_profiles_routes.py`：新增 `test_delete_last_profile_stops_monitoring` 和 `test_delete_profile_applies_new_active` 两个测试用例
+
 ### fix: Worker 超时后 slot 过早释放缓解
 
 - `app/services/login_orchestrator.py`：`_run()` 的 `except Exception` 处理中，检测超时异常（中文"超时"或英文"timed out"）时主动设置 `cancel_event` 并等待 0.5 秒，给 Worker 响应取消信号的时间窗口，降低新登录进入仍忙碌 Worker 的概率

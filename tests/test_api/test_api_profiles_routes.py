@@ -166,6 +166,14 @@ class TestAutoSwitch:
         assert resp.status_code == 200
         assert resp.json()["success"] is True
 
+    def test_auto_switch_write_failure(self, api_client):
+        """set_auto_switch 抛出异常时应返回 500 + 明确错误信息。"""
+        test_client, mock_services = api_client
+        mock_services.profile_service.set_auto_switch.side_effect = OSError("写入失败")
+        resp = test_client.post("/api/profiles/auto-switch", json={"enabled": True})
+        assert resp.status_code == 500
+        assert "写入失败" in resp.json()["detail"]
+
 
 # ── save_profile 参数验证 ──
 

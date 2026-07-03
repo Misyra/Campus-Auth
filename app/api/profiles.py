@@ -164,7 +164,14 @@ def toggle_auto_switch(
     profile_svc: ProfileServiceDep,
     monitor_svc: MonitorServiceDep,
 ) -> ApiResponse:
-    profile_svc.set_auto_switch(body.enabled)
+    try:
+        profile_svc.set_auto_switch(body.enabled)
+    except Exception as exc:
+        api_logger.warning("切换自动切换失败: {}", exc)
+        raise HTTPException(
+            status_code=500,
+            detail=f"切换自动切换失败: {exc}",
+        ) from None
     state = "开启" if body.enabled else "关闭"
     api_logger.info("切换自动切换 {} 成功", state)
 
