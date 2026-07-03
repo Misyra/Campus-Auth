@@ -30,7 +30,7 @@ logger = get_logger("login_orchestrator", source="backend")
 LoginSource = Literal["auto", "manual", "login_once", "browser"]
 
 
-def runtime_config_to_worker_dict(config: RuntimeConfig) -> dict:
+def runtime_config_to_worker_dict(config: RuntimeConfig, bind_proxy: str | None = None) -> dict:
     """将 RuntimeConfig 转换为 Worker 进程期望的 dict 格式。
 
     Worker 是独立进程，通过 dict 通信。
@@ -55,6 +55,11 @@ def runtime_config_to_worker_dict(config: RuntimeConfig) -> dict:
     d["shell_path"] = config.app_settings.shell_path
     d["access_log"] = config.logging.access_log
     d["log_retention_days"] = config.logging.log_retention_days
+
+    # 注入网卡绑定代理（如果有）
+    if bind_proxy:
+        d["browser_settings"]["bind_proxy"] = bind_proxy
+
     return d
 
 
@@ -186,6 +191,10 @@ class LoginOrchestrator:
         """延迟绑定运行时配置获取器（用于解决 Engine 循环依赖）。"""
         self._get_runtime_config = getter
 
+    def set_bind_proxy(self, bind_proxy_url: str | None) -> None:
+        """设置网卡绑定代理 URL（由引擎在监控启动时调用）。"""
+        self._bind_proxy_url = bind_proxy_url
+
     # ── 公共 API ──
 
     def validate(self, config: RuntimeConfig | None = None) -> str | None:
@@ -304,7 +313,8 @@ class LoginOrchestrator:
         from app.workers.playwright_worker import CMD_LOGIN
 
         # Build compatible dict for Worker process (Worker is separate process, communicates via dict)
-        worker_config = runtime_config_to_worker_dict(config)
+        bind_proxy = getattr(self, "_bind_proxy_url", None)
+        worker_config = runtime_config_to_worker_dict(config, bind_proxy=bind_proxy)
         worker_timeout = timeout if timeout is not None else resolve_worker_timeout(config)  # F09 单一来源
 
         def _run() -> tuple[bool, str]:

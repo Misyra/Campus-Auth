@@ -2,6 +2,13 @@
 
 ## 2026-07-04
 
+### feat: 集成 SOCKS5 代理生命周期和 IP 变化检测到 MonitorCore
+
+- `app/services/monitor_service.py`：`init_monitoring()` 新增 `_start_bind_proxy()` 调用，启动 SOCKS5 Forwarder；`stop_monitoring()` 新增 `_stop_bind_proxy()` 调用；新增 `bind_proxy_url` 属性暴露代理 URL；新增 `_check_bind_ip_change()` 在 `check_once()` 中检测 DHCP IP 变化并自动更新代理绑定
+- `app/services/login_orchestrator.py`：`runtime_config_to_worker_dict()` 新增 `bind_proxy` 可选参数，注入到 `browser_settings`；`LoginOrchestrator` 新增 `set_bind_proxy()` 方法和 `_dispatch()` 中传递给 worker dict
+- `app/services/engine.py`：`_handle_start()` 中监控启动后将 `core.bind_proxy_url` 传递给 orchestrator
+- `app/workers/playwright_worker.py`：`_build_context_options()` 检测 `bind_proxy` 设置并注入 Playwright proxy 选项
+
 ### feat: 为网络探测层添加网卡绑定支持（TCP/HTTP/物理检查）
 
 - `app/network/probes.py`：`is_network_available_socket` 新增 `source_ip` 参数，传递 `source_address=(source_ip, 0)` 给 `socket.create_connection`；新增绑定 Client 池 `_get_bound_client`（按 IP 缓存，最多 4 个，LRU 淘汰），`is_network_available_http` 和 `is_network_available_url` 新增 `source_ip` 参数；`is_local_network_connected` 新增 `interface_name` 参数，绑定网卡不可用时回退检查所有物理网卡；`shutdown_probes` 清理绑定 Client

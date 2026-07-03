@@ -623,6 +623,10 @@ class ScheduleEngine:
         core.set_profile_service(self._profile_service)
         core.init_monitoring()  # 只初始化，不启动循环
         self._monitor_core = core
+
+        # 传递网卡绑定代理 URL 到登录编排器
+        if self._orchestrator is not None:
+            self._orchestrator.set_bind_proxy(core.bind_proxy_url)
         self._next_network_check = time.time()  # 立即执行第一次检测
         self._update_status_snapshot(force=True)
         self._logger.info("监控已启动")
