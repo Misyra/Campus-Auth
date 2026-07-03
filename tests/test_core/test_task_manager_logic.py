@@ -20,11 +20,15 @@ class TestIsValidTaskId:
     def test_invalid_ids(self):
         """无效 ID。"""
         assert is_valid_task_id("") is False
-        assert is_valid_task_id("123") is False
-        assert is_valid_task_id("_task") is False
-        assert is_valid_task_id("my-task") is False
         assert is_valid_task_id("my task") is False
         assert is_valid_task_id("my.task") is False
+        assert is_valid_task_id("a" * 65) is False  # 超过 64 字符上限
+
+    def test_valid_ids_new_pattern(self):
+        """新规则下允许的 ID。"""
+        assert is_valid_task_id("123") is True
+        assert is_valid_task_id("_task") is True
+        assert is_valid_task_id("my-task") is True
 
     def test_numbers_allowed_after_first_char(self):
         """首字符后允许数字。"""

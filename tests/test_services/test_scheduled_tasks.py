@@ -365,7 +365,7 @@ class TestScheduleEngineCRUD:
         assert ok is False
 
     def test_save_task_invalid_id(self, scheduler):
-        ok, _ = scheduler.save_task("123bad", {"name": "test"})
+        ok, _ = scheduler.save_task("bad id!", {"name": "test"})
         assert ok is False
 
 

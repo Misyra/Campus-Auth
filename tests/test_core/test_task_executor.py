@@ -297,7 +297,8 @@ class TestVariableResolver:
     def test_resolve_for_js_unknown_var(self):
         resolver = VariableResolver(self._make_config(), {})
         result = resolver.resolve_for_js("{{UNKNOWN}}")
-        assert result == '"{{UNKNOWN}}"'
+        # 白名单模式：未知变量保留原样，不 JSON 编码
+        assert result == "{{UNKNOWN}}"
 
     def test_resolve_unknown_var_logs_warning(self):
         """未知变量应触发 warning 日志"""
@@ -683,7 +684,7 @@ class TestTaskValidator:
     def test_step_invalid_id(self):
         config = {
             "name": "测试",
-            "steps": [{"id": "123bad", "type": "click", "selector": "#btn"}],
+            "steps": [{"id": "", "type": "click", "selector": "#btn"}],
         }
         ok, errors = TaskValidator.validate(config)
         assert ok is False
@@ -763,9 +764,8 @@ class TestTaskIdHelpers:
 
     def test_invalid_ids(self):
         assert is_valid_task_id("") is False
-        assert is_valid_task_id("123abc") is False
-        assert is_valid_task_id("my-task") is False
         assert is_valid_task_id(None) is False
+        assert is_valid_task_id("a" * 65) is False  # 超过 64 字符上限
 
 
 # =====================================================================
@@ -789,8 +789,8 @@ class TestTaskManager:
     def test_list_tasks_skips_invalid_ids(self, tmp_path):
         mgr = TaskManager(tmp_path)
         browser_dir = tmp_path / "browser"
-        # 含连字符的文件名应被跳过
-        (browser_dir / "my-task.json").write_text(
+        # 含空格的文件名应被跳过
+        (browser_dir / "invalid id.json").write_text(
             '{"name":"x","steps":[]}', encoding="utf-8"
         )
         (browser_dir / "valid_task.json").write_text(

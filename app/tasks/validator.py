@@ -83,7 +83,7 @@ class TaskValidator:
         step_id = step.get("id", "")
         if not isinstance(step_id, str) or not TASK_ID_PATTERN.fullmatch(step_id):
             errors.append(
-                f"{prefix} 步骤ID格式无效，须以字母开头且仅包含字母、数字和下划线（如 step_01）"
+                f"{prefix} 步骤ID格式无效，只能包含字母、数字、下划线和连字符，长度不超过64"
             )
 
         # 验证步骤类型

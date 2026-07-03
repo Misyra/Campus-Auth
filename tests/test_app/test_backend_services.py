@@ -185,7 +185,7 @@ class TestTaskService:
             "name": "test",
             "steps": [{"id": "s1", "type": "click", "selector": "#btn"}],
         }
-        ok, msg = service.save_task_with_validation("123bad", data)
+        ok, msg = service.save_task_with_validation("bad id!", data)
         assert ok is False
         assert "ID" in msg
 
@@ -1016,7 +1016,7 @@ class TestSaveScriptTask:
 
     def test_save_script_invalid_id(self, service: TaskManager):
         config = {"type": "script", "content": 'print("hi")'}
-        ok, msg = service.save_task_with_validation("123bad", config)
+        ok, msg = service.save_task_with_validation("bad id!", config)
         assert ok is False
         assert "ID" in msg
 
