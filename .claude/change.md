@@ -4292,3 +4292,8 @@
 
 - pp/utils/browser_registry.py：新增 _edge_path() 函数，检查 PROGRAMFILES(X86) 和 PROGRAMFILES 下 msedge.exe 是否存在；_detect_edge() Windows 分支从盲定 installed = True 改为调用 _edge_path() 进行实际文件存在性校验
 - 	ests/test_utils/test_browser_registry.py：新增 4 个测试（_edge_path 优先返回 x86 路径、路径不存在返回 None、Windows 有 Edge 时 installed=True、Windows 无 Edge 时 installed=False）
+
+## 2026-07-03: CompositeCancelEvent 死锁修复 (Task 2: CR-03)
+
+- `app/utils/cancel_token.py`：`is_set()` 方法中将 `super().set()` 移到 `self._lock` 的 with 块之外，用 `should_set` 标志记录结果，消除 `is_set()` 持有 `_lock` 时调用 `super().set()` 获取 `_cond` 与 `wait()` 持有 `_cond` 时调用 `is_set()` 获取 `_lock` 的锁顺序颠倒死锁
+- `tests/test_utils/test_cancel_token.py`：新增 `test_no_deadlock_wait_concurrent_with_is_set` 测试（4 线程并发调用 `wait(timeout=0.5)` 和 `is_set()` 各 100 次，10 秒超时判定死锁）
