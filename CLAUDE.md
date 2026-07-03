@@ -157,7 +157,9 @@ Campus-Auth/
 │   └── scheduled/             # 定时任务
 ├── tests/                     # pytest 测试
 ├── docs/                      # 文档
-├── resources/                 # 资源文件（图标、背景）
+├── resources/                 # 资源文件
+│   ├── icons/                 # 图标、背景
+│   └── tools/                 # 辅助工具源码（git-puller、start、task-recorder）
 ├── debug/                     # 日志与截图（按日期归档）
 └── temp/                      # 临时文件（启动时自动清理）
 ```

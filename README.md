@@ -191,7 +191,7 @@ python main.py --runtime-mode lightweight   # 轻量模式（无 Web UI）
 ```text
 Campus-Auth/
 ├── main.py                   # 统一启动入口（CLI + 启动编排）
-├── start.go / start.exe      # Go 启动程序
+├── start.exe / git-puller.exe # Go 工具（编译产物，.gitignore）
 ├── start.sh                  # macOS/Linux 启动脚本
 ├── pyproject.toml            # 项目元数据与依赖
 ├── config/                   # 运行时配置
@@ -274,7 +274,10 @@ Campus-Auth/
 ├── dev/                      # 开发笔记
 ├── resources/                # 资源文件
 │   ├── icons/                # 图标
-│   └── tools/                # 辅助工具（油猴脚本）
+│   └── tools/                # 辅助工具
+│       ├── git-puller/       # Git 仓库克隆/更新工具（Go）
+│       ├── start/            # 启动程序（Go）
+│       └── task-recorder.user.js # 油猴脚本
 ├── debug/                    # 日志与截图（按日期归档）
 └── release/                  # 发布产物
 ```
@@ -283,8 +286,9 @@ Campus-Auth/
 
 **入口与启动：**
 - `main.py`：统一启动入口，负责 CLI 参数解析、服务启动、状态查询、自启动控制和浏览器打开。
-- `start.go` / `start.exe`：Go 启动程序，自动下载 uv、安装依赖、启动应用。
-- `start.sh`：macOS/Linux 启动脚本，功能同上。
+- `start.exe`：Go 启动程序（源码 `resources/tools/start/`），自动下载 uv、安装依赖、启动应用。
+- `git-puller.exe`：Go 仓库克隆/更新工具（源码 `resources/tools/git-puller/`），自动检测 Git、尝试镜像源、支持分支选择。
+- `start.sh`：macOS/Linux 启动脚本，功能同 start.exe。
 
 **后端服务：**
 - `app/application.py`：FastAPI 主应用，提供 HTTP API 和 WebSocket。
@@ -363,12 +367,16 @@ uv run ruff check .
 uv run ruff format .
 ```
 
-### 编译启动程序
+### 编译 Go 工具
 
-`start.exe` 由 `start.go` 编译生成，需要 Go 1.20+：
+`start.exe` 和 `git-puller.exe` 由 Go 源码编译生成，需要 Go 1.20+：
 
 ```bash
-go build -ldflags="-s -w" -o start.exe start.go
+# 编译启动程序
+cd resources/tools/start && go build -o ../../../start.exe .
+
+# 编译仓库克隆/更新工具
+cd resources/tools/git-puller && go build -o ../../../git-puller.exe .
 ```
 
 ### 常用调试入口
