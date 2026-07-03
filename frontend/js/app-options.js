@@ -234,6 +234,12 @@ export const appOptions = {
       },
       deep: true,
     },
+    customColors: {
+      handler() {
+        localStorage.setItem('appearance.custom_colors', JSON.stringify(this.customColors));
+      },
+      deep: true,
+    },
     'config.monitor.enable_tcp_check'() {
       this._ensureAtLeastOneCheckMethod();
     },
@@ -270,6 +276,16 @@ export const appOptions = {
     this.init();
     // 应用保存的外观设置
     this.applyAppearance();
+    // 监听系统主题变化（仅当用户选择 'auto' 时生效）
+    this._mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    this._onSystemThemeChange = (e) => {
+      if (this.appearance.theme === 'auto') {
+        document.documentElement.setAttribute('data-theme', e.matches ? 'dark' : 'light');
+        // 触发 applyAppearance 重算 isLight 相关变量
+        this.applyAppearance();
+      }
+    };
+    this._mediaQuery.addEventListener('change', this._onSystemThemeChange);
   },
   beforeUnmount() {
     this._wsDestroyed = true;
@@ -279,6 +295,9 @@ export const appOptions = {
     if (this._toastTimer) clearTimeout(this._toastTimer);
     if (this._toastLeavingTimer) clearTimeout(this._toastLeavingTimer);
     if (this._appearanceTimer) clearTimeout(this._appearanceTimer);
+    if (this._mediaQuery && this._onSystemThemeChange) {
+      this._mediaQuery.removeEventListener('change', this._onSystemThemeChange);
+    }
     if (this._loginCooldownTimer) clearTimeout(this._loginCooldownTimer);
     if (this._saveAbortController) this._saveAbortController.abort();
     if (this._logScrollRaf) cancelAnimationFrame(this._logScrollRaf);
