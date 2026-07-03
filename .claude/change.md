@@ -35,6 +35,13 @@
 - `resources/tools/git-puller/main.go`：新增 git-puller 工具，自动检测/安装 Git，尝试多个镜像源（GitClone、CNPMJS、GHProxy、GitHub 官方）克隆/更新仓库，支持分支选择，默认推荐 main 分支
 - `resources/tools/start/start.go`：将原 `start.go` 迁移到 `resources/tools/start/`，自动下载 uv、安装依赖、启动应用
 - 两个工具均校验项目根目录（检测 pyproject.toml），编译后 exe 放在项目根目录运行
+
+### feat: 前端网卡绑定 UI — 下拉选择框与刷新按钮
+
+- `frontend/js/api-service.js`：`monitor` 分组新增 `fetchInterfaces` 方法，调用 `/api/network/interfaces`
+- `frontend/js/app-options.js`：`data()` 新增 `networkInterfaces` 数组；`computed` 新增 `networkInterfaceOptions`（下拉选项）和 `selectedInterfaceDown`（网卡断连警告）；`methods` 新增 `loadNetworkInterfaces` 异步方法；`watch` 新增 `currentSettingsTab` 监听，切换到 monitor tab 时懒加载网卡列表
+- `frontend/partials/pages/settings/settings-monitor.html`：在"屏蔽系统代理"与"登录请求超时"之间添加绑定网卡下拉框（`custom-select`）、刷新按钮和网卡断连警告
+- `frontend/styles/pages/settings.css`：新增 `.form-warning` 样式类
 - 移除原 `start.go`，源码统一归入 `resources/tools/` 目录
 
 ## 2026-07-03

@@ -25,6 +25,7 @@ export const apiService = {
     fetchStatus: () => api.get('/api/status').then(r => r.data),
     start: () => api.post('/api/monitor/start').then(r => r.data),
     stop: () => api.post('/api/monitor/stop').then(r => r.data),
+    fetchInterfaces: () => api.get('/api/network/interfaces').then(r => r.data),
   },
 
   // ── 登录操作 ──
