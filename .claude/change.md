@@ -2,6 +2,13 @@
 
 ## 2026-07-04
 
+### feat: 新增 InterfaceInfo 数据模型和 bind_interface_name 配置字段
+
+- `app/network/interfaces.py`：新增 `InterfaceInfo` frozen dataclass（含 slots），包含 `name`、`ip`、`gateway`、`is_up` 四个字段，用于统一网络接口信息表示
+- `app/schemas.py`：`MonitorSettings` 新增 `bind_interface_name: str` 字段（默认空串，表示不绑定）
+- `frontend/js/constants.js`：`DEFAULT_CONFIG.monitor` 新增 `bind_interface_name` 默认值
+- `tests/test_network/test_interfaces.py`：新增 3 个测试用例（frozen 不可变、空值、slots 限制）
+
 ### feat: 新增 Git 仓库克隆/更新工具和启动程序
 
 - `resources/tools/git-puller/main.go`：新增 git-puller 工具，自动检测/安装 Git，尝试多个镜像源（GitClone、CNPMJS、GHProxy、GitHub 官方）克隆/更新仓库，支持分支选择，默认推荐 main 分支
