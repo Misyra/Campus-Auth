@@ -146,3 +146,34 @@ class TestRunSync:
             code, out, err = policy.run_sync(["/nonexistent/bin", "-c", "test"])
             assert code == -1
             assert "不存在" in err
+
+
+# =====================================================================
+# _clamp_timeout 边界行为 (from test_shell_policy_fix)
+# =====================================================================
+
+
+class TestClampTimeoutBoundary:
+    """_clamp_timeout 方法的边界行为验证。"""
+
+    def test_max_timeout_is_3600(self):
+        """确认 _MAX_TIMEOUT 常量为 3600。"""
+        assert _MAX_TIMEOUT == 3600
+
+    def test_clamp_timeout_at_max_boundary(self):
+        """_clamp_timeout 在 _MAX_TIMEOUT 边界的行为。"""
+        policy = ShellCommandPolicy(allowlist=["/bin/sh"])
+        assert policy._clamp_timeout(_MAX_TIMEOUT) == _MAX_TIMEOUT
+        assert policy._clamp_timeout(_MAX_TIMEOUT + 1) == _MAX_TIMEOUT
+
+    def test_clamp_timeout_at_min_boundary(self):
+        """_clamp_timeout 在下界的行为。"""
+        policy = ShellCommandPolicy(allowlist=["/bin/sh"])
+        assert policy._clamp_timeout(1) == 1
+        assert policy._clamp_timeout(0) == 1
+        assert policy._clamp_timeout(-10) == 1
+
+    def test_default_timeout_within_range_preserved(self):
+        """构造函数中 default_timeout 在有效范围内时保留原值。"""
+        policy = ShellCommandPolicy(allowlist=["/bin/sh"], default_timeout=120)
+        assert policy._default_timeout == 120

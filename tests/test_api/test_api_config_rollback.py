@@ -1,4 +1,4 @@
-"""测试 config.py 回滚语义修复 — 确保回滚后 data 仍是合法的 Pydantic 对象。"""
+"""测试 config.py 回滚语义 — 确保回滚后 data 仍是合法的 Pydantic 对象。"""
 
 from __future__ import annotations
 

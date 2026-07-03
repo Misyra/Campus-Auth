@@ -1,4 +1,4 @@
-"""Task 14: 验证 container.py 的 suppress(Exception) 和清理效率修复。
+"""验证 container.py 异常处理和清理效率。
 
 1. suppress(Exception) 改为 try/except + debug 日志（stop_web_services 和 shutdown）
 2. 逐个遍历删除改为 shutil.rmtree 一步删除

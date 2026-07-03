@@ -429,3 +429,49 @@ class TestSavePasswordField:
 
         assert result.startswith("ENC:")
         assert result != "newpassword"
+
+
+# ── Windows icacls 用户名来源 (from test_crypto_fix) ──
+
+
+class TestWindowsIcaclsUsername:
+    """测试 Windows icacls 命令中的用户名来源。"""
+
+    def test_icacls_uses_real_username_when_env_missing(self, _reset_crypto_cache):
+        """当 USERNAME 环境变量不存在时，应使用 getpass.getuser() 返回的真实用户名。"""
+        crypto_mod = _reset_crypto_cache
+        fake_username = "RealTestUser"
+
+        mock_run = MagicMock(return_value=MagicMock(returncode=0))
+
+        with (
+            patch.object(crypto_mod, "is_windows", return_value=True),
+            patch("subprocess.run", mock_run),
+            patch.dict("os.environ", {}, clear=True),
+            patch("getpass.getuser", return_value=fake_username),
+        ):
+            crypto_mod._get_or_create_key()
+
+        assert mock_run.called, "subprocess.run 应该被调用"
+        cmd = mock_run.call_args[0][0]
+        grant_arg = cmd[4]
+        assert grant_arg == f"{fake_username}:F", (
+            f"icacls 应使用真实用户名 '{fake_username}'，实际为 '{grant_arg}'"
+        )
+        assert "Users:F" not in cmd, "不应使用 'Users' 组名作为默认值"
+
+    def test_icacls_uses_env_username_when_present(self, _reset_crypto_cache):
+        """当 USERNAME 环境变量存在时，应优先使用环境变量中的值。"""
+        crypto_mod = _reset_crypto_cache
+        mock_run = MagicMock(return_value=MagicMock(returncode=0))
+
+        with (
+            patch.object(crypto_mod, "is_windows", return_value=True),
+            patch("subprocess.run", mock_run),
+            patch.dict("os.environ", {"USERNAME": "EnvUser"}, clear=True),
+        ):
+            crypto_mod._get_or_create_key()
+
+        assert mock_run.called
+        cmd = mock_run.call_args[0][0]
+        assert cmd[4] == "EnvUser:F"

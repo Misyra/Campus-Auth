@@ -15,12 +15,6 @@ import pytest
 class TestDecisionExecutorIsolation:
     """决策 executor 与探测 executor 隔离性。"""
 
-    def test_decision_executor_exists(self):
-        """_decision_executor 模块级变量已创建。"""
-        from app.network.decision import _decision_executor
-
-        assert isinstance(_decision_executor, ThreadPoolExecutor)
-
     def test_decision_executor_max_workers(self):
         """决策 executor 最大工作线程数为 3。"""
         from app.network.decision import _decision_executor
@@ -138,12 +132,6 @@ class TestShutdownDecisionExecutor:
     使用 monkeypatch 替换 _decision_executor 为临时实例，
     避免永久关闭模块级 executor 影响其他测试。
     """
-
-    def test_shutdown_decision_executor_callable(self):
-        """shutdown_decision_executor 函数可正常导入和调用。"""
-        from app.network.decision import shutdown_decision_executor
-
-        assert callable(shutdown_decision_executor)
 
     def test_shutdown_decision_executor_waits(self, monkeypatch):
         """shutdown_decision_executor(wait=True) 等待任务完成。"""

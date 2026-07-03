@@ -24,10 +24,6 @@ class TestScriptExecutorLifecycle:
         """executor 线程名前缀应为 script_api。"""
         assert _script_executor._thread_name_prefix == "script_api"
 
-    def test_shutdown_script_executor_is_callable(self):
-        """shutdown_script_executor 应为可调用函数。"""
-        assert callable(shutdown_script_executor)
-
 
 class TestShutdownScriptExecutor:
     """shutdown_script_executor() 函数行为。"""

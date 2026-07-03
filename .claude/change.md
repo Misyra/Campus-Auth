@@ -2,6 +2,38 @@
 
 ## 2026-07-03
 
+### refactor: 测试模块清理 — 删除无用测试、合并 fix 文件、重命名
+
+- 删除 16 个无价值的"存在性"测试（`assert callable`、`assert hasattr`、`assert isinstance`）
+- 合并 5 个 `*_fix.py` 文件到对应的主测试文件（application_fix → application_logic、main_fix → main、crypto_fix → crypto、env_fix → env、shell_policy_fix → shell_policy）
+- 重命名 7 个 `*_fix.py` 文件为语义化名称（config_fix → api_config_rollback、scheduled_tasks_fix → api_scheduled_tasks_side_effect、container_cleanup_fix → container_cleanup、debug_session_fix → debug_session_thread_safety、monitor_service_fix → monitor_service_masking、task_executor_fix → task_executor_lifecycle、uninstall_fix → uninstall_safety）
+- 清理所有 `__pycache__` 目录
+- 测试文件数：110 → 105，测试用例数：2422 → 2406
+
+## 2026-07-03
+
+### fix: test_application_fix mock shutdown_probes 防止全局资源关闭
+
+- `tests/test_app/test_application_fix.py`：`_mock_decision_executor_shutdown` fixture 新增 mock `app.network.probes.shutdown_probes`，防止 `TestClient(app)` 触发 lifespan 时关闭 probes 全局资源影响后续测试
+
+### test: 集成测试与服务层测试质量改进（Task 9.1-9.7）
+
+- `tests/test_integration/conftest.py`：integration teardown 各 shutdown 调用独立 try/except 保护
+- `tests/test_services/conftest.py`：`_make_raw` 中 LoginBridge 改为 MagicMock 解耦内部实现；`_update_status_snapshot` 保持真实方法绑定
+- `tests/test_services/test_engine.py`：提取 `_make_future_with_callback` 辅助函数减少 5 处重复；pure mode 锁测试改用共享计数器验证互斥；移除 `_update_status_snapshot` 手动 `__get__` 重绑定
+- `tests/test_services/test_login_orchestrator.py`：移除对私有 `_DISPATCHING` 哨兵的导入
+- `tests/conftest.py`：pystray mock 从 session-scoped autouse 改为 function-scoped opt-in fixture
+
+### fix: 替换 atexit 私有 API 调用
+
+- `app/utils/shutdown.py`：移除 `import atexit`，新增 `_exit_handlers` 列表和 `register_exit_handler()` 函数，`force_exit()` 中调用 `_run_exit_handlers()` 替代 `atexit._run_exitfuncs()`
+- `tests/test_utils/test_shutdown.py`：新增 `TestRegisterExitHandler` 测试类（4 个用例），更新 `TestForceExit` 测试用例使用新的 handler 列表
+
+### fix: 环境变量模板替换改为单次非递归替换
+
+- `app/utils/env.py`：新增 `import re`，`build_login_template_vars` 中将 `for` 循环 `str.replace()` 替换为 `_VAR_PATTERN.sub(_replacer, task_url)` 单次正则替换，避免变量值中包含 `{{VAR}}` 模式时的双重替换
+- `tests/test_utils/test_env.py`：新建测试文件，11 个测试用例覆盖基础替换、双重替换防护、边界情况
+
 ### fix: 浏览器注册增加 ARM64 Chromium 路径检测
 
 - `app/utils/browser_registry.py`：`has_playwright_chromium()` 中 `import platform` 移至模块顶层，新增 `platform.machine() == "arm64"` 检测，ARM64 架构下额外搜索 `chrome-linux-arm64/chrome` 和 `chrome-mac-arm64/chrome` 路径

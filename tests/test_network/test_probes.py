@@ -13,22 +13,6 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 
 
-class TestShutdownProbesCallable:
-    """shutdown_probes 函数基本可访问性。"""
-
-    def test_shutdown_probes_importable(self):
-        """shutdown_probes 可正常导入。"""
-        from app.network.probes import shutdown_probes
-
-        assert callable(shutdown_probes)
-
-    def test_shutdown_event_exists(self):
-        """_shutdown_event 模块级变量已创建。"""
-        from app.network.probes import _shutdown_event
-
-        assert isinstance(_shutdown_event, threading.Event)
-
-
 class TestShutdownProbesBehavior:
     """shutdown_probes 关闭行为验证。
 
