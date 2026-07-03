@@ -279,7 +279,7 @@
         <button class="btn btn-secondary btn-sm" @click="closeRandomWallpaperDialog" :disabled="randomWallpaperDialog.loading">取消</button>
         <button class="btn btn-primary btn-sm" @click="confirmRandomWallpaper" :disabled="randomWallpaperDialog.loading">
           <svg v-if="randomWallpaperDialog.loading" class="spin icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M21 12a9 9 011-6.219-8.56"/>
+            <path d="M21 12a9 9 0 11-6.219-8.56"/>
           </svg>
           {{ randomWallpaperDialog.loading ? '加载中...' : '确定' }}
         </button>
