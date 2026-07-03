@@ -193,6 +193,9 @@ class NetworkMonitorCore:
             f"认证地址={masked_url}, 账号={masked_username}, 运营商={isp}"
         )
 
+        # 绑定网卡：启动 SOCKS5 Forwarder
+        self._start_bind_proxy()
+
     def check_once(self) -> CheckOnceResult:
         """执行一次网络检测（不阻塞，不做登录重试）。"""
         interval = self._get_monitor_interval()
@@ -242,7 +245,10 @@ class NetworkMonitorCore:
                 ),
             )
 
-        # 2. 网络状态检测
+        # 2. IP 变化检测（网卡绑定场景下 DHCP 续租可能导致 IP 变化）
+        self._check_bind_ip_change()
+
+        # 3. 网络状态检测
         net_ok, net_reason, net_method = check_network_status(self.config.monitor)
         if net_ok:
             self._update_state(
@@ -288,7 +294,75 @@ class NetworkMonitorCore:
 
     def stop_monitoring(self) -> None:
         """停止监控（状态清理）。"""
+        self._stop_bind_proxy()
         self._update_state(monitoring=False, status_detail="已停止")
+
+    @property
+    def bind_proxy_url(self) -> str | None:
+        """当前绑定代理 URL（供引擎传递给 Worker）。"""
+        return getattr(self, "_bind_proxy_url", None)
+
+    def _start_bind_proxy(self) -> None:
+        """根据 bind_interface_name 启动 SOCKS5 Forwarder。"""
+        self._bind_proxy_url: str | None = None
+        self._interface_mgr = None
+        self._socks5_server = None
+        self._last_bind_ip: str | None = None
+
+        bind_name = self.config.monitor.bind_interface_name
+        if not bind_name:
+            return
+
+        from app.network.interfaces import InterfaceManager
+
+        self._interface_mgr = InterfaceManager()
+        bind_ip = self._interface_mgr.resolve_ip(bind_name)
+        if not bind_ip:
+            self.log_message(f"绑定网卡 {bind_name} 不可用，回退系统路由", "ERROR")
+            return
+
+        from app.network.proxy import Socks5Server
+
+        self._socks5_server = Socks5Server(bind_ip)
+        try:
+            self._socks5_server.start()
+            self._bind_proxy_url = self._socks5_server.proxy_url
+            self._last_bind_ip = bind_ip
+            self.log_message(
+                f"网卡绑定已启用: {bind_name} ({bind_ip}) -> {self._bind_proxy_url}"
+            )
+        except Exception as e:
+            self.log_message(f"SOCKS5 Forwarder 启动失败，关闭绑定功能: {e}", "ERROR")
+            self._socks5_server = None
+            self._bind_proxy_url = None
+
+    def _stop_bind_proxy(self) -> None:
+        """停止 SOCKS5 Forwarder。"""
+        if hasattr(self, "_socks5_server") and self._socks5_server:
+            self._socks5_server.stop()
+            self._socks5_server = None
+            self._bind_proxy_url = None
+
+    def _check_bind_ip_change(self) -> None:
+        """检测绑定网卡的 IP 变化，自动更新代理绑定。"""
+        bind_name = self.config.monitor.bind_interface_name
+        if not bind_name or not hasattr(self, "_interface_mgr") or not self._interface_mgr:
+            return
+
+        new_ip = self._interface_mgr.resolve_ip(bind_name)
+        old_ip = getattr(self, "_last_bind_ip", None)
+        if new_ip == old_ip:
+            return
+
+        self._last_bind_ip = new_ip
+        if new_ip and hasattr(self, "_socks5_server") and self._socks5_server:
+            self._socks5_server.update_bind_ip(new_ip)
+            self.log_message(f"DHCP IP 变化: {old_ip} -> {new_ip}，已更新代理")
+
+        if old_ip:
+            from app.network.probes import close_bound_client
+
+            close_bound_client(old_ip)
 
     def _get_test_sites(self) -> list[tuple[str, int]]:
         """获取测试站点列表（带缓存，返回副本避免调用方污染缓存）"""

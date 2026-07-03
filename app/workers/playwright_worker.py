@@ -739,6 +739,10 @@ class PlaywrightWorker:
         if extra_headers:
             ctx_opts["extra_http_headers"] = extra_headers
 
+        # 网卡绑定代理（SOCKS5 Forwarder）
+        if browser_settings.get("bind_proxy"):
+            ctx_opts["proxy"] = {"server": browser_settings["bind_proxy"]}
+
         return ctx_opts
 
     async def _apply_stealth_and_routes(self, browser_settings: dict) -> None:
