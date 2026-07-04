@@ -2,6 +2,11 @@
 
 ## 2026-07-04
 
+### fix(login): 修复 LoginCancelledError 无法映射为 CANCELLED 终态
+
+- `app/services/login_attempt.py`：`attempt_login()` 和 `_perform_login_with_active_task()` 的 `except Exception` catch-all 会吞掉 `LoginCancelledError`，导致 `execute()` 的 `except LoginCancelledError` 成为死代码。在两层 catch-all 前增加 `except LoginCancelledError: raise`，让异常传播到 `execute()` 正确映射为 CANCELLED 终态
+- `tests/test_utils/test_login.py`：`test_login_cancelled_error` 改为通过 `execute()` 验证 CANCELLED 映射（不再直接测 `_perform_login_with_active_task`）
+
 ### refactor(login): 移除 login_runner 外层重试，收敛到 LoginSession
 
 - `app/services/login_runner.py`：`execute_login_with_retries` 移除外层 `for attempt` 重试循环和 `time.sleep` 间隔，改为单次 `orchestrator.submit`；删除顶部 `import time`；重试逻辑由 Worker 内 LoginSession 负责（复用浏览器），避免外层 × 内层重试次数乘积放大
