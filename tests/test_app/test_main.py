@@ -472,29 +472,6 @@ class TestRunLoginThenExit:
             patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
             patch("app.services.profile_service.create_profile_service", return_value=mock_ps),
             patch("app.workers.playwright_worker.cleanup_orphan_browsers"),
-            patch("time.sleep"),
-        ):
-            mock_ps.load.return_value = mock_data
-            mock_ctx = MagicMock()
-            result = _run_login_then_exit(mock_ctx, MagicMock())
-            assert result == LoginResult.SUCCESS
-
-    def test_retry_then_succeed(self, tmp_pid_dir):
-        """第一次失败、第二次成功。返回 SUCCESS。"""
-        from app.services.login_runner import run_login_then_exit as _run_login_then_exit
-
-        mock_worker, mock_ps, mock_data = self._make_mocks()
-        fail_result = MagicMock(success=False, error="timeout")
-        success_result = MagicMock(success=True, data="ok")
-        mock_worker.submit.side_effect = [fail_result, success_result]
-
-        mock_ps.get_runtime_config.return_value = RuntimeConfig(credentials=_TEST_CREDS, retry=RetrySettings(max_retries=3, retry_interval=1))
-        with (
-            patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
-            patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
-            patch("app.services.profile_service.create_profile_service", return_value=mock_ps),
-            patch("app.workers.playwright_worker.cleanup_orphan_browsers"),
-            patch("time.sleep"),
         ):
             mock_ps.load.return_value = mock_data
             mock_ctx = MagicMock()
@@ -502,7 +479,7 @@ class TestRunLoginThenExit:
             assert result == LoginResult.SUCCESS
 
     def test_retries_exhausted(self, tmp_pid_dir):
-        """所有重试均失败，返回 TEMPORARY_FAILURE。"""
+        """单次提交失败，返回 TEMPORARY_FAILURE。"""
         from app.services.login_runner import run_login_then_exit as _run_login_then_exit
 
         mock_worker, mock_ps, mock_data = self._make_mocks()
@@ -519,17 +496,16 @@ class TestRunLoginThenExit:
                 return_value=(False, "network_down", "none"),
             ),
             patch("app.workers.playwright_worker.cleanup_orphan_browsers"),
-            patch("time.sleep"),
         ):
             mock_ps.load.return_value = mock_data
             mock_ctx = MagicMock()
             mock_logger = MagicMock()
             result = _run_login_then_exit(mock_ctx, mock_logger)
             assert result == LoginResult.TEMPORARY_FAILURE
-            # 每次重试失败记一次 warning + 重试耗尽记一次 warning
+            # 单次失败记一次 warning
             mock_logger.warning.assert_called()
             last_call = mock_logger.warning.call_args
-            assert "已重试" in last_call.args[0]
+            assert "登录失败" in last_call.args[0]
 
     def test_network_already_connected_exits(self, tmp_pid_dir):
         """网络已连接时应返回 SUCCESS，不启动浏览器登录。"""
@@ -572,7 +548,6 @@ class TestRunLoginThenExit:
                 return_value=(False, "network_down", "none"),
             ),
             patch("app.workers.playwright_worker.cleanup_orphan_browsers"),
-            patch("time.sleep"),
         ):
             mock_ps.load.return_value = mock_data
             mock_ctx = MagicMock()
@@ -598,7 +573,6 @@ class TestRunLoginThenExit:
                 side_effect=RuntimeError("probe failed"),
             ),
             patch("app.workers.playwright_worker.cleanup_orphan_browsers"),
-            patch("time.sleep"),
         ):
             mock_ps.load.return_value = mock_data
             mock_ctx = MagicMock()
@@ -609,33 +583,6 @@ class TestRunLoginThenExit:
 
 class TestLoginOnceRetryInterval:
     """login_once 固定间隔重试 + login_timeout 统一。"""
-
-    def test_fixed_retry_interval(self, tmp_pid_dir):
-        """重试间隔应为固定值，不使用指数退避。"""
-        from app.services.login_runner import execute_login_with_retries as _execute_login_with_retries
-
-        mock_worker = MagicMock()
-        fail_result = MagicMock(success=False, error="timeout")
-        success_result = MagicMock(success=True, data="ok")
-        mock_worker.submit.side_effect = [fail_result, fail_result, success_result]
-
-        runtime_config = RuntimeConfig(credentials=_TEST_CREDS, retry=RetrySettings(max_retries=3, retry_interval=5))
-
-        with (
-            patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
-            patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
-            patch("app.services.profile_service.ProfileService"),
-            patch("app.services.login_history_service.LoginHistoryService"),
-            patch("app.constants.AUTH_DATA_DIR", tmp_pid_dir),
-            patch("app.workers.playwright_worker.cleanup_orphan_browsers"),
-            patch("time.sleep") as mock_sleep,
-        ):
-            result = _execute_login_with_retries(runtime_config, MagicMock())
-            assert result == LoginResult.SUCCESS
-            # 两次重试都应 sleep(retry_interval=5)，而非指数递增
-            assert mock_sleep.call_count == 2
-            for call in mock_sleep.call_args_list:
-                assert call.args == (5,)
 
     def test_login_timeout_passed_to_worker(self, tmp_pid_dir):
         """login_timeout 应从配置读取并传递给 worker。"""
@@ -659,7 +606,6 @@ class TestLoginOnceRetryInterval:
             patch("app.services.login_history_service.LoginHistoryService"),
             patch("app.constants.AUTH_DATA_DIR", tmp_pid_dir),
             patch("app.workers.playwright_worker.cleanup_orphan_browsers"),
-            patch("time.sleep"),
         ):
             _execute_login_with_retries(runtime_config, MagicMock())
             mock_worker.submit.assert_called_once()
@@ -683,7 +629,6 @@ class TestLoginOnceRetryInterval:
             patch("app.services.login_history_service.LoginHistoryService"),
             patch("app.constants.AUTH_DATA_DIR", tmp_pid_dir),
             patch("app.workers.playwright_worker.cleanup_orphan_browsers"),
-            patch("time.sleep"),
         ):
             result = _execute_login_with_retries(runtime_config, MagicMock())
             assert result == LoginResult.SUCCESS

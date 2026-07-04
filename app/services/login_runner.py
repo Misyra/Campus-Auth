@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import time
 from typing import TYPE_CHECKING
 
 from app.schemas import LoginResult, RuntimeConfig
@@ -26,7 +25,10 @@ def load_login_config(logger):
 
 
 def execute_login_with_retries(runtime_config: RuntimeConfig, logger) -> LoginResult:
-    """执行登录，含固定间隔重试。
+    """执行登录（重试由 Worker 内的 LoginSession 负责）。
+
+    本函数仅做单次 submit，重试循环已收敛到 LoginSession（单次会话内
+    复用浏览器，失败重试间隔由 RetrySettings.retry_interval 控制）。
 
     Args:
         runtime_config: 运行时配置。
@@ -51,24 +53,13 @@ def execute_login_with_retries(runtime_config: RuntimeConfig, logger) -> LoginRe
         profile_service=profile_service,
     )
 
-    max_retries = max(1, min(runtime_config.retry.max_retries, 10))
-    interval = max(1, runtime_config.retry.retry_interval)
-
     try:
-        for attempt in range(1, max_retries + 1):
-            if attempt > 1:
-                logger.debug("等待 {}s 后重试第 {} 次", interval, attempt)
-                time.sleep(interval)
-
-            handle = orchestrator.submit(source="login_once", config=runtime_config)
-            ok, msg = handle.result()
-            if ok:
-                cleanup_orphan_browsers()
-                return LoginResult.SUCCESS
-            logger.warning("登录失败 (第 {} 次): {}", attempt, msg)
-
+        handle = orchestrator.submit(source="login_once", config=runtime_config)
+        ok, msg = handle.result()
         cleanup_orphan_browsers()
-        logger.warning("已重试 {} 次均失败，回退到正常模式", max_retries)
+        if ok:
+            return LoginResult.SUCCESS
+        logger.warning("登录失败: {}", msg)
         return LoginResult.TEMPORARY_FAILURE
     finally:
         orchestrator.shutdown(wait=False)
