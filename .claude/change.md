@@ -2,6 +2,12 @@
 
 ## 2026-07-04
 
+### refactor(login): 移除 login_runner 外层重试，收敛到 LoginSession
+
+- `app/services/login_runner.py`：`execute_login_with_retries` 移除外层 `for attempt` 重试循环和 `time.sleep` 间隔，改为单次 `orchestrator.submit`；删除顶部 `import time`；重试逻辑由 Worker 内 LoginSession 负责（复用浏览器），避免外层 × 内层重试次数乘积放大
+- `tests/test_integration/test_login_integration_extended.py`：`TestLoginOnceRetry` 移除 `patch("time.sleep")`；`test_execute_login_with_retries_exhausted` 断言 `submit.call_count == 1`（原为 2）；删除 `test_execute_login_with_retries_retry_then_succeed`（外层重试已移除）
+- `tests/test_app/test_main.py`：`TestRunLoginThenExit` 删除 `test_retry_then_succeed`（外层重试已移除）；`test_retries_exhausted` 移除 `patch("time.sleep")` 并更新 warning 断言为"登录失败"；`TestLoginOnceRetryInterval` 删除 `test_fixed_retry_interval`（外层重试间隔已不存在）；其余测试移除多余的 `patch("time.sleep")`
+
 ### feat(login): 新增 LoginSession 浏览器复用与重试循环
 
 - `app/services/login_session.py`：新增 `LoginSession` 类，单 `async with BrowserContextManager` 包住整个重试循环；所有终态（成功/失败/取消/耗尽/异常）都触发 `__aexit__` 关闭浏览器；`interruptible_sleep` 支持等待中取消；最后一次重试后不再等待；`LoginRetryPolicy` 默认从 `config["retry_settings"]` 构造

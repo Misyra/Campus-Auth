@@ -329,7 +329,6 @@ class TestLoginOnceRetry:
         with (
             patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
             patch("app.workers.playwright_worker.cleanup_orphan_browsers"),
-            patch("time.sleep"),
         ):
             from app.schemas import LoginResult
             from app.services.login_runner import execute_login_with_retries as _execute_login_with_retries
@@ -352,7 +351,6 @@ class TestLoginOnceRetry:
         with (
             patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
             patch("app.workers.playwright_worker.cleanup_orphan_browsers"),
-            patch("time.sleep"),
         ):
             from app.schemas import LoginResult
             from app.services.login_runner import execute_login_with_retries as _execute_login_with_retries
@@ -360,34 +358,8 @@ class TestLoginOnceRetry:
             result = _execute_login_with_retries(runtime_config, MagicMock())
 
         assert result == LoginResult.TEMPORARY_FAILURE
-        assert mock_worker.submit.call_count == 2
-
-    def test_execute_login_with_retries_retry_then_succeed(self, integration_stack):
-        """第一次失败、重试后成功 → 返回 SUCCESS。"""
-        engine, _, _, _, _ = integration_stack
-        _ensure_login_config(engine)
-        mock_worker = MagicMock()
-        mock_worker.submit.side_effect = [
-            WorkerResponse(success=False, error="超时"),
-            WorkerResponse(success=True, data="登录成功"),
-        ]
-        from app.schemas import RetrySettings
-        runtime_config = engine.get_runtime_config().model_copy(
-            update={"retry": RetrySettings(max_retries=3, retry_interval=1)}
-        )
-
-        with (
-            patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
-            patch("app.workers.playwright_worker.cleanup_orphan_browsers"),
-            patch("time.sleep"),
-        ):
-            from app.schemas import LoginResult
-            from app.services.login_runner import execute_login_with_retries as _execute_login_with_retries
-
-            result = _execute_login_with_retries(runtime_config, MagicMock())
-
-        assert result == LoginResult.SUCCESS
-        assert mock_worker.submit.call_count == 2
+        # 单次 submit（重试由 LoginSession 内部负责）
+        assert mock_worker.submit.call_count == 1
 
 
 class TestProfileSwitchDuringLogin:
