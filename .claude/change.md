@@ -2,6 +2,11 @@
 
 ## 2026-07-04
 
+### feat(utils): 新增 interruptible_sleep 可中断异步等待
+
+- `app/utils/concurrent.py`：新增 `interruptible_sleep(seconds, cancel_event, *, poll_interval=0.2)` 函数，纯异步轮询模式，兼容 `threading.Event` 与 `CompositeCancelEvent`，用于 LoginSession 重试间隔
+- `tests/test_utils/test_concurrent_sleep.py`：新增 6 个测试用例，覆盖正常完成、中途取消、零秒/负秒防御、已设置事件快速返回、自定义轮询间隔
+
 ### feat(login): 新增 LoginRetryPolicy 会话级重试策略
 
 - `app/services/login_models.py`：新增 `LoginRetryPolicy` dataclass，从 `RuntimeConfig.retry` 派生，`max_retries` 裁剪到 [1, 10]，`next_delay(attempt_index)` 返回固定间隔或 None
