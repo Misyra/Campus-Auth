@@ -710,16 +710,16 @@ class TestCreateNoWindowFlag:
 
 
 # =====================================================================
-# LoginAttemptHandler.close_browser 幂等性
+# LoginAttempt.close_browser 幂等性
 # =====================================================================
 
 
-class TestLoginAttemptHandlerCloseIdempotent:
+class TestLoginAttemptCloseIdempotent:
     def test_close_browser_idempotent(self):
         """多次调用 close_browser 不应报错（幂等）"""
-        from app.services.login_handler import LoginAttemptHandler
+        from app.services.login_attempt import LoginAttempt
 
-        handler = LoginAttemptHandler(config={})
+        handler = LoginAttempt(config={})
         # _browser_ctx 为 None 时，close_browser 应安全返回
         import asyncio
 

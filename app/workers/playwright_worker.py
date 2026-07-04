@@ -424,16 +424,16 @@ class PlaywrightWorker:
     async def _handle_login(self, data: dict) -> WorkerResponse:
         """处理登录命令。
 
-        创建 LoginAttemptHandler 执行完整登录流程。
-        LoginAttemptHandler 内部管理浏览器生命周期（创建/关闭）。
+        创建 LoginAttempt 执行完整登录流程。
+        LoginAttempt 内部管理浏览器生命周期（创建/关闭）。
         """
-        from app.services.login_handler import LoginAttemptHandler
+        from app.services.login_attempt import LoginAttempt
 
         config = data.get("config", {})
         cancel_event: threading.Event | None = data.get("cancel_event")
 
         try:
-            handler = LoginAttemptHandler(
+            handler = LoginAttempt(
                 config=config,
                 cancel_event=cancel_event,
             )

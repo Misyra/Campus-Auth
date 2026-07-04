@@ -1,7 +1,7 @@
 """监控与登录模块综合测试
 
 合并原 test_login.py 和 test_monitor_service.py。
-覆盖 LoginAttemptHandler、SCREENSHOT_URL_PATTERN、NetworkMonitorCore 等。
+覆盖 LoginAttempt、SCREENSHOT_URL_PATTERN、NetworkMonitorCore 等。
 """
 
 from __future__ import annotations
@@ -19,9 +19,9 @@ from app.services.monitor_service import (
     NetworkMonitorCore,
     NetworkState,
 )
-from app.services.login_handler import SCREENSHOT_URL_PATTERN, LoginAttemptHandler
+from app.services.login_attempt import SCREENSHOT_URL_PATTERN, LoginAttempt
 
-# ── 第一部分：LoginAttemptHandler（原 test_login.py）──
+# ── 第一部分：LoginAttempt（原 test_login.py）──
 
 
 # =====================================================================
@@ -62,13 +62,13 @@ class TestScreenshotUrlPattern:
 
 
 # =====================================================================
-# LoginAttemptHandler 初始化
+# LoginAttempt 初始化
 # =====================================================================
 
 
-class TestLoginAttemptHandlerInit:
+class TestLoginAttemptInit:
     def test_init_defaults(self):
-        handler = LoginAttemptHandler(config={})
+        handler = LoginAttempt(config={})
         assert handler.config == {}
         assert handler.cancel_event is None
         assert handler._browser_ctx is None
@@ -76,7 +76,7 @@ class TestLoginAttemptHandlerInit:
 
     def test_init_with_cancel_event(self):
         event = threading.Event()
-        handler = LoginAttemptHandler(config={}, cancel_event=event)
+        handler = LoginAttempt(config={}, cancel_event=event)
         assert handler.cancel_event is event
 
 
@@ -89,7 +89,7 @@ class TestAttemptLogin:
     @pytest.mark.asyncio
     async def test_delegates_to_perform(self):
         """attempt_login 直接委托 _perform_login_with_active_task。"""
-        handler = LoginAttemptHandler(config={})
+        handler = LoginAttempt(config={})
 
         with patch.object(
             handler,
@@ -104,7 +104,7 @@ class TestAttemptLogin:
     @pytest.mark.asyncio
     async def test_exception_returns_error(self):
         """异常应被捕获并返回错误消息"""
-        handler = LoginAttemptHandler(config={})
+        handler = LoginAttempt(config={})
 
         with patch.object(
             handler,
@@ -125,7 +125,7 @@ class TestCloseBrowser:
     @pytest.mark.asyncio
     async def test_close_browser_with_context(self):
         """有浏览器上下文时应释放上下文引用（不销毁浏览器实例）"""
-        handler = LoginAttemptHandler(config={})
+        handler = LoginAttempt(config={})
         mock_ctx = AsyncMock()
         handler._browser_ctx = mock_ctx
 
@@ -137,14 +137,14 @@ class TestCloseBrowser:
     @pytest.mark.asyncio
     async def test_close_browser_without_context(self):
         """无浏览器上下文时不应抛异常"""
-        handler = LoginAttemptHandler(config={})
+        handler = LoginAttempt(config={})
         handler._browser_ctx = None
         await handler.close_browser()
 
     @pytest.mark.asyncio
     async def test_close_browser_exception_handled(self):
         """关闭过程中异常应被捕获"""
-        handler = LoginAttemptHandler(config={})
+        handler = LoginAttempt(config={})
         mock_ctx = AsyncMock()
         mock_ctx.__aexit__ = AsyncMock(side_effect=RuntimeError("close error"))
         handler._browser_ctx = mock_ctx

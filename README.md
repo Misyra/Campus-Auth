@@ -226,7 +226,7 @@ Campus-Auth/
 │   │   ├── engine.py         # 统一后台引擎（监控 + 调度）
 │   │   ├── task_executor.py  # 任务执行（双线程池）
 │   │   ├── login_orchestrator.py # 登录编排
-│   │   ├── login_handler.py  # 登录尝试处理
+│   │   ├── login_attempt.py  # 登录尝试处理
 │   │   ├── login_runner.py   # 登录执行（login_once 模式）
 │   │   ├── scheduler_service.py # 定时调度
 │   │   ├── profile_service.py # 配置方案管理
@@ -296,7 +296,7 @@ Campus-Auth/
 - `app/services/engine.py`：统一后台引擎，整合监控与调度。
 - `app/services/task_executor.py`：任务执行器，双线程池架构。
 - `app/services/login_orchestrator.py`：登录编排，协调 Worker 和任务执行。
-- `app/services/login_handler.py`：登录尝试处理，浏览器任务和脚本任务编排。
+- `app/services/login_attempt.py`：登录尝试处理，浏览器任务和脚本任务编排。
 - `app/services/profile_service.py`：多网络配置方案管理，网关/SSID 检测，自动切换。
 - `app/services/config_builder.py`：配置构建与运行时配置合并。
 - `app/services/monitor_service.py`：网络监控核心，网络探测循环与 Profile 自动切换。

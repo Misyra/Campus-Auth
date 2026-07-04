@@ -92,7 +92,7 @@ class BrowserContextManager:
         """异步上下文管理器入口 — 通过 Worker 获取浏览器
 
         Worker 管理浏览器生命周期，不再直接调用 _start_browser()。
-        从 Worker 获取浏览器对象引用（同线程安全，因为 LoginAttemptHandler
+        从 Worker 获取浏览器对象引用（同线程安全，因为 LoginAttempt
         始终在 Worker 的事件循环线程中执行）。
         """
         if self._is_cancelled():

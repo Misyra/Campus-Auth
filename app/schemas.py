@@ -257,7 +257,7 @@ def get_runtime_features(
 
 
 class BrowserSettings(BaseModel, frozen=True):
-    """浏览器运行参数 — PlaywrightWorker / LoginAttemptHandler 消费。
+    """浏览器运行参数 — PlaywrightWorker / LoginAttempt 消费。
 
     字段名与旧 dict 键名保持兼容，最小化消费端迁移量。
     """
@@ -284,7 +284,7 @@ class BrowserSettings(BaseModel, frozen=True):
 
 
 class LoginCredentials(BaseModel, frozen=True):
-    """登录凭证 — LoginAttemptHandler / LoginOrchestrator 消费。"""
+    """登录凭证 — LoginAttempt / LoginOrchestrator 消费。"""
 
     username: str = ""
     password: str = ""
