@@ -10,6 +10,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from app.services.login_models import AttemptOutcome, AttemptOutcomeType
 from app.utils.browser import BrowserContextManager
 from app.utils.env import build_login_template_vars
 from app.utils.exceptions import LoginCancelledError
@@ -29,18 +30,23 @@ class LoginAttempt:
         self,
         config: dict[str, Any],
         cancel_event: threading.Event | None = None,
+        *,
+        browser: BrowserContextManager | None = None,
     ):
         """
-        初始化登录处理器
+        初始化登录尝试器。
 
         参数:
             config: 配置字典
             cancel_event: 取消事件，设置后中断登录操作
+            browser: Session 模式下由 LoginSession 传入的浏览器上下文。
+                     非 None 时复用该浏览器，不自行创建/关闭；
+                     None 时保持旧行为（自行创建/关闭，兼容旧调用方）。
         """
         self.config = config
         self.cancel_event = cancel_event
         self.logger = get_logger("login", source="backend")
-        self._browser_ctx: BrowserContextManager | None = None
+        self._browser_ctx: BrowserContextManager | None = browser
         self._task_manager: Any | None = None
         self._project_root: Path | None = None
 
@@ -78,6 +84,56 @@ class LoginAttempt:
         except Exception as e:
             error_msg = f"登录过程中发生错误: {e!s}"
             return False, error_msg
+
+    async def execute(self) -> AttemptOutcome:
+        """执行单次登录尝试，返回 AttemptOutcome。
+
+        LoginSession 调用此方法。内部委托给 attempt_login() 并做
+        tuple[bool, str] → AttemptOutcome 映射。
+
+        异常处理：
+        - LoginCancelledError → CANCELLED
+        - 明确可重试网络异常 → RETRYABLE
+        - PlaywrightError（Target closed 等）→ RETRYABLE
+        - 程序异常 → 不捕获，向上传播让 Worker 处理
+
+        本方法不识别 INVALID_CREDENTIAL（保守策略：未识别一律 RETRYABLE），
+        凭证错误识别留待后续按 Portal 特征实现。
+        """
+        from playwright.async_api import Error as PlaywrightError
+        from playwright.async_api import TimeoutError as PlaywrightTimeoutError
+
+        from app.utils.exceptions import LoginCancelledError
+
+        _RETRYABLE_ERRORS: tuple[type[BaseException], ...] = (
+            ConnectionResetError,
+            ConnectionAbortedError,
+            ConnectionRefusedError,
+            TimeoutError,  # Python 内置
+            PlaywrightTimeoutError,  # playwright.async_api.TimeoutError
+        )
+        _RETRYABLE_PLAYWRIGHT_SUBSTRINGS = (
+            "Target closed",
+            "Connection closed",
+            "Browser has been closed",
+        )
+
+        try:
+            success, message = await self.attempt_login()
+            if success:
+                return AttemptOutcome(AttemptOutcomeType.SUCCESS, message)
+            # 失败默认 RETRYABLE；INVALID_CREDENTIAL 识别待后续实现
+            return AttemptOutcome(AttemptOutcomeType.RETRYABLE, message)
+        except LoginCancelledError:
+            return AttemptOutcome(AttemptOutcomeType.CANCELLED, "登录已取消")
+        except _RETRYABLE_ERRORS as exc:
+            return AttemptOutcome(AttemptOutcomeType.RETRYABLE, str(exc))
+        except PlaywrightError as exc:
+            msg = str(exc)
+            if any(s in msg for s in _RETRYABLE_PLAYWRIGHT_SUBSTRINGS):
+                return AttemptOutcome(AttemptOutcomeType.RETRYABLE, msg)
+            raise  # 其他 PlaywrightError 视为程序异常
+        # 程序异常（TypeError/KeyError 等）不捕获，直接抛出
 
     async def _perform_login_with_active_task(self) -> tuple[bool, str] | None:
         """执行当前活动任务；返回 None 表示未找到可执行任务。"""
@@ -158,32 +214,43 @@ class LoginAttempt:
         if self.cancel_event and self.cancel_event.is_set():
             return False, "登录已取消"
 
-        # 创建新浏览器实例
+        # 浏览器获取：Session 模式复用传入的 browser，旧模式自行创建
         if self._browser_ctx is not None:
-            await self.close_browser()
-
-        self.logger.debug("启动浏览器")
-        browser_start = time.perf_counter()
-        browser_manager = BrowserContextManager(
-            self.config, cancel_event=self.cancel_event
-        )
-        self._browser_ctx = browser_manager  # 先赋值，确保异常时 close_browser 能清理
-        try:
-            await browser_manager.__aenter__()
-        except Exception:
-            # __aenter__ 失败时手动调用 __aexit__ 释放已获取的资源
-            self._browser_ctx = None
-            with contextlib.suppress(Exception):
-                await browser_manager.__aexit__(*sys.exc_info())
-            raise
-        self.logger.debug("浏览器就绪 ({:.1f}s)", time.perf_counter() - browser_start)
+            # Session 模式：browser 已由 LoginSession 通过 __init__ 传入并就绪
+            browser_manager = self._browser_ctx
+            browser_owned = False
+            self.logger.debug("复用 Session 浏览器")
+        else:
+            # 旧模式：自行创建浏览器（兼容调试会话等旧调用方）
+            browser_owned = True
+            self.logger.debug("启动浏览器")
+            browser_start = time.perf_counter()
+            browser_manager = BrowserContextManager(
+                self.config, cancel_event=self.cancel_event
+            )
+            self._browser_ctx = (
+                browser_manager  # 先赋值，确保异常时 close_browser 能清理
+            )
+            try:
+                await browser_manager.__aenter__()
+            except Exception:
+                # __aenter__ 失败时手动调用 __aexit__ 释放已获取的资源
+                self._browser_ctx = None
+                with contextlib.suppress(Exception):
+                    await browser_manager.__aexit__(*sys.exc_info())
+                raise
+            self.logger.debug(
+                "浏览器就绪 ({:.1f}s)", time.perf_counter() - browser_start
+            )
 
         success = False
         try:
             if not browser_manager.page:
                 raise RuntimeError("浏览器页面初始化失败")
 
-            browser_timeout = self._browser_settings.get("timeout", 8) * 1000  # 秒 → 毫秒
+            browser_timeout = (
+                self._browser_settings.get("timeout", 8) * 1000
+            )  # 秒 → 毫秒
             navigation_timeout = (
                 self._browser_settings.get("navigation_timeout", 15) * 1000
             )  # 秒 → 毫秒
@@ -220,7 +287,10 @@ class LoginAttempt:
             self.logger.warning("登录失败: {} (耗时 {:.1f}s)", log_msg, total)
             return False, message
         finally:
-            await self.close_browser()
+            # 旧模式（自行创建）需要关闭浏览器；
+            # Session 模式（外部传入）由 LoginSession 的 async with 负责关闭。
+            if browser_owned:
+                await self.close_browser()
 
     async def _execute_script_task(
         self, task: Any, phase_start: float
@@ -256,8 +326,17 @@ class LoginAttempt:
         await asyncio.sleep(LOGIN_SUCCESS_SETTLE_SECONDS)
 
         from app.schemas import MonitorSettings
-        monitor_settings = MonitorSettings(**{k: v for k, v in self._monitor_settings.items() if k in MonitorSettings.model_fields})
-        net_ok, net_msg, _ = await asyncio.to_thread(check_network_status, monitor_settings)
+
+        monitor_settings = MonitorSettings(
+            **{
+                k: v
+                for k, v in self._monitor_settings.items()
+                if k in MonitorSettings.model_fields
+            }
+        )
+        net_ok, net_msg, _ = await asyncio.to_thread(
+            check_network_status, monitor_settings
+        )
 
         total = time.perf_counter() - phase_start
         if net_ok:
