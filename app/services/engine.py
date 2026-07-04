@@ -247,7 +247,13 @@ class LoginBridge:
                     return False
 
         source = "manual" if is_manual else "auto"
-        handle = orchestrator.submit(source=source, config=config)
+        try:
+            handle = orchestrator.submit(source=source, config=config)
+        except Exception as exc:
+            self._logger.error("登录提交异常: {}", exc)
+            if on_complete is not None:
+                on_complete(False, str(exc))
+            return False
 
         if handle.rejected_reason is not None:
             self._logger.warning("登录被拒绝: {}", handle.rejected_reason)

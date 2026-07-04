@@ -104,6 +104,9 @@ class TestFullMode:
             pause=engine._runtime_config.pause,
             logging=engine._runtime_config.logging,
             app_settings=AppSettings(),
+            username="testuser",
+            password="testpass",
+            auth_url="http://10.0.0.1",
         )
         result = save_global_and_profile(payload, profile_service, engine.reload_config)
         assert result.success is True

@@ -186,6 +186,12 @@ class TestFullLoginSequence:
     def test_do_async_login_submits_to_executor(self):
         """_do_async_login 正确提交到 orchestrator 并管理状态。"""
         svc = _make_raw_engine()
+        svc._runtime_config = RuntimeConfig(
+            credentials=LoginCredentials(
+                username="testuser", password="testpass", auth_url="http://auth.example.com",
+            ),
+            monitor=MonitorSettings(enable_local_check=False, check_auth_url=False),
+        )
         future = Future()
         handle = MagicMock()
         handle.rejected_reason = None
@@ -450,6 +456,12 @@ class TestLoginConcurrencyProtection:
     def test_concurrent_login_rejection(self):
         """并发登录请求：第一个成功，后续被去重拒绝。"""
         svc = _make_raw_engine()
+        svc._runtime_config = RuntimeConfig(
+            credentials=LoginCredentials(
+                username="testuser", password="testpass", auth_url="http://auth.example.com",
+            ),
+            monitor=MonitorSettings(enable_local_check=False, check_auth_url=False),
+        )
         callback_done = threading.Event()
         future = Future()
         _orig_adc = future.add_done_callback
@@ -535,13 +547,19 @@ class TestLoginConcurrencyProtection:
 
         assert svc._task_executor.is_login_running() is True
 
-    def test_login_exception_propagates(self):
-        """登录执行异常时，异常会向上传播。"""
+    def test_login_exception_returns_false(self):
+        """登录执行异常时，返回 False。"""
         svc = _make_raw_engine()
+        svc._runtime_config = RuntimeConfig(
+            credentials=LoginCredentials(
+                username="testuser", password="testpass", auth_url="http://auth.example.com",
+            ),
+            monitor=MonitorSettings(enable_local_check=False, check_auth_url=False),
+        )
         svc._orchestrator.submit.side_effect = RuntimeError("线程池已关闭")
 
-        with pytest.raises(RuntimeError):
-            svc._do_async_login()
+        result = svc._do_async_login()
+        assert result is False
 
     def test_future_none_returns_false(self):
         """去重命中时，返回 False。"""
@@ -558,6 +576,12 @@ class TestLoginConcurrencyProtection:
     def test_multiple_threads_competing_for_login(self):
         """多线程竞争登录：由 orchestrator 内部去重，结果取决于 submit 返回。"""
         svc = _make_raw_engine()
+        svc._runtime_config = RuntimeConfig(
+            credentials=LoginCredentials(
+                username="testuser", password="testpass", auth_url="http://auth.example.com",
+            ),
+            monitor=MonitorSettings(enable_local_check=False, check_auth_url=False),
+        )
         callback_done = threading.Event()
         future = Future()
         _orig_adc = future.add_done_callback

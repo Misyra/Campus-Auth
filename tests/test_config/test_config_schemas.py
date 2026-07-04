@@ -180,7 +180,7 @@ class TestProfileDefaults:
         p = Profile()
         assert p.name == "默认方案"
         assert p.username == ""
-        assert p.password == ""
+        assert p.password is None  # None 表示不修改
         assert p.carrier == "无"
         assert p.auth_url == ""
 

@@ -141,9 +141,10 @@ class TestNetworkDetectionLogin:
         }
         engine._monitor_core = mock_core
 
-        from app.schemas import RetrySettings
+        from app.schemas import MonitorSettings, RetrySettings
         engine._runtime_config = engine._runtime_config.model_copy(update={
             "retry": RetrySettings(max_retries=3, retry_interval=30),
+            "monitor": MonitorSettings(enable_local_check=False, check_auth_url=False),
         })
 
         assert not task_executor.is_login_running()
@@ -168,6 +169,11 @@ class TestNetworkDetectionLogin:
     def test_retry_after_failure(self, integration_stack):
         engine, profile_service, task_executor, _, mock_worker = integration_stack
         _ensure_login_config(engine)
+
+        from app.schemas import MonitorSettings
+        engine._runtime_config = engine._runtime_config.model_copy(update={
+            "monitor": MonitorSettings(enable_local_check=False, check_auth_url=False),
+        })
 
         mock_worker.submit.return_value = WorkerResponse(
             success=False, error="认证失败"

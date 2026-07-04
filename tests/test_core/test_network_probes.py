@@ -78,7 +78,10 @@ class TestIsLocalNetworkConnected:
             "Ethernet": MagicMock(isup=True, speed=1000),
             "Loopback Pseudo-Interface 1": MagicMock(isup=True, speed=1073),
         }
-        with patch("app.network.probes.psutil.net_if_stats", return_value=mock_stats):
+        with (
+            patch("app.network.probes.psutil.net_if_stats", return_value=mock_stats),
+            patch("app.network.probes._check_interface_connectivity", return_value=True),
+        ):
             assert is_local_network_connected() is True
 
     def test_returns_false_on_loopback_only(self):

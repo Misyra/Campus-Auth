@@ -79,21 +79,20 @@ class TestAttemptLogin:
         mock_perform.assert_awaited_once()
 
     @pytest.mark.asyncio
-    async def test_exception_propagates(self):
-        """程序异常不再被 attempt_login 吞掉，直接传播给 execute() 分类。"""
+    async def test_exception_returns_error(self):
+        """attempt_login 内异常应被捕获并返回错误消息。"""
         config = _make_config()
         handler = LoginAttempt(config)
 
-        with (
-            patch.object(
-                handler,
-                "_perform_login_with_active_task",
-                new_callable=AsyncMock,
-                side_effect=RuntimeError("boom"),
-            ),
-            pytest.raises(RuntimeError, match="boom"),
+        with patch.object(
+            handler,
+            "_perform_login_with_active_task",
+            new_callable=AsyncMock,
+            side_effect=RuntimeError("boom"),
         ):
-            await handler.attempt_login()
+            ok, msg = await handler.attempt_login()
+            assert ok is False
+            assert "boom" in msg
 
     @pytest.mark.asyncio
     async def test_active_task_returns_result(self):
