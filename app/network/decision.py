@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import atexit
+import contextlib
 import socket
 from collections.abc import Iterable, Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -25,7 +25,7 @@ from .probes import (
 _decision_executor = ThreadPoolExecutor(
     max_workers=3, thread_name_prefix="net_decision"
 )
-atexit.register(_decision_executor.shutdown, wait=False, cancel_futures=True)
+_decision_shutdown_done = False
 
 
 @dataclass(slots=True)
@@ -317,5 +317,10 @@ def _is_auth_url_reachable(
 
 
 def shutdown_decision_executor(wait: bool = True) -> None:
-    """关闭决策层线程池，在应用关闭时调用。"""
-    _decision_executor.shutdown(wait=wait)
+    """关闭决策层线程池，在应用关闭时调用。幂等。"""
+    global _decision_shutdown_done
+    if _decision_shutdown_done:
+        return
+    _decision_shutdown_done = True
+    with contextlib.suppress(RuntimeError):
+        _decision_executor.shutdown(wait=wait)

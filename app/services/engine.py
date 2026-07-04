@@ -10,15 +10,15 @@ WS 广播委托给 WebSocketManager。
 from __future__ import annotations
 
 import contextlib
-from concurrent.futures import CancelledError, Future
 import queue
-import re
 import threading
 import time
+from collections.abc import Callable
+from concurrent.futures import CancelledError, Future
 from dataclasses import dataclass, field
-from enum import StrEnum
+from enum import Enum, StrEnum
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from app.services.login_orchestrator import LoginOrchestrator
@@ -31,7 +31,6 @@ from app.services.monitor_service import NetworkMonitorCore
 from app.services.websocket_manager import WebSocketManager
 from app.utils import validate_env_config
 from app.utils.logging import get_logger
-from app.services.login_handler import SCREENSHOT_URL_PATTERN
 
 from .profile_service import ProfileService
 from .retry_policy import MonitoredPolicy
@@ -48,6 +47,15 @@ class EngineCmdType(StrEnum):
     SHUTDOWN = "shutdown"
     RELOAD = "reload"
     APPLY_PROFILE = "apply_profile"
+
+
+class StartResult(Enum):
+    """监控启动结果。"""
+
+    SUCCESS = "success"
+    ALREADY_RUNNING = "already_running"
+    INVALID_CONFIG = "invalid_config"
+    START_FAILED = "start_failed"
 
 
 @dataclass
@@ -593,13 +601,13 @@ class ScheduleEngine:
         """【委托】提交登录到 LoginBridge。"""
         return self._login_bridge.submit_login(is_manual=is_manual, config_snapshot=config_snapshot)
 
-    def _handle_start(self, cmd: EngineCommand) -> None:
-        """启动监控（在引擎循环中调用）。"""
+    def _handle_start(self, cmd: EngineCommand) -> StartResult:
+        """启动监控（在引擎循环中调用）。返回启动结果。"""
         if self._monitor_core is not None and self._monitor_core.monitoring:
             self._logger.warning("监控已在运行中")
             if cmd.response_event:
                 cmd.response_event.set()
-            return
+            return StartResult.ALREADY_RUNNING
 
         # 统一验证配置（确保所有路径都经过验证）
         valid, error = validate_env_config(self._runtime_config)
@@ -607,7 +615,7 @@ class ScheduleEngine:
             self._logger.warning("启动监控失败: 配置无效: {}", error)
             if cmd.response_event:
                 cmd.response_event.set()
-            return
+            return StartResult.INVALID_CONFIG
 
         config = self._runtime_config
         pure_mode = cmd.data.get("pure_mode", self.pure_mode)
@@ -615,23 +623,30 @@ class ScheduleEngine:
             # frozen model: create new browser copy with pure_mode=True
             config = config.model_copy(update={"browser": config.browser.model_copy(update={"pure_mode": True})})
 
-        core = NetworkMonitorCore(
-            config=config,
-            logger=self._logger,
-            login_history=self._login_history,
-        )
-        core.set_profile_service(self._profile_service)
-        core.init_monitoring()  # 只初始化，不启动循环
-        self._monitor_core = core
+        try:
+            core = NetworkMonitorCore(
+                config=config,
+                logger=self._logger,
+                login_history=self._login_history,
+            )
+            core.set_profile_service(self._profile_service)
+            core.init_monitoring()  # 只初始化，不启动循环
+            self._monitor_core = core
 
-        # 传递网卡绑定代理 URL 到登录编排器
-        if self._orchestrator is not None:
-            self._orchestrator.set_bind_proxy(core.bind_proxy_url)
-        self._next_network_check = time.time()  # 立即执行第一次检测
-        self._update_status_snapshot(force=True)
-        self._logger.info("监控已启动")
-        if cmd.response_event:
-            cmd.response_event.set()
+            # 传递网卡绑定代理 URL 到登录编排器
+            if self._orchestrator is not None:
+                self._orchestrator.set_bind_proxy(core.bind_proxy_url)
+            self._next_network_check = time.time()  # 立即执行第一次检测
+            self._update_status_snapshot(force=True)
+            self._logger.info("监控已启动")
+            if cmd.response_event:
+                cmd.response_event.set()
+            return StartResult.SUCCESS
+        except Exception as exc:
+            self._logger.exception("监控启动失败: {}", exc)
+            if cmd.response_event:
+                cmd.response_event.set()
+            return StartResult.START_FAILED
 
     def _handle_stop(self, cmd: EngineCommand | None = None) -> None:
         """停止监控。"""
@@ -695,7 +710,19 @@ class ScheduleEngine:
         # 仅当重载成功且之前处于监控状态时，才执行 stop/start
         if was_monitoring:
             self._handle_stop()
-            self._handle_start(EngineCommand(type=EngineCmdType.START))
+            result = self._handle_start(EngineCommand(type=EngineCmdType.START))
+            if result == StartResult.INVALID_CONFIG:
+                self._logger.warning("配置重载后监控重启失败：配置无效")
+                cmd.response_data = (False, "配置重载成功但监控重启失败：配置无效")
+                if cmd.response_event:
+                    cmd.response_event.set()
+                return
+            elif result == StartResult.START_FAILED:
+                self._logger.warning("配置重载后监控重启失败")
+                cmd.response_data = (False, "配置重载成功但监控重启失败")
+                if cmd.response_event:
+                    cmd.response_event.set()
+                return
         logger.info("配置已重载")
         cmd.response_data = (True, "配置重载成功")
         if cmd.response_event:
@@ -733,7 +760,19 @@ class ScheduleEngine:
 
         if was_monitoring:
             self._handle_stop()
-            self._handle_start(EngineCommand(type=EngineCmdType.START))
+            result = self._handle_start(EngineCommand(type=EngineCmdType.START))
+            if result == StartResult.INVALID_CONFIG:
+                self._logger.warning("方案切换后监控重启失败：配置无效")
+                cmd.response_data = (False, "方案切换成功但监控重启失败：配置无效")
+                if cmd.response_event:
+                    cmd.response_event.set()
+                return
+            elif result == StartResult.START_FAILED:
+                self._logger.warning("方案切换后监控重启失败")
+                cmd.response_data = (False, "方案切换成功但监控重启失败")
+                if cmd.response_event:
+                    cmd.response_event.set()
+                return
             self._logger.debug("监控正在按新方案重启")
         cmd.response_data = (True, "方案切换成功")
         if cmd.response_event:
@@ -775,6 +814,13 @@ class ScheduleEngine:
 
     def boot(self) -> None:
         """启动引擎（线程 + 监控）。由调用方决定是否调用，不再自行判断配置。"""
+        # 启动前清理孤儿浏览器（所有启动入口统一执行）
+        from app.workers.playwright_worker import cleanup_orphan_browsers
+        try:
+            cleanup_orphan_browsers()
+        except Exception as exc:
+            logger.warning("清理孤儿浏览器失败: {}", exc)
+
         # 启动引擎线程（确保所有依赖注入完成后再启动）
         self.start_thread()
         self.start_monitoring()

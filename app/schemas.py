@@ -1,13 +1,18 @@
 from __future__ import annotations
 
-import json
 import re
 from dataclasses import dataclass
 from enum import StrEnum
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from app.constants import DEFAULT_HTTP_TARGETS, DEFAULT_NETWORK_TARGETS, DEFAULT_URL_CHECK_URLS, URL_PATTERN, VALID_LOG_LEVELS
+from app.constants import (
+    DEFAULT_HTTP_TARGETS,
+    DEFAULT_NETWORK_TARGETS,
+    DEFAULT_URL_CHECK_URLS,
+    URL_PATTERN,
+    VALID_LOG_LEVELS,
+)
 
 
 class StartupAction(StrEnum):
@@ -218,7 +223,7 @@ class Profile(BaseModel):
     match_gateway_ip: str = ""
     match_ssid: str = ""
     username: str = ""
-    password: str = ""          # ENC: 加密存储
+    password: str | None = None  # None 表示不修改，"" 表示清空，"ENC:..." 表示已加密
     auth_url: str = ""
     carrier: str = "无"
     carrier_custom: str = ""
@@ -379,7 +384,7 @@ class ConfigSaveRequest(BaseModel):
     app_settings: AppSettings = Field(default_factory=AppSettings)
     # 凭据（平铺）
     username: str = ""
-    password: str = ""
+    password: str | None = None  # None 表示不修改，"" 表示清空
     auth_url: str = ""
     isp: str = ""
     carrier_custom: str = ""
@@ -589,7 +594,7 @@ class ScheduledTaskConfig(BaseModel):
     timeout: int = Field(default=60, ge=5, le=3600)
 
     @model_validator(mode="after")
-    def validate_type_fields(self) -> "ScheduledTaskConfig":
+    def validate_type_fields(self) -> ScheduledTaskConfig:
         if self.type == "shell" and not self.command:
             raise ValueError("Shell 命令不能为空")
         if self.type in ("script", "browser") and not self.target_id:

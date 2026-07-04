@@ -148,6 +148,7 @@ def is_block_proxy() -> bool:
 
 
 _VIRTUAL_NIC_PREFIXES = (
+    # Linux
     "docker",  # docker0, docker-*
     "veth",  # veth pair (Docker/K8s)
     "br-",  # bridge (Docker)
@@ -155,42 +156,123 @@ _VIRTUAL_NIC_PREFIXES = (
     "vboxnet",  # VirtualBox
     "virbr",  # libvirt
     "tap-",  # TAP (OpenVPN 等)
+    # Windows
+    "hyper-v",  # Hyper-V Virtual Ethernet Adapter
+    "virtualbox",  # VirtualBox Host-Only Network
+    "vmware",  # VMware Network Adapter
+)
+
+_VIRTUAL_NIC_KEYWORDS = (
+    "virtual",  # Virtual Ethernet, Virtual Adapter
+    "pseudo",  # Pseudo-Interface
+    "tunnel",  # Tunnel, Tunneling
+    "miniport",  # WAN Miniport
+    "teredo",  # Teredo Tunneling
+    "loopback",  # Loopback
 )
 
 
 def _is_virtual_nic(name: str) -> bool:
-    """判断接口名是否为虚拟网卡（docker/bridge/虚拟机/TAP 等）。"""
-    return name.lower().startswith(_VIRTUAL_NIC_PREFIXES)
+    """判断接口名是否为虚拟网卡（候选过滤，非最终判定）。"""
+    lower = name.lower()
+    if lower.startswith(_VIRTUAL_NIC_PREFIXES):
+        return True
+    return any(kw in lower for kw in _VIRTUAL_NIC_KEYWORDS)
+
+
+def _get_candidate_interfaces(
+    interface_name: str = "",
+) -> list[tuple[str, object]]:
+    """获取候选网卡列表（up + 非 loopback + 非虚拟网卡 + speed > 0）。"""
+    candidates = []
+    all_stats = psutil.net_if_stats()
+
+    if interface_name:
+        # 指定网卡：直接作为候选（即使可能是虚拟网卡）
+        stats = all_stats.get(interface_name)
+        if stats is not None and stats.isup:
+            candidates.append((interface_name, stats))
+        return candidates
+
+    # 未指定：遍历所有网卡，过滤候选
+    for name, stats in all_stats.items():
+        if not stats.isup:
+            continue
+        if name.lower().startswith("lo"):
+            continue
+        if _is_virtual_nic(name):
+            continue
+        # speed == 0 可能是虚拟网卡或半断开状态，跳过
+        if stats.speed == 0:
+            continue
+        candidates.append((name, stats))
+
+    return candidates
+
+
+def _check_interface_connectivity(interface_name: str) -> bool:
+    """通过 TCP Connect 验证网卡连通性。"""
+    # 常见可达目标
+    test_targets = [
+        ("8.8.8.8", 53),  # Google DNS
+        ("114.114.114.114", 53),  # 国内 DNS
+        ("1.1.1.1", 53),  # Cloudflare DNS
+    ]
+
+    # 获取网卡绑定 IP
+    addrs = psutil.net_if_addrs().get(interface_name, [])
+    source_ip = None
+    for addr in addrs:
+        if addr.family == socket.AF_INET:
+            source_ip = addr.address
+            break
+
+    if not source_ip:
+        return False
+
+    # TCP Connect 测试
+    for host, port in test_targets:
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(1.0)
+            sock.bind((source_ip, 0))
+            result = sock.connect_ex((host, port))
+            sock.close()
+
+            if result == 0:
+                return True
+        except Exception:
+            continue
+
+    return False
 
 
 def is_local_network_connected(interface_name: str = "") -> bool:
-    """检查本地网络是否有实际连接（有线或无线）。
+    """检查本地网络是否有实际连接。
 
-    参数:
-        interface_name: 指定网卡名称，为空时检查所有物理网卡。
-            指定时优先检查该网卡，不可用时回退到检查所有物理网卡。
+    策略：候选网卡过滤 + TCP Connect 最终判定。
     """
     try:
-        if interface_name:
-            stats = psutil.net_if_stats().get(interface_name)
-            if stats is not None and stats.isup:
-                logger.debug("绑定网卡已连接: {}", interface_name)
+        candidates = _get_candidate_interfaces(interface_name)
+        if not candidates:
+            if interface_name:
+                logger.error("绑定网卡 {} 不可用", interface_name)
+            else:
+                logger.warning("未找到候选网卡")
+            return False
+
+        # 对候选网卡执行 TCP Connect 验证
+        for name, stats in candidates:
+            if _check_interface_connectivity(name):
+                logger.debug("网卡 {} 连通性验证通过 (speed={}Mbps)", name, stats.speed)
                 return True
-            logger.error("绑定网卡 {} 不可用，回退检查物理网络", interface_name)
-        # 原逻辑：任一物理网卡 up
-        for name, stats in psutil.net_if_stats().items():
-            if (
-                stats.isup
-                and not name.lower().startswith("lo")
-                and not _is_virtual_nic(name)
-            ):
-                logger.debug("网络接口已连接: {} (speed={}Mbps)", name, stats.speed)
-                return True
+
+        logger.warning("所有候选网卡连通性验证失败")
+        return False
+
     except Exception as exc:
         logger.debug("psutil 网络检测失败: {}", exc)
-
-    logger.warning("未检测到本地网络连接")
-    return False
+        return False
 
 
 def is_network_available_socket(

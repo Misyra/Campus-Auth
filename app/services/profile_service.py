@@ -10,7 +10,13 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from app.network.detect import detect_gateway_ip, detect_wifi_ssid
-from app.schemas import ConfigSaveRequest, GlobalConfig, Profile, ProfilesData, RuntimeConfig
+from app.schemas import (
+    ConfigSaveRequest,
+    GlobalConfig,
+    Profile,
+    ProfilesData,
+    RuntimeConfig,
+)
 from app.utils.crypto import save_password_field
 from app.utils.files import atomic_write
 from app.utils.logging import get_logger
@@ -130,10 +136,16 @@ class ProfileService:
         with self._lock:
             data = self._load_unsafe()
             existing = data.profiles.get(profile_id)
-            settings.password = save_password_field(
-                settings.password or "",
-                existing.password if existing else "",
-            )
+
+            # 处理密码字段：None 表示不修改，保留原值
+            if settings.password is None:
+                settings.password = existing.password if existing else ""
+            else:
+                settings.password = save_password_field(
+                    settings.password,
+                    existing.password if existing else "",
+                )
+
             data.profiles[profile_id] = settings
 
             if len(data.profiles) == 1:
@@ -321,11 +333,14 @@ def save_global_and_profile(
         else:
             carrier = payload.isp
 
-        # 密码处理：掩码保留原值，空串清除，明文加密
-        new_password = save_password_field(
-            payload.password,
-            existing.password or "",
-        )
+        # 密码处理：None 保留原值，空串清除，明文加密
+        if payload.password is None:
+            new_password = existing.password or ""
+        else:
+            new_password = save_password_field(
+                payload.password,
+                existing.password or "",
+            )
 
         # 使用 model_validate 确保验证（model_copy 不触发验证）
         data.profiles[profile_id] = Profile.model_validate({

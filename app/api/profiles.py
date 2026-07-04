@@ -16,7 +16,6 @@ from app.schemas import (
 )
 from app.utils.logging import get_logger
 
-
 router = APIRouter()
 api_logger = get_logger("api", source="backend")
 
@@ -62,7 +61,9 @@ def get_profile(
     profile = data.profiles.get(profile_id)
     if not profile:
         raise HTTPException(status_code=404, detail="方案不存在")
-    return ProfileDetailResponse(profile_id=profile_id, settings=profile)
+    # 不返回实际密码值，只返回空字符串（表示有密码时前端显示掩码）
+    safe_profile = profile.model_copy(update={"password": ""})
+    return ProfileDetailResponse(profile_id=profile_id, settings=safe_profile)
 
 
 @router.put("/api/profiles/{profile_id}", response_model=ApiResponse)
