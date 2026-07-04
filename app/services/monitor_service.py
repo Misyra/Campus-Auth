@@ -302,6 +302,11 @@ class NetworkMonitorCore:
         """当前绑定代理 URL（供引擎传递给 Worker）。"""
         return getattr(self, "_bind_proxy_url", None)
 
+    @staticmethod
+    def _is_non_routable(ip: str) -> bool:
+        """判断 IP 是否不可路由（本地回环或 APIPA）。"""
+        return ip.startswith("127.") or ip.startswith("169.254.")
+
     def _start_bind_proxy(self) -> None:
         """根据 bind_interface_name 启动 SOCKS5 Forwarder。"""
         self._bind_proxy_url: str | None = None
@@ -319,6 +324,13 @@ class NetworkMonitorCore:
         bind_ip = self._interface_mgr.resolve_ip(bind_name)
         if not bind_ip:
             self.log_message(f"绑定网卡 {bind_name} 不可用，回退系统路由", "ERROR")
+            return
+
+        # 检查 IP 是否可路由（非回环、非 APIPA）
+        if self._is_non_routable(bind_ip):
+            self.log_message(
+                f"绑定网卡 {bind_name} 的 IP {bind_ip} 不可路由，回退系统路由", "ERROR"
+            )
             return
 
         from app.network.proxy import Socks5Server
