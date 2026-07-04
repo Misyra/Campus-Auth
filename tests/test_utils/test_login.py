@@ -80,20 +80,21 @@ class TestAttemptLogin:
         mock_perform.assert_awaited_once()
 
     @pytest.mark.asyncio
-    async def test_exception_caught_returns_false(self):
+    async def test_exception_propagates(self):
+        """程序异常不再被 attempt_login 吞掉，直接传播给 execute() 分类。"""
         config = _make_config()
         handler = LoginAttempt(config)
 
-        with patch.object(
-            handler,
-            "_perform_login_with_active_task",
-            new_callable=AsyncMock,
-            side_effect=RuntimeError("boom"),
+        with (
+            patch.object(
+                handler,
+                "_perform_login_with_active_task",
+                new_callable=AsyncMock,
+                side_effect=RuntimeError("boom"),
+            ),
+            pytest.raises(RuntimeError, match="boom"),
         ):
-            ok, msg = await handler.attempt_login()
-
-        assert ok is False
-        assert "boom" in msg
+            await handler.attempt_login()
 
     @pytest.mark.asyncio
     async def test_active_task_returns_result(self):
@@ -231,8 +232,8 @@ class TestPerformLoginWithActiveTask:
         assert "登录已取消" in outcome.message
 
     @pytest.mark.asyncio
-    async def test_generic_exception(self):
-        """通用异常被捕获（行 146-149）。"""
+    async def test_generic_exception_propagates(self):
+        """程序异常不再被 _perform_login_with_active_task 吞掉，直接传播。"""
         config = _make_config()
         handler = LoginAttempt(config)
 
@@ -242,10 +243,8 @@ class TestPerformLoginWithActiveTask:
 
         with patch.object(handler, "_ensure_task_manager"):
             handler._task_manager = mock_tm
-            ok, msg = await handler._perform_login_with_active_task()
-
-        assert ok is False
-        assert "task error" in msg
+            with pytest.raises(RuntimeError, match="task error"):
+                await handler._perform_login_with_active_task()
 
 
 # ── _execute_browser_task ────────────────────────────────────────────
@@ -277,6 +276,7 @@ class TestExecuteBrowserTask:
         mock_page = MagicMock()
         mock_page.on = MagicMock()
         mock_page.remove_listener = MagicMock()
+        mock_page.is_closed = MagicMock(return_value=False)
 
         mock_browser = MagicMock()
         mock_browser.page = mock_page
