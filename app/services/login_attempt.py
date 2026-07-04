@@ -1,4 +1,4 @@
-"""登录尝试处理器。"""
+"""单次登录尝试 — 任务加载、Script/Browser 分支、表单提交与结果解析。"""
 
 import asyncio
 import contextlib
@@ -22,8 +22,8 @@ SCREENSHOT_URL_PATTERN = r"\s*截图[:：]\s*/\S+\.(?:png|jpg|jpeg|webp|gif)"
 LOGIN_SUCCESS_SETTLE_SECONDS = 2
 
 
-class LoginAttemptHandler:
-    """登录尝试处理器 - 统一登录逻辑（解决循环依赖）"""
+class LoginAttempt:
+    """单次登录尝试 — 任务加载、Script/Browser 分支、表单提交与结果解析。"""
 
     def __init__(
         self,

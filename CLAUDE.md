@@ -115,7 +115,7 @@ Campus-Auth/
 │   │   ├── engine.py          # ScheduleEngine 统一后台引擎
 │   │   ├── task_executor.py   # 任务执行器（双线程池）
 │   │   ├── login_orchestrator.py # 登录编排
-│   │   ├── login_handler.py   # 登录尝试处理
+│   │   ├── login_attempt.py   # 登录尝试处理
 │   │   ├── login_runner.py    # 登录执行（login_once 模式）
 │   │   ├── scheduler_service.py  # 定时调度
 │   │   ├── monitor_service.py    # 网络监控核心
