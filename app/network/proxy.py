@@ -7,6 +7,7 @@ import socket
 import struct
 import threading
 
+from app.network.interfaces import is_apipa_address, is_local_address
 from app.utils.logging import get_logger
 
 logger = get_logger("socks5_proxy", source="backend")
@@ -92,20 +93,6 @@ class Socks5Server:
                     logger.error("SOCKS5 accept error")
                 break
 
-    @staticmethod
-    def _is_local_address(addr: str) -> bool:
-        """判断是否为本地地址（127.0.0.0/8 或 localhost）。"""
-        return addr == "localhost" or addr.startswith("127.")
-
-    @staticmethod
-    def _is_non_routable(addr: str) -> bool:
-        """判断是否为不可路由地址（本地回环或 APIPA）。"""
-        return (
-            addr == "localhost"
-            or addr.startswith("127.")
-            or addr.startswith("169.254.")
-        )
-
     def _handle_client(self, client: socket.socket) -> None:
         remote: socket.socket | None = None
         try:
@@ -113,8 +100,7 @@ class Socks5Server:
             addr, port = self._do_connect_request(client)
             bind_ip = self._get_bind_ip()
             # 目标是本地地址或绑定 IP 不可路由时，不绑定 source_address
-            # 不可路由包括：本地回环（127.0.0.0/8）、APIPA（169.254.0.0/16）
-            if self._is_local_address(addr) or self._is_non_routable(bind_ip):
+            if is_local_address(addr) or is_apipa_address(bind_ip) or is_local_address(bind_ip):
                 source_addr = None
             else:
                 source_addr = (bind_ip, 0)
