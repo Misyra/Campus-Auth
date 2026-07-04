@@ -5,7 +5,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Request
 
 from app.deps import AutoStartServiceDep
-from app.schemas import ApiResponse, AutoStartStatusResponse, AutostartEnableRequest, ShellListResponse
+from app.schemas import ApiResponse, AutoStartStatusResponse, AutostartEnableRequest, ShellInfo, ShellListResponse
 from app.utils.logging import get_logger
 from app.utils.shell_utils import detect_shells as detect_available_shells
 from app.utils.shell_utils import get_default_shell
@@ -19,7 +19,10 @@ def list_shells() -> ShellListResponse:
     """获取系统可用的 Shell 列表。"""
     shells = detect_available_shells()
     default_shell = get_default_shell()
-    return ShellListResponse(shells=[s["path"] for s in shells], default=default_shell)
+    return ShellListResponse(
+        shells=[ShellInfo(**s) for s in shells],
+        default=default_shell,
+    )
 
 
 def _read_autostart_lightweight(request: Request) -> bool:

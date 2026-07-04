@@ -445,9 +445,16 @@ class HealthResponse(BaseModel):
     process: dict = Field(default_factory=dict)
 
 
+class ShellInfo(BaseModel):
+    """Shell 信息。"""
+    name: str = ""
+    path: str = ""
+    description: str = ""
+
+
 class ShellListResponse(BaseModel):
     """GET /api/shells 响应。"""
-    shells: list[str] = Field(default_factory=list)
+    shells: list[ShellInfo] = Field(default_factory=list)
     default: str = ""
 
 
