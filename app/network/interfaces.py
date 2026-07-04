@@ -168,3 +168,35 @@ class InterfaceManager:
         """检查指定网卡是否 up。"""
         stats = psutil.net_if_stats().get(name)
         return stats is not None and stats.isup
+
+    @staticmethod
+    def _is_routable_ip(ip: str) -> bool:
+        """判断 IP 是否可路由（非回环、非 APIPA）。"""
+        return not (ip.startswith("127.") or ip.startswith("169.254."))
+
+    def is_interface_bindable(self, name: str) -> tuple[bool, str]:
+        """判断网卡是否可用于绑定。
+
+        检查项：
+        1. 网卡是否存在
+        2. 网卡是否 up
+        3. IP 是否可路由（非回环、非 APIPA）
+
+        Returns:
+            (是否可用, 原因)
+        """
+        stats = psutil.net_if_stats().get(name)
+        if stats is None:
+            return False, f"网卡 {name} 不存在"
+
+        if not stats.isup:
+            return False, f"网卡 {name} 未连接"
+
+        ip = self._get_ipv4(name)
+        if not ip:
+            return False, f"网卡 {name} 无 IPv4 地址"
+
+        if not self._is_routable_ip(ip):
+            return False, f"网卡 {name} 的 IP {ip} 不可路由"
+
+        return True, ""
