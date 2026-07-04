@@ -97,15 +97,24 @@ class Socks5Server:
         """判断是否为本地地址（127.0.0.0/8 或 localhost）。"""
         return addr == "localhost" or addr.startswith("127.")
 
+    @staticmethod
+    def _is_non_routable(addr: str) -> bool:
+        """判断是否为不可路由地址（本地回环或 APIPA）。"""
+        return (
+            addr == "localhost"
+            or addr.startswith("127.")
+            or addr.startswith("169.254.")
+        )
+
     def _handle_client(self, client: socket.socket) -> None:
         remote: socket.socket | None = None
         try:
             self._do_handshake(client)
             addr, port = self._do_connect_request(client)
             bind_ip = self._get_bind_ip()
-            # 本地地址或绑定 IP 是回环地址时，不绑定 source_address
-            # 避免 Windows 上回环 IP 连接远程地址失败
-            if self._is_local_address(addr) or self._is_local_address(bind_ip):
+            # 目标是本地地址或绑定 IP 不可路由时，不绑定 source_address
+            # 不可路由包括：本地回环（127.0.0.0/8）、APIPA（169.254.0.0/16）
+            if self._is_local_address(addr) or self._is_non_routable(bind_ip):
                 source_addr = None
             else:
                 source_addr = (bind_ip, 0)
