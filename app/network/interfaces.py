@@ -53,8 +53,7 @@ class InterfaceManager:
 
     def _is_physical(self, name: str, stats: object) -> bool:
         """判断是否为物理网卡（排除回环、虚拟网卡、无 IPv4 的接口）。"""
-        if stats.isloopback:
-            return False
+        # Windows 的 snicstats 没有 isloopback 属性，通过名称判断
         if name.lower().startswith("lo"):
             return False
         if _is_virtual_nic(name):
