@@ -223,10 +223,13 @@ export const appOptions = {
       ];
     },
     networkInterfaceOptions() {
-      return this.networkInterfaces.map(iface => ({
-        value: iface.id,
-        label: `${iface.name} (${iface.ip} / 网关 ${iface.gateway || '无'})`,
-      }));
+      return [
+        { value: '', label: '不绑定（系统默认路由）' },
+        ...this.networkInterfaces.map(iface => ({
+          value: iface.id,
+          label: `${iface.name} (${iface.ip} / 网关 ${iface.gateway || '无'})`,
+        })),
+      ];
     },
     selectedInterfaceDown() {
       const name = this.config.monitor.bind_interface_name;
