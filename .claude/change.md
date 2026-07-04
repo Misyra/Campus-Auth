@@ -2,6 +2,63 @@
 
 ## 2026-07-04
 
+### fix: 浏览器定时任务退化为通用登录
+
+- `app/services/task_executor.py`：`_execute_browser` 方法从 registry 加载任务配置后，将 `task_id` 注入到 `RuntimeConfig.active_task`，确保 `LoginAttemptHandler` 加载正确的任务配置，而非全局活动任务
+
+### fix: 定时任务错过不可恢复
+
+- `app/services/scheduler_service.py`：新增追赶机制，`tick()` 方法从上次 tick 到当前时间之间的所有分钟都会被检查，错过的定时任务会被补执行；新增 `MAX_CATCHUP_MINUTES = 30` 限制追赶窗口，避免启动时执行过期任务；新增 `_get_catchup_minutes()` 方法计算追赶分钟列表，正确处理跨天边界
+- `tests/test_services/test_p0_fixes.py`：新增 P0 修复验证测试，覆盖 task_id 注入和追赶机制的各种场景
+
+### fix: P1 问题批量修复
+
+- P1-1 孤儿浏览器清理整合到 `Engine.boot()`：所有启动入口（完整模式、轻量模式）统一执行 `cleanup_orphan_browsers()`，从 `container.py` 的 `startup()` 中移除重复调用
+- P1-3 方案切换监控失败静默：新增 `StartResult` 枚举（SUCCESS/ALREADY_RUNNING/INVALID_CONFIG/START_FAILED），`_handle_start()` 返回启动结果，`_handle_apply_profile()` 和 `_handle_reload()` 检查返回值，失败时返回错误信息
+- P1-4 掩码密码处理：`Profile.password` 和 `ConfigSaveRequest.password` 改为 `str | None`，`None` 表示不修改密码；前端未编辑密码时传 `null`；后端 `get_profile` 不返回实际密码值
+- P1-5 Windows 虚拟网卡误判：扩展 `_VIRTUAL_NIC_PREFIXES` 增加 Windows 前缀（hyper-v/virtualbox/vmware），新增 `_VIRTUAL_NIC_KEYWORDS` 关键词匹配，`is_local_network_connected` 改为候选过滤 + TCP Connect 最终判定
+- P1-6 decision_executor 关闭竞态：删除 `atexit.register()`，添加幂等保护 `_decision_shutdown_done`
+
+### refactor: 提取网络工具函数到 utils.py
+
+- `app/network/utils.py`：新增模块，包含 `is_local_address`、`is_apipa_address`、`is_routable_ip` 三个 IP 地址分类工具函数
+- `app/network/interfaces.py`：移除内联的工具函数，改为从 `utils.py` 导入 `is_routable_ip`
+- `app/network/proxy.py`：从 `utils.py` 导入 `is_local_address` 和 `is_routable_ip`，简化 `_handle_client` 中的条件判断
+
+### refactor: 统一 IP 地址分类逻辑到 interfaces.py
+
+- `app/network/interfaces.py`：新增模块级函数 `is_local_address`、`is_apipa_address`、`is_routable_ip`，`InterfaceManager._is_routable_ip` 改为调用 `is_routable_ip`
+- `app/network/proxy.py`：移除 `Socks5Server._is_local_address` 和 `_is_non_routable` 方法，改为导入并调用 `is_local_address`、`is_apipa_address`
+
+### refactor: 封装网卡可用性检查到 InterfaceManager.is_interface_bindable
+
+- `app/network/interfaces.py`：新增 `_is_routable_ip` 静态方法判断 IP 是否可路由；新增 `is_interface_bindable` 方法，检查网卡是否存在、是否 up、IP 是否可路由，返回 (是否可用, 原因) 元组
+- `app/services/monitor_service.py`：移除 `_is_non_routable` 方法，`_start_bind_proxy` 改用 `is_interface_bindable` 统一检查
+
+### fix: 绑定网卡 IP 不可路由时回退系统路由
+
+- `app/services/monitor_service.py`：新增 `_is_non_routable` 静态方法判断不可路由 IP（127.0.0.0/8 或 169.254.0.0/16）；`_start_bind_proxy` 中检测到绑定 IP 不可路由时，不启动 SOCKS5 代理，直接回退系统路由
+
+### fix: SOCKS5 APIPA 地址不绑定 source_address
+
+- `app/network/proxy.py`：新增 `_is_non_routable` 静态方法判断不可路由地址（本地回环或 APIPA 169.254.0.0/16）；`_handle_client` 中当绑定 IP 是不可路由地址时，不绑定 source_address，避免 Windows 上 APIPA 地址连接远程地址失败（WinError 10049）
+
+### fix: SOCKS5 绑定 IP 是回环地址时不绑定 source_address
+
+- `app/network/proxy.py`：`_handle_client` 中当绑定 IP 是回环地址（127.0.0.0/8）时，不绑定 source_address，避免 Windows 上回环 IP 连接远程地址失败（WinError 10051）
+
+### fix: SOCKS5 代理连接本地地址时不绑定 source_address
+
+- `app/network/proxy.py`：新增 `_is_local_address` 静态方法判断本地地址（127.0.0.0/8 或 localhost）；`_handle_client` 中本地地址不绑定 source_address，避免 Windows 上非回环 IP 连接回环地址失败（WinError 10049）
+
+### fix: 修复 Windows 上 isloopback 属性不存在导致网卡枚举失败
+
+- `app/network/interfaces.py`：`_is_physical` 方法移除对 `stats.isloopback` 的依赖（Windows 的 `snicstats` 无此属性），改为仅通过接口名称判断回环
+
+### fix: 修复网卡列表 API 调用路径错误（network → monitor）
+
+- `frontend/js/app-options.js`：`loadNetworkInterfaces` 方法中 API 调用路径从 `this.$apiService.network.fetchInterfaces()` 修正为 `this.$apiService.monitor.fetchInterfaces()`，匹配 `api-service.js` 中的实际分组
+
 ### fix: 修复网络探测测试因 source_address 参数不匹配导致的 4 个失败
 
 - `tests/test_core/test_network_probes.py`：`test_success_on_second_target` mock 的 `side_effect` 函数签名补充 `source_address=None` 参数；`test_successful_connection`、`test_https_default_port`、`test_http_default_port` 三个断言补充 `source_address=None` 以匹配 NIC 绑定功能引入的 `socket.create_connection` 新参数
