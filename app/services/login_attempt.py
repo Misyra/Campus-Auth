@@ -13,6 +13,7 @@ from typing import Any
 from app.services.login_models import AttemptOutcome, AttemptOutcomeType
 from app.utils.browser import BrowserContextManager
 from app.utils.env import build_login_template_vars
+from app.utils.exceptions import LoginCancelledError
 from app.utils.logging import get_logger
 
 # 用于从日志消息中移除截图路径的正则表达式
@@ -71,9 +72,15 @@ class LoginAttempt:
             tuple[bool, str]: (是否成功, 详细信息)
         """
         self.logger.debug("登录开始")
-        task_result = await self._perform_login_with_active_task()
-        if task_result is not None:
-            return task_result
+        try:
+            task_result = await self._perform_login_with_active_task()
+            if task_result is not None:
+                return task_result
+        except LoginCancelledError:
+            raise
+        except Exception as exc:
+            self.logger.error("登录异常: {}", exc)
+            return False, str(exc)
 
         error_msg = "未找到可执行的任务，请先在任务管理页面创建并启用一个登录任务"
         self.logger.warning("登录失败: {}", error_msg)

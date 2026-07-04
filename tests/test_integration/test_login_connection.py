@@ -40,9 +40,15 @@ class TestLoginConnection:
         mock_worker.submit.return_value = WorkerResponse(success=True, data="登录成功")
 
         # 网络异常 → check_once 返回 need_login → 触发登录
-        with patch(
-            "app.network.decision.check_network_status",
-            return_value=(False, "network_down", "none"),
+        with (
+            patch(
+                "app.network.decision.check_network_status",
+                return_value=(False, "network_down", "none"),
+            ),
+            patch(
+                "app.network.decision.check_login_prerequisites",
+                return_value=(True, ""),
+            ),
         ):
             result = engine._do_async_login()
 

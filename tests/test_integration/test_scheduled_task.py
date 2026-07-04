@@ -54,12 +54,14 @@ def _make_executor(
     if history_store is None:
         history_store = MagicMock(spec=TaskHistoryStore)
 
+    from app.schemas import RuntimeConfig
+
     executor = TaskExecutor(
         registry=registry,
         history_store=history_store,
         worker_getter=kwargs.get("worker_getter", MagicMock()),
         get_runtime_config=kwargs.get(
-            "get_runtime_config", lambda: {"browser_settings": {}}
+            "get_runtime_config", lambda: RuntimeConfig()
         ),
         login_orchestrator=kwargs.get("login_orchestrator", MagicMock()),
     )
