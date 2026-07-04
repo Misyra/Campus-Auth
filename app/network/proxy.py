@@ -7,7 +7,7 @@ import socket
 import struct
 import threading
 
-from app.network.interfaces import is_apipa_address, is_local_address
+from app.network.utils import is_local_address, is_routable_ip
 from app.utils.logging import get_logger
 
 logger = get_logger("socks5_proxy", source="backend")
@@ -100,7 +100,7 @@ class Socks5Server:
             addr, port = self._do_connect_request(client)
             bind_ip = self._get_bind_ip()
             # 目标是本地地址或绑定 IP 不可路由时，不绑定 source_address
-            if is_local_address(addr) or is_apipa_address(bind_ip) or is_local_address(bind_ip):
+            if is_local_address(addr) or not is_routable_ip(bind_ip):
                 source_addr = None
             else:
                 source_addr = (bind_ip, 0)

@@ -16,6 +16,7 @@ from app.network.detect import (
     _parse_windows_all_routes,
 )
 from app.network.probes import _is_virtual_nic
+from app.network.utils import is_routable_ip
 from app.utils.logging import get_logger
 from app.utils.platform import CREATE_NO_WINDOW_FLAG
 
@@ -25,24 +26,6 @@ logger = get_logger("interfaces", source="backend")
 _AF_INET = socket.AF_INET  # Windows=2, Linux=2, macOS=2
 
 _CACHE_TTL = 30.0  # 秒
-
-
-# ── IP 地址分类工具函数 ──
-
-
-def is_local_address(addr: str) -> bool:
-    """判断是否为本地地址（127.0.0.0/8 或 localhost）。"""
-    return addr == "localhost" or addr.startswith("127.")
-
-
-def is_apipa_address(addr: str) -> bool:
-    """判断是否为 APIPA 地址（169.254.0.0/16）。"""
-    return addr.startswith("169.254.")
-
-
-def is_routable_ip(ip: str) -> bool:
-    """判断 IP 是否可路由（非回环、非 APIPA）。"""
-    return not (is_local_address(ip) or is_apipa_address(ip))
 
 
 @dataclass(frozen=True, slots=True)
@@ -190,7 +173,7 @@ class InterfaceManager:
     @staticmethod
     def _is_routable_ip(ip: str) -> bool:
         """判断 IP 是否可路由（非回环、非 APIPA）。"""
-        return is_routable_ip(ip)
+        return is_routable_ip(ip)  # ponytail: 保持接口一致性，内部调用 utils
 
     def is_interface_bindable(self, name: str) -> tuple[bool, str]:
         """判断网卡是否可用于绑定。
