@@ -189,7 +189,15 @@ export const appOptions = {
     shellPathOptions() {
       return [
         { value: '', label: '自动检测（推荐）' },
-        ...this.availableShells.map(s => ({ value: s.path, label: s.name + ' - ' + s.description })),
+        ...this.availableShells.map(s => {
+          if (typeof s === 'string') {
+            // 后端返回字符串数组
+            const name = s.split(/[\\/]/).pop() || s;
+            return { value: s, label: name };
+          }
+          // 后端返回对象数组
+          return { value: s.path, label: (s.name || s.path) + (s.description ? ' - ' + s.description : '') };
+        }),
         { value: '__custom__', label: '自定义路径...' },
       ];
     },
