@@ -94,6 +94,11 @@ class TestLoginConnection:
         engine, profile_service, task_executor, _, mock_worker = integration_stack
         _ensure_login_config(engine)
 
+        from app.schemas import MonitorSettings
+        engine._runtime_config = engine._runtime_config.model_copy(update={
+            "monitor": MonitorSettings(enable_local_check=False, check_auth_url=False),
+        })
+
         mock_worker.submit.return_value = WorkerResponse(
             success=False, error="网络超时"
         )
