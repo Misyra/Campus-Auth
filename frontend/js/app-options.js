@@ -342,7 +342,7 @@ export const appOptions = {
 
     async loadNetworkInterfaces() {
       try {
-        const data = await this.$apiService.network.fetchInterfaces();
+        const data = await this.$apiService.monitor.fetchInterfaces();
         this.networkInterfaces = data;
       } catch (e) {
         console.error('Failed to load network interfaces:', e);
