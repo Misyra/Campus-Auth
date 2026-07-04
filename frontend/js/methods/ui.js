@@ -236,58 +236,6 @@ export const uiMethods = {
     this.currentPage = page;
     if (!keepMoreMenu) this.showMoreNav = false;
   },
-  addCustomVar() {
-    // 确保 custom_variables 是对象
-    if (!this.config.app_settings.custom_variables || typeof this.config.app_settings.custom_variables !== 'object') {
-      this.config.app_settings.custom_variables = {};
-    }
-    // 生成默认变量名
-    let index = 1;
-    let key = `var_${index}`;
-    while (Object.hasOwn(this.config.app_settings.custom_variables, key)) {
-      index++;
-      key = `var_${index}`;
-    }
-    this.config.app_settings.custom_variables[key] = '';
-  },
-  removeCustomVar(key) {
-    if (this.config.app_settings.custom_variables && key in this.config.app_settings.custom_variables) {
-      const newVars = { ...this.config.app_settings.custom_variables };
-      delete newVars[key];
-      this.config.app_settings.custom_variables = newVars;
-    }
-  },
-  updateCustomVarKey(oldKey, newKey) {
-    if (!newKey || oldKey === newKey) return;
-    newKey = newKey.trim();
-    if (!newKey) return;
-    // 验证新变量名格式
-    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(newKey)) {
-      this.frontendLogger.warn('config', '自定义变量名格式无效: ' + newKey);
-      this.toastOnly(false, '变量名必须以字母或下划线开头，只能包含字母、数字和下划线');
-      // 恢复原值
-      this.$nextTick(() => {
-        const input = document.querySelector('.custom-var-item input[data-var-key="' + CSS.escape(oldKey) + '"]');
-        if (input) input.value = oldKey;
-      });
-      return;
-    }
-    if (Object.hasOwn(this.config.app_settings.custom_variables, newKey)) {
-      this.frontendLogger.warn('config', '自定义变量名已存在: ' + newKey);
-      this.toastOnly(false, '变量名已存在');
-      return;
-    }
-    // 创建新键并复制值
-    const newVars = {};
-    for (const [k, v] of Object.entries(this.config.app_settings.custom_variables)) {
-      if (k === oldKey) {
-        newVars[newKey] = v;
-      } else {
-        newVars[k] = v;
-      }
-    }
-    this.config.app_settings.custom_variables = newVars;
-  },
   _isViewerAtBottom() {
     const logViewer = this.$refs?.logViewer;
     if (!logViewer || logViewer.scrollHeight === 0) return true;

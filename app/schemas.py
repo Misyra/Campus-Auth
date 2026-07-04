@@ -356,7 +356,6 @@ class AppSettings(BaseModel, frozen=True):
     auto_open_browser: bool = False
     proxy: str = ""
     app_port: int = Field(default=50721, ge=1, le=65535)
-    custom_variables: dict[str, str] = Field(default_factory=dict)
 
 
 # ── API 请求/响应模型 ──

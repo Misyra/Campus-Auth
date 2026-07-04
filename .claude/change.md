@@ -2,6 +2,22 @@
 
 ## 2026-07-04
 
+### refactor: 删除自定义变量功能
+
+- `app/schemas.py`：删除 `AppSettings.custom_variables` 字段
+- `app/utils/env.py`：删除 `_ENV_DENYLIST` 常量和 `build_login_template_vars()` 中的 `custom_variables` 参数及相关逻辑
+- `app/services/login_orchestrator.py`：删除 `custom_variables` 传递
+- `app/services/login_attempt.py`：删除 `self._custom_variables` 存储和传递
+- `app/services/debug_service.py`：删除 `custom_variables` 参数传递
+- `frontend/partials/pages/settings/settings-account.html`：将自定义变量编辑 UI 替换为功能移除提示
+- `frontend/js/methods/ui.js`：删除 `addCustomVar()`、`removeCustomVar()`、`updateCustomVarKey()` 方法
+- `frontend/js/constants.js`：删除 `custom_variables` 默认值
+- `frontend/js/data/config.js`：简化 `cloneConfig()` 中的 `app_settings` 拷贝
+- `docs/dev/architecture.md`：删除变量优先级表中的自定义变量行
+- 测试文件：删除所有 `custom_variables` 相关测试和断言
+
+### fix(login): 修复 LoginCancelledError 无法映射为 CANCELLED 终态
+
 ### fix(login): 修复 LoginCancelledError 无法映射为 CANCELLED 终态
 
 - `app/services/login_attempt.py`：`attempt_login()` 和 `_perform_login_with_active_task()` 的 `except Exception` catch-all 会吞掉 `LoginCancelledError`，导致 `execute()` 的 `except LoginCancelledError` 成为死代码。在两层 catch-all 前增加 `except LoginCancelledError: raise`，让异常传播到 `execute()` 正确映射为 CANCELLED 终态
