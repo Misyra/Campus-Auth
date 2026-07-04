@@ -107,10 +107,7 @@ class ServiceContainer:
 
     async def startup(self):
         """启动所有服务。"""
-        from app.workers.playwright_worker import cleanup_orphan_browsers
-
         try:
-            cleanup_orphan_browsers()
             self.start_web_services()
             self.engine.boot()
             self.engine.sync_scheduler_state()

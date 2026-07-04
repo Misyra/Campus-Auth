@@ -13,7 +13,7 @@ from app.schemas import (
 def build_runtime_config(global_config: GlobalConfig, profile: Profile) -> RuntimeConfig:
     """构建运行时配置。ISP 转换、密码过滤只在此处发生。"""
     username = profile.username.strip()
-    raw_password = profile.password.strip()
+    raw_password = (profile.password or "").strip()
     password = raw_password if (raw_password and not raw_password.startswith("•")) else ""
     auth_url = profile.auth_url.strip()
 

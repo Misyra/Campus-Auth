@@ -220,16 +220,17 @@ class TestPhysicalCheckFallback:
     """物理网络检查回退逻辑验证。"""
 
     def test_specific_interface_up(self, monkeypatch):
-        """指定网卡 up 时应返回 True。"""
+        """指定网卡 up 且连通时应返回 True。"""
         from app.network import probes as probes_mod
 
         fake_stats = {"Ethernet": type("S", (), {"isup": True, "speed": 1000})()}
         monkeypatch.setattr("app.network.probes.psutil.net_if_stats", lambda: fake_stats)
+        monkeypatch.setattr(probes_mod, "_check_interface_connectivity", lambda name: name == "Ethernet")
 
         assert probes_mod.is_local_network_connected(interface_name="Ethernet") is True
 
     def test_specific_interface_down_fallback(self, monkeypatch):
-        """指定网卡 down 时应回退检查其他物理网卡。"""
+        """指定网卡 down 时应返回 False（候选列表为空）。"""
         from app.network import probes as probes_mod
 
         fake_stats = {
@@ -237,28 +238,33 @@ class TestPhysicalCheckFallback:
             "Wi-Fi": type("S", (), {"isup": True, "speed": 300})(),
         }
         monkeypatch.setattr("app.network.probes.psutil.net_if_stats", lambda: fake_stats)
+        monkeypatch.setattr(probes_mod, "_check_interface_connectivity", lambda name: name == "Wi-Fi")
 
-        assert probes_mod.is_local_network_connected(interface_name="Ethernet") is True
+        # 指定网卡 down 时，候选列表只包含指定网卡（即使 down）
+        assert probes_mod.is_local_network_connected(interface_name="Ethernet") is False
 
     def test_specific_interface_missing_fallback(self, monkeypatch):
-        """指定网卡不存在时应回退检查其他物理网卡。"""
+        """指定网卡不存在时应返回 False（候选列表为空）。"""
         from app.network import probes as probes_mod
 
         fake_stats = {
             "Wi-Fi": type("S", (), {"isup": True, "speed": 300})(),
         }
         monkeypatch.setattr("app.network.probes.psutil.net_if_stats", lambda: fake_stats)
+        monkeypatch.setattr(probes_mod, "_check_interface_connectivity", lambda name: name == "Wi-Fi")
 
-        assert probes_mod.is_local_network_connected(interface_name="Ethernet") is True
+        # 指定网卡不存在时，候选列表为空
+        assert probes_mod.is_local_network_connected(interface_name="Ethernet") is False
 
-    def test_no_interface_name_uses_original_logic(self, monkeypatch):
-        """不指定网卡名时使用原有逻辑。"""
+    def test_no_interface_name_uses_candidate_filter(self, monkeypatch):
+        """不指定网卡名时使用候选过滤 + TCP Connect。"""
         from app.network import probes as probes_mod
 
         fake_stats = {
             "Wi-Fi": type("S", (), {"isup": True, "speed": 300})(),
         }
         monkeypatch.setattr("app.network.probes.psutil.net_if_stats", lambda: fake_stats)
+        monkeypatch.setattr(probes_mod, "_check_interface_connectivity", lambda name: name == "Wi-Fi")
 
         assert probes_mod.is_local_network_connected() is True
 

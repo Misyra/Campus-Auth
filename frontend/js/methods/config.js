@@ -120,10 +120,16 @@ export const configMethods = {
         app_settings: c.app_settings,
         active_task: c.active_task || '',
       };
-      // 始终发送完整凭据；password 为空串时后端 save_password_field 保留原密码不修改
-      CREDENTIAL_FIELDS.forEach(f => {
-        payload[f] = c.credentials[f] || '';
+      // 凭据字段：username/auth_url/isp/carrier_custom 空串表示清空
+      ['username', 'auth_url', 'isp', 'carrier_custom', 'active_task'].forEach(f => {
+        payload[f] = c.credentials[f] ?? '';
       });
+      // 密码字段：未编辑时传 null（不修改），编辑态传实际值（空串表示清空）
+      if (this.passwordSaved && !this.editingPassword) {
+        payload.password = null;  // 未修改密码
+      } else {
+        payload.password = c.credentials.password || '';  // 编辑态：空串清空，有值则加密
+      }
 
       const data = await this.$apiService.config.patch(payload, {
         signal: this._saveAbortController.signal,
