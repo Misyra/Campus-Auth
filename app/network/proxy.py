@@ -102,11 +102,13 @@ class Socks5Server:
         try:
             self._do_handshake(client)
             addr, port = self._do_connect_request(client)
-            # 本地地址不绑定 source_address，避免 Windows 上非回环 IP 连接回环地址失败
-            if self._is_local_address(addr):
+            bind_ip = self._get_bind_ip()
+            # 本地地址或绑定 IP 是回环地址时，不绑定 source_address
+            # 避免 Windows 上回环 IP 连接远程地址失败
+            if self._is_local_address(addr) or self._is_local_address(bind_ip):
                 source_addr = None
             else:
-                source_addr = (self._get_bind_ip(), 0)
+                source_addr = (bind_ip, 0)
             remote = socket.create_connection(
                 (addr, port),
                 timeout=10,
