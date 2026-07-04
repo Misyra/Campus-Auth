@@ -2,6 +2,11 @@
 
 ## 2026-07-04
 
+### feat(login): 新增 LoginSession 浏览器复用与重试循环
+
+- `app/services/login_session.py`：新增 `LoginSession` 类，单 `async with BrowserContextManager` 包住整个重试循环；所有终态（成功/失败/取消/耗尽/异常）都触发 `__aexit__` 关闭浏览器；`interruptible_sleep` 支持等待中取消；最后一次重试后不再等待；`LoginRetryPolicy` 默认从 `config["retry_settings"]` 构造
+- `tests/test_services/test_login_session.py`：新增 12 个测试用例（3 个测试类），覆盖首试成功、重试后成功、重试耗尽、凭证错误不重试、取消不重试、等待中取消、cancel_event 预设、max_retries=1 无等待、浏览器在各种终态下关闭、异常传播时浏览器仍关闭
+
 ### refactor(login): LoginAttempt 适配 Session 模式
 
 - `app/services/login_attempt.py`：`__init__` 新增 `browser` keyword-only 参数（Session 模式复用传入浏览器）；`_execute_browser_task` 条件分支（browser 非 None 时复用，None 时旧行为）；`finally` 块使用 `browser_owned` 标志控制关闭；新增 `execute()` 方法返回 `AttemptOutcome`，含异常分类（LoginCancelledError → CANCELLED，连接/超时异常 → RETRYABLE，PlaywrightError 含特定子串 → RETRYABLE）；保留 `attempt_login()`/`close_browser()` 兼容旧调用方
