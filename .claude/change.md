@@ -2,6 +2,11 @@
 
 ## 2026-07-04
 
+### refactor(login): LoginAttempt 适配 Session 模式
+
+- `app/services/login_attempt.py`：`__init__` 新增 `browser` keyword-only 参数（Session 模式复用传入浏览器）；`_execute_browser_task` 条件分支（browser 非 None 时复用，None 时旧行为）；`finally` 块使用 `browser_owned` 标志控制关闭；新增 `execute()` 方法返回 `AttemptOutcome`，含异常分类（LoginCancelledError → CANCELLED，连接/超时异常 → RETRYABLE，PlaywrightError 含特定子串 → RETRYABLE）；保留 `attempt_login()`/`close_browser()` 兼容旧调用方
+- `tests/test_utils/test_login.py`：`test_existing_browser_closed_first` 改为 `test_session_mode_reuses_browser`；新增 `TestExecute`（8 用例）和 `TestInitBrowser`（3 用例）
+
 ### feat(utils): 新增 interruptible_sleep 可中断异步等待
 
 - `app/utils/concurrent.py`：新增 `interruptible_sleep(seconds, cancel_event, *, poll_interval=0.2)` 函数，纯异步轮询模式，兼容 `threading.Event` 与 `CompositeCancelEvent`，用于 LoginSession 重试间隔
