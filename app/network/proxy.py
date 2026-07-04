@@ -92,16 +92,25 @@ class Socks5Server:
                     logger.error("SOCKS5 accept error")
                 break
 
+    @staticmethod
+    def _is_local_address(addr: str) -> bool:
+        """判断是否为本地地址（127.0.0.0/8 或 localhost）。"""
+        return addr == "localhost" or addr.startswith("127.")
+
     def _handle_client(self, client: socket.socket) -> None:
         remote: socket.socket | None = None
         try:
             self._do_handshake(client)
             addr, port = self._do_connect_request(client)
-            bind_ip = self._get_bind_ip()
+            # 本地地址不绑定 source_address，避免 Windows 上非回环 IP 连接回环地址失败
+            if self._is_local_address(addr):
+                source_addr = None
+            else:
+                source_addr = (self._get_bind_ip(), 0)
             remote = socket.create_connection(
                 (addr, port),
                 timeout=10,
-                source_address=(bind_ip, 0),
+                source_address=source_addr,
             )
             # Success reply
             client.sendall(b"\x05\x00\x00\x01\x00\x00\x00\x00\x00\x00")
