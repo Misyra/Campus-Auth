@@ -215,7 +215,7 @@ class TestPerformLoginWithActiveTask:
 
     @pytest.mark.asyncio
     async def test_login_cancelled_error(self):
-        """LoginCancelledError 被捕获（行 143-145）。"""
+        """LoginCancelledError 传播到 execute() 并映射为 CANCELLED 终态。"""
         config = _make_config()
         handler = LoginAttempt(config)
 
@@ -225,10 +225,10 @@ class TestPerformLoginWithActiveTask:
 
         with patch.object(handler, "_ensure_task_manager"):
             handler._task_manager = mock_tm
-            ok, msg = await handler._perform_login_with_active_task()
+            outcome = await handler.execute()
 
-        assert ok is False
-        assert "登录已取消" in msg
+        assert outcome.type == AttemptOutcomeType.CANCELLED
+        assert "登录已取消" in outcome.message
 
     @pytest.mark.asyncio
     async def test_generic_exception(self):
