@@ -81,6 +81,8 @@ class LoginAttempt:
             error_msg = "未找到可执行的任务，请先在任务管理页面创建并启用一个登录任务"
             self.logger.warning("登录失败: {}", error_msg)
             return False, error_msg
+        except LoginCancelledError:
+            raise  # 让 execute() 捕获并映射为 CANCELLED 终态
         except Exception as e:
             error_msg = f"登录过程中发生错误: {e!s}"
             return False, error_msg
@@ -164,8 +166,7 @@ class LoginAttempt:
             return await self._execute_browser_task(task, active_task_id, phase_start)
 
         except LoginCancelledError:
-            self.logger.warning("登录已取消")
-            return False, "登录已取消"
+            raise  # 让 execute() 捕获并映射为 CANCELLED 终态
         except Exception as e:
             total = time.perf_counter() - phase_start
             self.logger.exception("登录异常: {} (耗时 {:.1f}s)", e, total)
