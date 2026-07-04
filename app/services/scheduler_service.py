@@ -18,11 +18,15 @@ logger = get_logger("scheduler", source="backend")
 class SchedulerService:
     """定时任务调度器。"""
 
+    # 最大追赶窗口：超过此时间不追赶（避免启动时执行过期任务）
+    MAX_CATCHUP_MINUTES = 30
+
     def __init__(self, task_registry, task_executor) -> None:
         self._task_registry = task_registry
         self._task_executor = task_executor
         self._scheduler_running = False
         self._next_schedule_tick = 0.0
+        self._last_tick_minute: tuple[int, int] | None = None
 
     # ── 属性 ──
 
@@ -44,6 +48,7 @@ class SchedulerService:
             return
         self._scheduler_running = True
         self._next_schedule_tick = (int(time.time() // 60) * 60) + 60
+        self._last_tick_minute = None
         logger.info("定时任务调度器已启动")
 
     def stop(self) -> None:
@@ -58,21 +63,69 @@ class SchedulerService:
         return self._scheduler_running and now >= self._next_schedule_tick
 
     def tick(self, now: float) -> None:
-        """执行一次调度 tick：查询到期任务并提交执行。"""
+        """执行一次调度 tick：查询到期任务并提交执行，支持追赶错过的任务。"""
         from datetime import datetime
 
         try:
             dt_now = datetime.now()
+            current_minute = (dt_now.hour, dt_now.minute)
             registry = self._task_registry
             executor = self._task_executor
+
             if registry and executor:
-                due_tasks = registry.get_due_tasks(dt_now.hour, dt_now.minute)
-                for task_id in due_tasks:
-                    executor.execute_task_async(task_id)
-                logger.debug("调度周期: 处理 {} 个到期任务", len(due_tasks))
+                # 追赶逻辑：从上次 tick 到当前时间之间的所有分钟
+                minutes_to_check = self._get_catchup_minutes(current_minute)
+                total_due = 0
+                for hour, minute in minutes_to_check:
+                    due_tasks = registry.get_due_tasks(hour, minute)
+                    for task_id in due_tasks:
+                        executor.execute_task_async(task_id)
+                    total_due += len(due_tasks)
+
+                if total_due > 0:
+                    logger.info("调度周期: 处理 {} 个到期任务（含追赶）", total_due)
+                else:
+                    logger.debug("调度周期: 无到期任务")
+
+                self._last_tick_minute = current_minute
         finally:
             # 无论是否抛异常，都推进下一次 tick 时间，避免引擎循环每秒重试
             self._next_schedule_tick = (int(time.time() // 60) * 60) + 60
+
+    def _get_catchup_minutes(self, current: tuple[int, int]) -> list[tuple[int, int]]:
+        """获取需要追赶的分钟列表。
+
+        从 _last_tick_minute（不含）到 current（含）之间的所有分钟。
+        超过 MAX_CATCHUP_MINUTES 的部分不追赶。
+        """
+        if self._last_tick_minute is None:
+            # 首次 tick，只检查当前分钟
+            return [current]
+
+        # 计算分钟差
+        last_total = self._last_tick_minute[0] * 60 + self._last_tick_minute[1]
+        curr_total = current[0] * 60 + current[1]
+        diff = curr_total - last_total
+
+        # 处理跨天
+        if diff < 0:
+            diff += 24 * 60
+
+        # 超过追赶窗口，只检查当前分钟
+        if diff > self.MAX_CATCHUP_MINUTES:
+            logger.warning(
+                "距离上次调度已过去 {} 分钟，超过追赶窗口（{} 分钟），跳过追赶",
+                diff, self.MAX_CATCHUP_MINUTES,
+            )
+            return [current]
+
+        # 生成追赶列表（不含 last_tick_minute，含 current）
+        minutes = []
+        for i in range(1, diff + 1):
+            m = (last_total + i) % (24 * 60)
+            minutes.append((m // 60, m % 60))
+
+        return minutes
 
     # ── 状态同步 ──
 

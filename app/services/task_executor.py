@@ -318,6 +318,10 @@ class TaskExecutor:
         config = (
             self._get_runtime_config() if self._get_runtime_config else RuntimeConfig()
         )
+        # 将定时任务的 task_id 注入到 active_task，让 LoginAttemptHandler 加载正确任务
+        if task_id and task_id != config.active_task:
+            config = config.model_copy(update={"active_task": task_id})
+
         handle = self._login_orchestrator.submit(
             source="browser",
             config=config,
