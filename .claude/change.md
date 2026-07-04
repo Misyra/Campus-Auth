@@ -2,6 +2,11 @@
 
 ## 2026-07-04
 
+### feat(login): 新增 AttemptOutcomeType 与 AttemptOutcome 数据模型
+
+- `app/services/login_models.py`：新增模块，定义 `AttemptOutcomeType`(StrEnum) 和 `AttemptOutcome`(frozen dataclass)
+- `tests/test_services/test_login_models.py`：新增单元测试，覆盖枚举值、不可变性、should_retry 逻辑
+
 ### fix: 浏览器定时任务退化为通用登录
 
 - `app/services/task_executor.py`：`_execute_browser` 方法从 registry 加载任务配置后，将 `task_id` 注入到 `RuntimeConfig.active_task`，确保 `LoginAttemptHandler` 加载正确的任务配置，而非全局活动任务
