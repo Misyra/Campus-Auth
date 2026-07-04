@@ -422,24 +422,35 @@ class PlaywrightWorker:
     # ── 命令处理函数 ──
 
     async def _handle_login(self, data: dict) -> WorkerResponse:
-        """处理登录命令。
+        """处理登录命令 — 委托给 LoginSession。
 
-        创建 LoginAttempt 执行完整登录流程。
-        LoginAttempt 内部管理浏览器生命周期（创建/关闭）。
+        LoginSession 在单次 Worker 调用内复用浏览器并管理重试循环，
+        所有终态（成功/失败/取消/耗尽）都关闭浏览器。
         """
-        from app.services.login_attempt import LoginAttempt
+        from app.services.login_models import AttemptOutcomeType
+        from app.services.login_session import LoginSession
 
         config = data.get("config", {})
         cancel_event: threading.Event | None = data.get("cancel_event")
 
-        try:
-            handler = LoginAttempt(
-                config=config,
-                cancel_event=cancel_event,
+        if cancel_event is None:
+            # 防御性：Worker 不应收到无 cancel_event 的登录命令
+            logger.error(
+                "登录命令缺少 cancel_event: task_id={}",
+                config.get("task_id", "unknown"),
             )
-            success, message = await handler.attempt_login()
-            return WorkerResponse(success=success, data=message)
+            return WorkerResponse(success=False, error="cancel_event 缺失")
+
+        try:
+            session = LoginSession(config, cancel_event)
+            outcome = await session.run()
+            return WorkerResponse(
+                success=outcome.type == AttemptOutcomeType.SUCCESS,
+                data=outcome.message if outcome.type == AttemptOutcomeType.SUCCESS else None,
+                error=outcome.message if outcome.type != AttemptOutcomeType.SUCCESS else None,
+            )
         except Exception as e:
+            # 程序异常（Attempt 未捕获的）在此兜底，与现有行为一致
             logger.exception(
                 "登录执行异常: task_id={}", config.get("task_id", "unknown")
             )
