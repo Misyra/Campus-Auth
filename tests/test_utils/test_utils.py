@@ -548,35 +548,11 @@ class TestBuildLoginTemplateVars:
         )
         assert result["LOGIN_URL"] == "http://10.0.0.1/login?user=user1&isp=联通"
 
-    def test_custom_variables_injected(self):
-        """自定义变量应注入到模板变量"""
-        custom = {"MY_VAR": "hello", "ANOTHER": "world"}
-        result = build_login_template_vars(
-            auth_url="http://test.com",
-            username="u",
-            password="p",
-            custom_variables=custom,
-        )
-        assert result["MY_VAR"] == "hello"
-        assert result["ANOTHER"] == "world"
-
-    def test_denylist_not_overridden(self):
-        """保留名自定义变量应被拒绝"""
-        custom = {"PATH": "/evil/path", "PYTHONPATH": "/evil"}
-        result = build_login_template_vars(custom_variables=custom)
-        assert result.get("PATH") is None
-        assert result.get("PYTHONPATH") is None
-
     def test_empty_config(self):
         """空参数应返回空字典"""
         result = build_login_template_vars()
         assert isinstance(result, dict)
         assert result.get("LOGIN_URL", "") == ""
-
-    def test_none_custom_variables(self):
-        """custom_variables=None 不应报错"""
-        result = build_login_template_vars(auth_url="http://test.com", custom_variables=None)
-        assert "LOGIN_URL" in result
 
     def test_task_url_with_login_url_fallback(self):
         """task_url 中无模板变量时，LOGIN_URL 应被设置为解析后的 task_url"""

@@ -50,7 +50,6 @@ def runtime_config_to_worker_dict(config: RuntimeConfig, bind_proxy: str | None 
     d["login_timeout"] = config.browser.login_timeout
     d["retry_settings"] = config.retry.model_dump()
     d["active_task"] = config.active_task
-    d["custom_variables"] = config.app_settings.custom_variables
     d["block_proxy"] = config.app_settings.block_proxy
     d["shell_path"] = config.app_settings.shell_path
     d["access_log"] = config.logging.access_log

@@ -130,7 +130,6 @@ class DebugSessionManager:
                 password=rc.credentials.password,
                 isp=rc.credentials.isp,
                 task_url=task.url,
-                custom_variables=rc.app_settings.custom_variables,
             )
             return rc, tv
 

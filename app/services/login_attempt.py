@@ -59,7 +59,6 @@ class LoginAttempt:
         self._browser_settings: dict[str, Any] = config.get("browser_settings", {})
         self._monitor_settings: dict[str, Any] = config.get("monitor", {})
         self._active_task: str = config.get("active_task", "").strip()
-        self._custom_variables: dict[str, str] = config.get("custom_variables", {})
 
     async def attempt_login(self) -> tuple[bool, str]:
         """
@@ -194,7 +193,6 @@ class LoginAttempt:
             password=self._credentials.get("password", ""),
             isp=self._credentials.get("isp", ""),
             task_url=task.url,
-            custom_variables=self._custom_variables,
         )
 
         if self.cancel_event and self.cancel_event.is_set():

@@ -163,10 +163,6 @@ class TestFieldCompleteness:
         assert rc.app_settings.proxy == "http://proxy:8080"
         assert rc.app_settings.app_port == 12345
 
-    def test_custom_variables_is_empty_dict(self):
-        rc = build_runtime_config(_default_global_config(), _default_profile())
-        assert rc.app_settings.custom_variables == {}
-
     def test_credentials_structure(self):
         profile = _default_profile(
             username="  user1  ",
@@ -245,7 +241,6 @@ class TestEndToEnd:
         assert rc.app_settings.block_proxy is False
         assert rc.app_settings.proxy == "socks5://127.0.0.1:1080"
         assert rc.app_settings.app_port == 9999
-        assert rc.app_settings.custom_variables == {}
 
     def test_build_returns_frozen_model(self):
         """RuntimeConfig 是 frozen 的，不允许修改。"""

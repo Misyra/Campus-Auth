@@ -148,7 +148,6 @@ class TestStartTemplateVarReplacement:
 
         mock_monitor = MagicMock()
         mock_runtime = MagicMock()
-        mock_runtime.app_settings.custom_variables = {}
         mock_runtime.browser.timeout = 8
         mock_runtime.browser.navigation_timeout = 15
         mock_runtime.credentials.auth_url = ""

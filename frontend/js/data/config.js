@@ -10,7 +10,7 @@ function cloneConfig(src) {
     retry: { ...src.retry },
     credentials: { ...src.credentials },
     active_task: src.active_task,
-    app_settings: { ...src.app_settings, custom_variables: { ...src.app_settings.custom_variables } },
+    app_settings: { ...src.app_settings },
   };
 }
 

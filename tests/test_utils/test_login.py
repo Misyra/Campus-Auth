@@ -30,7 +30,6 @@ def _make_config(**overrides: Any) -> dict[str, Any]:
         "active_task": "",
         "browser_settings": {"timeout": 8, "navigation_timeout": 15},
         "monitor": {},
-        "custom_variables": {},
     }
     base.update(overrides)
     return base

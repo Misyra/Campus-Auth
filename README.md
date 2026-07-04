@@ -169,7 +169,6 @@ python main.py --runtime-mode lightweight   # 轻量模式（无 Web UI）
 - 认证地址、运营商
 - 检测间隔、暂停时段
 - 浏览器参数（无头模式、超时、User-Agent 等）
-- 自定义变量
 
 也可以选择使用全局凭证或全局高级设置。
 

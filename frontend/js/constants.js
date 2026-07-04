@@ -154,7 +154,6 @@ export const DEFAULT_CONFIG = {
     auto_open_browser: false,
     proxy: "",
     app_port: 50721,
-    custom_variables: {},
   },
 };
 
