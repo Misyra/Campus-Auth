@@ -13,7 +13,6 @@ from typing import Any
 from app.services.login_models import AttemptOutcome, AttemptOutcomeType
 from app.utils.browser import BrowserContextManager
 from app.utils.env import build_login_template_vars
-from app.utils.exceptions import LoginCancelledError
 from app.utils.logging import get_logger
 
 # 用于从日志消息中移除截图路径的正则表达式
@@ -73,19 +72,13 @@ class LoginAttempt:
             tuple[bool, str]: (是否成功, 详细信息)
         """
         self.logger.debug("登录开始")
-        try:
-            task_result = await self._perform_login_with_active_task()
-            if task_result is not None:
-                return task_result
+        task_result = await self._perform_login_with_active_task()
+        if task_result is not None:
+            return task_result
 
-            error_msg = "未找到可执行的任务，请先在任务管理页面创建并启用一个登录任务"
-            self.logger.warning("登录失败: {}", error_msg)
-            return False, error_msg
-        except LoginCancelledError:
-            raise  # 让 execute() 捕获并映射为 CANCELLED 终态
-        except Exception as e:
-            error_msg = f"登录过程中发生错误: {e!s}"
-            return False, error_msg
+        error_msg = "未找到可执行的任务，请先在任务管理页面创建并启用一个登录任务"
+        self.logger.warning("登录失败: {}", error_msg)
+        return False, error_msg
 
     async def execute(self) -> AttemptOutcome:
         """执行单次登录尝试，返回 AttemptOutcome。
@@ -142,35 +135,27 @@ class LoginAttempt:
         from app.tasks.models import ScriptTaskInfo
 
         phase_start = time.perf_counter()
-        try:
-            self._ensure_task_manager()
+        self._ensure_task_manager()
 
-            task_manager = self._task_manager
-            profile_task_id = self._active_task
-            if profile_task_id:
-                active_task_id = profile_task_id
-                task = task_manager.load_task(profile_task_id)
-            else:
-                active_task_id = task_manager.get_active_task() or "default"
-                task = task_manager.load_active_task()
+        task_manager = self._task_manager
+        profile_task_id = self._active_task
+        if profile_task_id:
+            active_task_id = profile_task_id
+            task = task_manager.load_task(profile_task_id)
+        else:
+            active_task_id = task_manager.get_active_task() or "default"
+            task = task_manager.load_active_task()
 
-            if not task:
-                self.logger.warning("未找到活动任务: {}", active_task_id)
-                return None
+        if not task:
+            self.logger.warning("未找到活动任务: {}", active_task_id)
+            return None
 
-            # ========== 脚本任务分支 ==========
-            if isinstance(task, ScriptTaskInfo):
-                return await self._execute_script_task(task, phase_start)
+        # ========== 脚本任务分支 ==========
+        if isinstance(task, ScriptTaskInfo):
+            return await self._execute_script_task(task, phase_start)
 
-            # ========== 浏览器任务 ==========
-            return await self._execute_browser_task(task, active_task_id, phase_start)
-
-        except LoginCancelledError:
-            raise  # 让 execute() 捕获并映射为 CANCELLED 终态
-        except Exception as e:
-            total = time.perf_counter() - phase_start
-            self.logger.exception("登录异常: {} (耗时 {:.1f}s)", e, total)
-            return False, f"任务执行异常: {e}"
+        # ========== 浏览器任务 ==========
+        return await self._execute_browser_task(task, active_task_id, phase_start)
 
     def _ensure_task_manager(self) -> None:
         """懒初始化 TaskManager。"""
@@ -220,6 +205,21 @@ class LoginAttempt:
             # Session 模式：browser 已由 LoginSession 通过 __init__ 传入并就绪
             browser_manager = self._browser_ctx
             browser_owned = False
+
+            # Attempt 间浏览器可能崩溃（TargetClosedError 等），
+            # 检查 page 有效性，无效则通过 worker.ensure_browser 重建。
+            # ensure_browser 是幂等的：浏览器健康则跳过，崩溃则重建。
+            if browser_manager.page is None or browser_manager.page.is_closed():
+                self.logger.debug("Session 浏览器 page 已失效，重建")
+                from app.workers.playwright_worker import get_worker
+
+                worker = get_worker()
+                await worker.ensure_browser(self.config)
+                # 刷新引用（ensure_browser 重建后 worker 的属性是新对象）
+                browser_manager.page = worker.page
+                browser_manager.context = worker.context
+                browser_manager.browser = worker.browser
+
             self.logger.debug("复用 Session 浏览器")
         else:
             # 旧模式：自行创建浏览器（兼容调试会话等旧调用方）
