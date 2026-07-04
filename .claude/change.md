@@ -2,6 +2,11 @@
 
 ## 2026-07-04
 
+### feat(login): 新增 LoginRetryPolicy 会话级重试策略
+
+- `app/services/login_models.py`：新增 `LoginRetryPolicy` dataclass，从 `RuntimeConfig.retry` 派生，`max_retries` 裁剪到 [1, 10]，`next_delay(attempt_index)` 返回固定间隔或 None
+- `tests/test_services/test_login_models.py`：新增 9 个测试用例，覆盖边界裁剪、next_delay 范围判断、from_runtime_config 构造
+
 ### feat(login): 新增 AttemptOutcomeType 与 AttemptOutcome 数据模型
 
 - `app/services/login_models.py`：新增模块，定义 `AttemptOutcomeType`(StrEnum) 和 `AttemptOutcome`(frozen dataclass)
