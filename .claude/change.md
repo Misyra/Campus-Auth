@@ -2,6 +2,49 @@
 
 ## 2026-07-05
 
+### refactor(monitor): NetworkMonitorCore 改 getter 注入，reload 零停机
+
+- `app/services/monitor_service.py`：
+  - `__init__` 的 `config` 参数改为 `get_config: Callable[[], RuntimeConfig]`
+  - 所有 `self.config.X` 改为 `self._get_config().X`（14 处）
+  - `_get_test_sites` 删除缓存，每次重算
+  - `_start_bind_proxy` 记录指纹，新增 `_needs_bind_proxy_rebuild`
+  - 删除 `self._test_sites_cache` 和 `self.config`
+- `app/services/engine.py`：
+  - `_handle_start` 构造 NetworkMonitorCore 改传 getter（pure_mode 闭包捕获）
+  - `_handle_reload` 不再 stop+start，仅 bind 变化时重建 SOCKS5 Forwarder
+  - `_handle_apply_profile` 同上简化
+- 测试：
+  - `tests/test_services/test_monitor_core.py`：新增 `TestGetterInjection`（3 测试）
+  - `tests/test_core/test_monitor.py`：全部 `config=` 改为 `get_config=lambda: config`；`test_caching` 改为 `test_no_caching_returns_fresh`
+  - `tests/test_services/test_engine.py`：`test_handle_reload_monitoring` 断言不再 stop+start；新增 `test_reload_bind_change_rebuilds_proxy`、`test_apply_profile_bind_change_rebuilds`；`test_handle_start_pure_mode` 改查 `get_config` 参数
+  - `tests/test_services/test_monitor_service_masking.py`、`tests/test_integration/test_profile_connection.py`、`tests/test_integration/test_network_connection.py`：适配 getter 注入
+
+### refactor(schemas): 持久化层 frozen 化，统一不可变风格
+
+- `app/schemas.py`：`GlobalConfig`、`ProfilesData`、`Profile` 加 `frozen=True`
+- `app/services/profile_service.py`：
+  - `update` 签名改为 `Callable[[ProfilesData], ProfilesData | None]`，支持返回新对象
+  - `set_active_profile` 改用 `model_copy(update={"active_profile": profile_id})`
+  - `save_profile` 改用 `model_copy` 构建新 Profile 和 ProfilesData
+  - `delete_profile` 改用 dict 推导 + `model_copy` 构建新对象
+  - `set_auto_switch` 改用 `model_copy(update={"auto_switch": enabled})`
+  - `_rollback_config` 改为返回 `backup_data.model_copy(deep=True)`
+  - `save_global_and_profile._apply` 改为返回新 `ProfilesData`
+- `app/api/config.py`：`set_log_level` 的 `update` lambda 改为返回新 `ProfilesData`
+- 测试：新增 `TestFrozenModels`（3 测试）；更新 rollback/merge/backend 测试适配不可变模式
+
+### refactor(profile): ProfileService 加 mtime 内存缓存 + 单例化
+
+- `app/services/profile_service.py`：
+  - `__init__` 新增 `_cache` / `_cache_mtime` 字段
+  - `_load_unsafe` 改为 mtime 缓存：mtime 未变返回缓存引用，变化时读盘更新缓存
+  - `_save_unsafe` 写盘后同步刷新缓存
+  - 新增 `get_profile_service()` 双重检查锁定单例，`create_profile_service()` 改为兼容别名
+  - 新增 `reset_profile_service_singleton()` 仅供测试重置
+- `tests/test_services/test_profile_service.py`：新增 `autouse` fixture `_reset_singleton`；`test_load_returns_new_instance_each_time` 改为 `test_load_returns_cached_instance_when_unchanged`；新增 `TestProfileServiceCache`（3 测试：缓存命中、mtime 失效、update 刷新）
+- `tests/test_app/test_backend_services.py`：`TestCorruptRenameEAFP` 两处 `__new__` 构造补充 `_cache` / `_cache_mtime` 属性
+
 ### fix(engine): 修复 _reload_config_internal 裸写和 toggle_pure_mode TOCTOU
 
 - `app/services/engine.py`：

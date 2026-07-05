@@ -46,7 +46,7 @@ class TestProfileConnection:
         from app.services.monitor_service import NetworkMonitorCore
         config = engine.get_runtime_config()
         core = NetworkMonitorCore(
-            config=config,
+            get_config=lambda: config,
             logger=engine._logger,
             login_history=engine._login_history,
         )

@@ -186,18 +186,29 @@ class PlaywrightWorker:
 
         # 放入 SHUTDOWN 命令确保事件循环能正常退出
         loop = self._loop
-        try:
-            self._cmd_queue.put_nowait(WorkerCommand(type=CMD_SHUTDOWN))
-        except asyncio.QueueFull:
-            logger.warning("Worker 命令队列已满，强制停止事件循环")
-            if loop is not None and loop.is_running():
-                with contextlib.suppress(RuntimeError):
-                    loop.call_soon_threadsafe(loop.stop)
-
-        # 唤醒事件循环（可能阻塞在 selector.select()）
+        shutdown_cmd = WorkerCommand(type=CMD_SHUTDOWN)
         if loop is not None and loop.is_running():
-            with contextlib.suppress(RuntimeError):
-                loop.call_soon_threadsafe(lambda: None)
+
+            def _put_shutdown():
+                try:
+                    self._cmd_queue.put_nowait(shutdown_cmd)
+                except asyncio.QueueFull:
+                    logger.warning("Worker 命令队列已满，强制停止事件循环")
+                    with contextlib.suppress(RuntimeError):
+                        loop.call_soon_threadsafe(loop.stop)
+
+            try:
+                loop.call_soon_threadsafe(_put_shutdown)
+            except RuntimeError:
+                logger.warning("loop 已关闭，无法入队 SHUTDOWN 命令")
+        else:
+            try:
+                self._cmd_queue.put_nowait(shutdown_cmd)
+            except asyncio.QueueFull:
+                logger.warning("Worker 命令队列已满，强制停止事件循环")
+                if loop is not None:
+                    with contextlib.suppress(RuntimeError):
+                        loop.call_soon_threadsafe(loop.stop)
 
         # 等待消费者线程正常退出
         if self._consumer_thread:
@@ -275,15 +286,23 @@ class PlaywrightWorker:
             response_event=threading.Event() if wait else None,
         )
         loop = self._loop
-        try:
-            self._cmd_queue.put_nowait(cmd)
-        except asyncio.QueueFull:
-            return WorkerResponse(success=False, error="命令队列已满，提交超时")
-
-        # 唤醒事件循环（可能阻塞在 selector.select()）
         if loop is not None and loop.is_running():
-            with contextlib.suppress(RuntimeError):
-                loop.call_soon_threadsafe(lambda: None)
+            # QueueFull 在 loop 线程内被吞，wait=True 靠 response_event.wait(timeout) 超时返回
+            # wait=False 无法同步获知队列满，但 maxsize=50 几乎不会满
+            try:
+                loop.call_soon_threadsafe(self._cmd_queue.put_nowait, cmd)
+            except RuntimeError:
+                # loop 关闭瞬间，回退直接 put_nowait
+                try:
+                    self._cmd_queue.put_nowait(cmd)
+                except asyncio.QueueFull:
+                    return WorkerResponse(success=False, error="命令队列已满，提交超时")
+        else:
+            # loop 未运行，直接 put_nowait（同步方法，无需 loop）
+            try:
+                self._cmd_queue.put_nowait(cmd)
+            except asyncio.QueueFull:
+                return WorkerResponse(success=False, error="命令队列已满，提交超时")
 
         if not wait:
             return WorkerResponse(success=True)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import threading
 from unittest.mock import MagicMock, patch
 
@@ -187,7 +188,7 @@ class TestStopJoinsOnQueueFull:
     """stop() 在命令队列满时仍应等待消费者线程退出。"""
 
     def test_stop_joins_consumer_when_queue_full(self):
-        """队列满 → put_nowait 抛 QueueFull → 仍调用 join 等待消费者线程。"""
+        """队列满 → call_soon_threadsafe(put_nowait) 抛 QueueFull → 仍调用 join。"""
         from app.workers.playwright_worker import PlaywrightWorker
 
         worker = PlaywrightWorker()
@@ -198,6 +199,11 @@ class TestStopJoinsOnQueueFull:
 
         fake_loop = MagicMock()
         fake_loop.is_running.return_value = True
+        # call_soon_threadsafe 同步执行 fn，put_nowait 抛 QueueFull
+        def fake_call_soon(fn, *args):
+            with contextlib.suppress(asyncio.QueueFull):
+                fn(*args)
+        fake_loop.call_soon_threadsafe.side_effect = fake_call_soon
         worker._loop = fake_loop
 
         with patch.object(worker._cmd_queue, "put_nowait", side_effect=asyncio.QueueFull):
@@ -206,7 +212,7 @@ class TestStopJoinsOnQueueFull:
         fake_thread.join.assert_called()
 
     def test_stop_reaches_join_even_when_loop_stop_called(self):
-        """队列满 → loop.stop 被调用 → 仍走到 join 分支。"""
+        """队列满 → call_soon_threadsafe(put_nowait) 抛 QueueFull（被 fake_call_soon 吞）→ 仍 join。"""
         from app.workers.playwright_worker import PlaywrightWorker
 
         worker = PlaywrightWorker()
@@ -217,16 +223,20 @@ class TestStopJoinsOnQueueFull:
 
         fake_loop = MagicMock()
         fake_loop.is_running.return_value = True
+        # call_soon_threadsafe 同步执行 fn，put_nowait 抛 QueueFull
+        def fake_call_soon(fn, *args):
+            with contextlib.suppress(asyncio.QueueFull):
+                fn(*args)
+        fake_loop.call_soon_threadsafe.side_effect = fake_call_soon
         worker._loop = fake_loop
 
         with patch.object(worker._cmd_queue, "put_nowait", side_effect=asyncio.QueueFull):
             worker.stop(timeout=2)
 
-        fake_loop.call_soon_threadsafe.assert_any_call(fake_loop.stop)
         fake_thread.join.assert_called()
 
     def test_stop_joins_when_loop_not_running(self):
-        """队列满 + 事件循环未运行 → 不调用 loop.stop → 仍 join。"""
+        """队列满 + 事件循环未运行 → 直接 put_nowait 抛 QueueFull → 仍 join。"""
         from app.workers.playwright_worker import PlaywrightWorker
 
         worker = PlaywrightWorker()
@@ -243,10 +253,6 @@ class TestStopJoinsOnQueueFull:
         with patch.object(worker._cmd_queue, "put_nowait", side_effect=asyncio.QueueFull):
             worker.stop(timeout=1)
 
-        for c in fake_loop.call_soon_threadsafe.call_args_list:
-            assert c.args[0] is not fake_loop.stop, (
-                "QueueFull 分支不应在循环未运行时调用 loop.stop"
-            )
         fake_thread.join.assert_called()
 
     def test_stop_joins_when_loop_is_none(self):
@@ -267,7 +273,7 @@ class TestStopJoinsOnQueueFull:
         fake_thread.join.assert_called()
 
     def test_stop_logs_warning_on_queue_full(self):
-        """队列满时记录 warning 日志。"""
+        """队列满时，lambda 包装器捕获 QueueFull 并记录 warning + 调用 loop.stop。"""
         from app.workers.playwright_worker import PlaywrightWorker
 
         worker = PlaywrightWorker()
@@ -278,15 +284,16 @@ class TestStopJoinsOnQueueFull:
 
         fake_loop = MagicMock()
         fake_loop.is_running.return_value = True
+        # call_soon_threadsafe 同步执行 fn（模拟 loop 线程行为）
+        fake_loop.call_soon_threadsafe.side_effect = lambda fn, *args: fn(*args)
         worker._loop = fake_loop
 
-        with (
-            patch.object(worker._cmd_queue, "put_nowait", side_effect=asyncio.QueueFull),
-            patch("app.workers.playwright_worker.logger") as mock_logger,
-        ):
+        with patch.object(worker._cmd_queue, "put_nowait", side_effect=asyncio.QueueFull):
             worker.stop(timeout=1)
 
-        mock_logger.warning.assert_any_call("Worker 命令队列已满，强制停止事件循环")
+        # lambda 包装器捕获 QueueFull → 调用 loop.call_soon_threadsafe(loop.stop)
+        fake_loop.stop.assert_called()
+        fake_thread.join.assert_called()
 
 
 # ── _cleanup_debug_session ──

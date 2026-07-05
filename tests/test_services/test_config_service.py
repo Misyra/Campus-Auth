@@ -83,28 +83,25 @@ class TestConfigBuilderBuild:
         assert result.credentials.password == "new_pwd"
 
 
-
 class TestRollbackConfig:
     """测试 _rollback_config 函数。"""
 
     def test_rollback_restores_fields(self):
-        data = ProfilesData()
-        data.global_config = GlobalConfig(browser=BrowserSettings(timeout=60))
-        backup = ProfilesData()
-        backup.global_config = GlobalConfig(browser=BrowserSettings(timeout=30))
+        data = ProfilesData(
+            global_config=GlobalConfig(browser=BrowserSettings(timeout=60)),
+        )
+        backup = ProfilesData(
+            global_config=GlobalConfig(browser=BrowserSettings(timeout=30)),
+        )
 
-        _rollback_config(data, backup)
-        assert data.global_config.browser.timeout == 30
+        result = _rollback_config(data, backup)
+        assert result.global_config.browser.timeout == 30
 
     def test_rollback_all_fields(self):
         """回滚应恢复 ProfilesData 的所有字段。"""
-        data = ProfilesData()
-        data.auto_switch = True
-        data.active_profile = "custom"
-        backup = ProfilesData()
-        backup.auto_switch = False
-        backup.active_profile = "default"
+        data = ProfilesData(auto_switch=True, active_profile="custom")
+        backup = ProfilesData(auto_switch=False, active_profile="default")
 
-        _rollback_config(data, backup)
-        assert data.auto_switch is False
-        assert data.active_profile == "default"
+        result = _rollback_config(data, backup)
+        assert result.auto_switch is False
+        assert result.active_profile == "default"

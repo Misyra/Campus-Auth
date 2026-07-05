@@ -180,7 +180,7 @@ class TestEnums:
 
 class TestMonitorCoreInit:
     def test_default_state(self):
-        core = NetworkMonitorCore(config=RuntimeConfig())
+        core = NetworkMonitorCore(get_config=lambda: RuntimeConfig())
         assert core.monitoring is False
         assert core.network_check_count == 0
         assert core.login_attempt_count == 0
@@ -190,25 +190,25 @@ class TestMonitorCoreInit:
 
     def test_custom_config(self):
         config = RuntimeConfig()
-        core = NetworkMonitorCore(config=config)
-        assert core.config == config
+        core = NetworkMonitorCore(get_config=lambda: config)
+        assert core._get_config() == config
 
     def test_custom_logger(self):
         logger = MagicMock()
-        core = NetworkMonitorCore(config=RuntimeConfig(), logger=logger)
+        core = NetworkMonitorCore(get_config=lambda: RuntimeConfig(), logger=logger)
         core.log_message("test message")
         logger.info.assert_called_once_with("{}", "test message")
 
     def test_default_logger(self):
         """无自定义 logger 时应使用 logger"""
-        core = NetworkMonitorCore(config=RuntimeConfig())
+        core = NetworkMonitorCore(get_config=lambda: RuntimeConfig())
         # 不应抛异常
         core.log_message("test message")
 
 
 class TestMonitorCoreSnapshot:
     def test_snapshot_default(self):
-        core = NetworkMonitorCore(config=RuntimeConfig())
+        core = NetworkMonitorCore(get_config=lambda: RuntimeConfig())
         snap = core.snapshot()
         assert snap["monitoring"] is False
         assert snap["network_check_count"] == 0
@@ -216,7 +216,7 @@ class TestMonitorCoreSnapshot:
         assert snap["network_state"] == "unknown"
 
     def test_snapshot_with_state(self):
-        core = NetworkMonitorCore(config=RuntimeConfig())
+        core = NetworkMonitorCore(get_config=lambda: RuntimeConfig())
         core.monitoring = True
         core.network_check_count = 5
         core.login_attempt_count = 2
@@ -230,7 +230,7 @@ class TestMonitorCoreSnapshot:
 
 class TestMonitorCoreGetTestSites:
     def test_default_targets(self):
-        core = NetworkMonitorCore(config=RuntimeConfig())
+        core = NetworkMonitorCore(get_config=lambda: RuntimeConfig())
         sites = core._get_test_sites()
         assert len(sites) > 0
         for host, port in sites:
@@ -239,7 +239,7 @@ class TestMonitorCoreGetTestSites:
 
     def test_custom_targets(self):
         config = RuntimeConfig(monitor=MonitorSettings(ping_targets=["8.8.8.8:53", "1.1.1.1:443"]))
-        core = NetworkMonitorCore(config=config)
+        core = NetworkMonitorCore(get_config=lambda: config)
         sites = core._get_test_sites()
         assert ("8.8.8.8", 53) in sites
         assert ("1.1.1.1", 443) in sites
@@ -247,46 +247,41 @@ class TestMonitorCoreGetTestSites:
     def test_string_targets(self):
         """字符串格式的目标应被正确解析"""
         config = RuntimeConfig(monitor=MonitorSettings(ping_targets=["8.8.8.8:53", "1.1.1.1:443"]))
-        core = NetworkMonitorCore(config=config)
+        core = NetworkMonitorCore(get_config=lambda: config)
         sites = core._get_test_sites()
         assert len(sites) == 2
 
     def test_targets_without_port(self):
         """缺少端口的目标应自动补全"""
         config = RuntimeConfig(monitor=MonitorSettings(ping_targets=["8.8.8.8", "www.baidu.com"]))
-        core = NetworkMonitorCore(config=config)
+        core = NetworkMonitorCore(get_config=lambda: config)
         sites = core._get_test_sites()
         # IP 默认 53，域名默认 443
         assert ("8.8.8.8", 53) in sites
         assert ("www.baidu.com", 443) in sites
 
-    def test_caching(self):
-        core = NetworkMonitorCore(config=RuntimeConfig())
+    def test_no_caching_returns_fresh(self):
+        """getter 注入后每次重算，返回相同值但非缓存。"""
+        core = NetworkMonitorCore(get_config=lambda: RuntimeConfig())
         sites1 = core._get_test_sites()
         sites2 = core._get_test_sites()
-        # 每次返回副本，值相同但不是同一对象
         assert sites1 == sites2
-        assert sites1 is not sites2
-        # 修改副本不影响缓存
-        sites1.clear()
-        sites3 = core._get_test_sites()
-        assert len(sites3) > 0
 
 
 class TestMonitorCoreGetMonitorInterval:
     def test_default_interval(self):
-        core = NetworkMonitorCore(config=RuntimeConfig())
+        core = NetworkMonitorCore(get_config=lambda: RuntimeConfig())
         assert core._get_monitor_interval() == 300
 
     def test_custom_interval(self):
         config = RuntimeConfig(monitor=MonitorSettings(check_interval_seconds=600))
-        core = NetworkMonitorCore(config=config)
+        core = NetworkMonitorCore(get_config=lambda: config)
         assert core._get_monitor_interval() == 600
 
 
 class TestMonitorCoreStopMonitoring:
     def test_stop_clears_state(self):
-        core = NetworkMonitorCore(config=RuntimeConfig())
+        core = NetworkMonitorCore(get_config=lambda: RuntimeConfig())
         core.monitoring = True
         core.start_time = time.time()
         core.network_check_count = 10
@@ -295,7 +290,7 @@ class TestMonitorCoreStopMonitoring:
         assert core.status_detail == "已停止"
 
     def test_stop_when_not_monitoring(self):
-        core = NetworkMonitorCore(config=RuntimeConfig())
+        core = NetworkMonitorCore(get_config=lambda: RuntimeConfig())
         core.monitoring = False
         # 不应抛异常
         core.stop_monitoring()
@@ -313,7 +308,7 @@ class TestLogMessageExcInfo:
     def test_exc_info_false_by_default(self):
         """默认不附加堆栈"""
         logger = MagicMock()
-        core = NetworkMonitorCore(config=RuntimeConfig(), logger=logger)
+        core = NetworkMonitorCore(get_config=lambda: RuntimeConfig(), logger=logger)
         core.log_message("test", "INFO")
         args = logger.info.call_args[0]
         assert "Traceback" not in args[1]
@@ -321,7 +316,7 @@ class TestLogMessageExcInfo:
     def test_exc_info_true_appends_traceback(self):
         """exc_info=True 时应附加堆栈信息"""
         logger = MagicMock()
-        core = NetworkMonitorCore(config=RuntimeConfig(), logger=logger)
+        core = NetworkMonitorCore(get_config=lambda: RuntimeConfig(), logger=logger)
         try:
             raise ValueError("test error")
         except ValueError:
@@ -334,7 +329,7 @@ class TestLogMessageExcInfo:
     def test_exc_info_without_active_exception(self):
         """无活跃异常时不应附加无意义的堆栈"""
         logger = MagicMock()
-        core = NetworkMonitorCore(config=RuntimeConfig(), logger=logger)
+        core = NetworkMonitorCore(get_config=lambda: RuntimeConfig(), logger=logger)
         core.log_message("正常消息", "INFO", exc_info=True)
         args = logger.info.call_args[0]
         assert "Traceback" not in args[1]
@@ -366,7 +361,7 @@ class TestMonitorCoreDetailedSnapshot:
         """last_check_time 序列化为 ISO 格式。"""
         from datetime import datetime
 
-        core = NetworkMonitorCore(config=RuntimeConfig())
+        core = NetworkMonitorCore(get_config=lambda: RuntimeConfig())
         core.last_check_time = datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC)
         snap = core.snapshot()
         assert "2026-01-01" in snap["last_check_time"]
@@ -378,13 +373,13 @@ class TestMonitorCoreLogMessage:
     def test_uses_logger_when_set(self):
         """有自定义 logger 时使用 logger。"""
         logger = MagicMock()
-        core = NetworkMonitorCore(config=RuntimeConfig(), logger=logger)
+        core = NetworkMonitorCore(get_config=lambda: RuntimeConfig(), logger=logger)
         core.log_message("测试消息", "INFO")
         logger.info.assert_called_once_with("{}", "测试消息")
 
     def test_uses_default_logger_when_no_custom(self):
         """无自定义 logger 时使用默认 logger。"""
-        core = NetworkMonitorCore(config=RuntimeConfig())
+        core = NetworkMonitorCore(get_config=lambda: RuntimeConfig())
         # 不应抛异常
         core.log_message("测试消息", "INFO")
 
