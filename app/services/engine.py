@@ -874,11 +874,10 @@ class ScheduleEngine:
 
         if level not in VALID_LOG_LEVELS:
             raise ValueError(f"无效的日志级别: {level}")
-        with self._reload_lock:
-            new_config = self._runtime_config.model_copy(
-                update={"logging": self._runtime_config.logging.model_copy(update={"level": level})}
-            )
-            self._runtime_config = new_config
+        new_config = self._runtime_config.model_copy(
+            update={"logging": self._runtime_config.logging.model_copy(update={"level": level})}
+        )
+        self._swap_runtime_config(new_config)
 
     def _reload_config_internal(self) -> bool:
         """从 settings.json 重新加载 UI 和运行时配置。返回 True 表示成功。
