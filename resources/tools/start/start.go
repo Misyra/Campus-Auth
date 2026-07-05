@@ -105,7 +105,7 @@ func main() {
 
 	// [2/2] 启动应用
 	fmt.Println("\n[2/2] 启动 Campus-Auth...")
-	args := append([]string{"run", "main.py", "--browser"}, extraArgs...)
+	args := append([]string{"run", "main.py", "--browser", "--runtime-mode", "full"}, extraArgs...)
 	if err := runCommand(uvCmd, args...); err != nil {
 		fmt.Printf("[X] 启动失败: %v\n", err)
 		pause(noPause)

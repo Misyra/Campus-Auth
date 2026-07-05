@@ -75,6 +75,7 @@ class AppConfig:
         """从 RuntimeConfig 统一派生 AppConfig，消除手动同步风险。"""
         return cls(
             startup_action=StartupAction(config.app_settings.startup_action),
+            runtime_mode=RuntimeMode(config.app_settings.runtime_mode),
             minimize_to_tray=config.app_settings.minimize_to_tray,
             lightweight_tray=config.app_settings.lightweight_tray,
             auto_open_browser=config.app_settings.auto_open_browser,
@@ -121,14 +122,12 @@ _BROWSER_ARGS_DEFAULT = (
 )
 
 
-
-
-
 # ── GET 端点响应模型 ──
 
 
 class ProfileSummary(BaseModel):
     """方案列表中的单个方案摘要。"""
+
     name: str = ""
     match_gateway_ip: str = ""
     match_ssid: str = ""
@@ -140,6 +139,7 @@ class ProfileSummary(BaseModel):
 
 class ProfileListResponse(BaseModel):
     """GET /api/profiles 响应。"""
+
     profiles: dict[str, ProfileSummary] = Field(default_factory=dict)
     active_profile: str = "default"
     auto_switch: bool = False
@@ -147,12 +147,14 @@ class ProfileListResponse(BaseModel):
 
 class ProfileDetailResponse(BaseModel):
     """GET /api/profiles/{id} 响应。"""
+
     profile_id: str
     settings: Profile
 
 
 class BrowserInfo(BaseModel):
     """浏览器信息。"""
+
     channel: str
     name: str
     icon: str = ""
@@ -163,12 +165,14 @@ class BrowserInfo(BaseModel):
 
 class BrowserListResponse(BaseModel):
     """GET /api/browsers 响应。"""
+
     browsers: list[BrowserInfo] = Field(default_factory=list)
     current: str = "playwright"
 
 
 class TaskSummary(BaseModel):
     """任务列表中的单个任务。"""
+
     id: str = ""
     name: str = ""
     description: str = ""
@@ -210,7 +214,7 @@ class AutoStartStatusResponse(BaseModel):
     enabled: bool
     method: str
     location: str
-    lightweight: bool = True
+    runtime_mode: str = "full"
 
 
 class Profile(BaseModel):
@@ -219,6 +223,7 @@ class Profile(BaseModel):
     每个方案独立持有自己的凭证，不存在"留空回退到全局"语义。
     替代 AuthProfile，用于新的 ProfilesData 结构。
     """
+
     name: str = Field(default="默认方案")
     match_gateway_ip: str = ""
     match_ssid: str = ""
@@ -236,8 +241,10 @@ class Profile(BaseModel):
 
 
 def get_runtime_features(
-    mode: RuntimeMode | str, minimize_to_tray: bool, auto_open_browser: bool,
-    lightweight_tray: bool = True
+    mode: RuntimeMode | str,
+    minimize_to_tray: bool,
+    auto_open_browser: bool,
+    lightweight_tray: bool = True,
 ) -> RuntimeFeatures:
     """根据运行模式派生特性标志"""
     if mode == RuntimeMode.LIGHTWEIGHT:
@@ -295,7 +302,7 @@ class LoginCredentials(BaseModel, frozen=True):
 
 
 def _parse_targets(raw: str) -> list[str]:
-    return [s.strip() for s in re.split(r'[,\n]', raw) if s.strip()]
+    return [s.strip() for s in re.split(r"[,\n]", raw) if s.strip()]
 
 
 class MonitorSettings(BaseModel, frozen=True):
@@ -303,16 +310,24 @@ class MonitorSettings(BaseModel, frozen=True):
 
     check_interval_seconds: int = Field(default=300, ge=10, le=86400)
     network_check_timeout: int = Field(default=2, ge=1, le=30)
-    ping_targets: list[str] = Field(default_factory=lambda: _parse_targets(DEFAULT_NETWORK_TARGETS))
+    ping_targets: list[str] = Field(
+        default_factory=lambda: _parse_targets(DEFAULT_NETWORK_TARGETS)
+    )
     enable_tcp_check: bool = False
     enable_http_check: bool = False
     enable_local_check: bool = True
-    test_urls: list[str] = Field(default_factory=lambda: _parse_targets(DEFAULT_HTTP_TARGETS))
+    test_urls: list[str] = Field(
+        default_factory=lambda: _parse_targets(DEFAULT_HTTP_TARGETS)
+    )
     check_auth_url: bool = False
     auth_url_targets: list[str] = Field(default_factory=list)
-    url_check_urls: list[str] = Field(default_factory=lambda: _parse_targets(DEFAULT_URL_CHECK_URLS))
+    url_check_urls: list[str] = Field(
+        default_factory=lambda: _parse_targets(DEFAULT_URL_CHECK_URLS)
+    )
     script_timeout: int = Field(default=60, ge=5, le=600)
-    bind_interface_name: str = Field(default="", description="绑定网卡名称，空串表示不绑定")
+    bind_interface_name: str = Field(
+        default="", description="绑定网卡名称，空串表示不绑定"
+    )
 
 
 class PauseSettings(BaseModel, frozen=True):
@@ -350,10 +365,10 @@ class AppSettings(BaseModel, frozen=True):
 
     block_proxy: bool = True
     shell_path: str = ""
-    minimize_to_tray: bool = True
     startup_action: StartupAction = StartupAction.NONE
-    autostart_lightweight: bool = True
-    lightweight_tray: bool = True
+    runtime_mode: RuntimeMode = RuntimeMode.FULL
+    lightweight_tray: bool = True  # 仅 runtime_mode=lightweight 时生效
+    minimize_to_tray: bool = True
     auto_open_browser: bool = False
     proxy: str = ""
     app_port: int = Field(default=50721, ge=1, le=65535)
@@ -368,14 +383,15 @@ class ApiResponse(BaseModel):
     success=True 表示业务成功；success=False 表示业务失败（HTTP 200）。
     data 可选，用于附加返回数据。
     """
+
     success: bool
     message: str = ""
     data: dict | None = None
 
 
-
 class ConfigSaveRequest(BaseModel):
     """PUT /api/config 请求体 — 嵌套结构，与 RuntimeConfig 对齐。"""
+
     browser: BrowserSettings = Field(default_factory=BrowserSettings)
     monitor: MonitorSettings = Field(default_factory=MonitorSettings)
     retry: RetrySettings = Field(default_factory=RetrySettings)
@@ -396,6 +412,7 @@ class ConfigPatchRequest(BaseModel):
 
     所有字段均为 Optional，未传的字段不修改。
     """
+
     browser: BrowserSettings | None = None
     monitor: MonitorSettings | None = None
     retry: RetrySettings | None = None
@@ -417,21 +434,25 @@ class LogLevelRequest(BaseModel):
 
 class AutoSwitchRequest(BaseModel):
     """POST /api/profiles/auto-switch 请求体。"""
+
     enabled: bool = True
 
 
 class UninstallRequest(BaseModel):
     """POST /api/uninstall 请求体。"""
+
     keys: list[str] = Field(default_factory=list)
 
 
 class FetchUrlRequest(BaseModel):
     """POST /api/background/fetch-url 请求体。"""
+
     url: str = Field(min_length=1, description="图片 URL")
 
 
 class InitStatusResponse(BaseModel):
     """GET /api/init-status 响应。"""
+
     initialized: bool
     agreed: bool
     password_decryption_failed: bool = False
@@ -439,6 +460,7 @@ class InitStatusResponse(BaseModel):
 
 class HealthResponse(BaseModel):
     """GET /api/health 响应。"""
+
     status: str = "ok"
     version: str = ""
     python_version: str = ""
@@ -448,6 +470,7 @@ class HealthResponse(BaseModel):
 
 class ShellInfo(BaseModel):
     """Shell 信息。"""
+
     name: str = ""
     path: str = ""
     description: str = ""
@@ -455,12 +478,14 @@ class ShellInfo(BaseModel):
 
 class ShellListResponse(BaseModel):
     """GET /api/shells 响应。"""
+
     shells: list[ShellInfo] = Field(default_factory=list)
     default: str = ""
 
 
 class DebugSessionResponse(BaseModel):
     """调试会话状态响应（start/next/run-all/stop 共用）。"""
+
     running: bool = False
     task_id: str | None = None
     current_step: int = 0
@@ -471,28 +496,33 @@ class DebugSessionResponse(BaseModel):
     message: str = ""
 
 
-class AutostartEnableRequest(BaseModel):
-    """POST /api/autostart/enable|mode 请求体。"""
-    lightweight: bool = True
+class AutostartModeRequest(BaseModel):
+    """POST /api/autostart/mode 请求体。"""
+
+    runtime_mode: RuntimeMode = RuntimeMode.FULL
 
 
 class TaskOrderRequest(BaseModel):
     """POST /api/tasks/order 请求体。"""
+
     order: list[str] = Field(default_factory=list, description="任务 ID 有序列表")
 
 
 class PureModeResponse(BaseModel):
     """GET/POST /api/pure-mode 响应。"""
+
     enabled: bool
 
 
 class StealthScriptResponse(BaseModel):
     """GET /api/config/default-stealth-script 响应。"""
+
     script: str = ""
 
 
 class NetworkDetectResponse(BaseModel):
     """POST /api/profiles/detect 响应。"""
+
     gateway_ip: str | None = None
     ssid: str | None = None
     matched_profile_id: str | None = None
@@ -501,18 +531,21 @@ class NetworkDetectResponse(BaseModel):
 
 class BinaryInfo(BaseModel):
     """可执行二进制信息。"""
+
     path: str = ""
     name: str = ""
 
 
 class OcrStatusResponse(BaseModel):
     """GET /api/ocr/status 响应。"""
+
     installed: bool = False
     size_mb: float = 0.0
 
 
 class UpdateCheckResponse(BaseModel):
     """GET /api/check-update 响应。"""
+
     current: str = ""
     latest: str | None = None
     has_update: bool = False
@@ -525,6 +558,7 @@ class UpdateCheckResponse(BaseModel):
 
 class UninstallItem(BaseModel):
     """可清理项目。"""
+
     key: str
     label: str
     exists: bool = False
@@ -607,5 +641,3 @@ class ScheduledTaskConfig(BaseModel):
         if self.type in ("script", "browser") and not self.target_id:
             raise ValueError("请选择目标任务")
         return self
-
-

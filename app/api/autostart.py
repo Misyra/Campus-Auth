@@ -5,7 +5,14 @@ from __future__ import annotations
 from fastapi import APIRouter, Request
 
 from app.deps import AutoStartServiceDep
-from app.schemas import ApiResponse, AutoStartStatusResponse, AutostartEnableRequest, ShellInfo, ShellListResponse
+from app.schemas import (
+    ApiResponse,
+    AutostartModeRequest,
+    AutoStartStatusResponse,
+    RuntimeMode,
+    ShellInfo,
+    ShellListResponse,
+)
 from app.utils.logging import get_logger
 from app.utils.shell_utils import detect_shells as detect_available_shells
 from app.utils.shell_utils import get_default_shell
@@ -25,21 +32,28 @@ def list_shells() -> ShellListResponse:
     )
 
 
-def _read_autostart_lightweight(request: Request) -> bool:
-    """从 container 共享的 ProfileService 读取自启动轻量模式偏好。"""
+def _read_runtime_mode(request: Request) -> RuntimeMode:
+    """从配置中读取自启动运行模式。"""
     try:
         ps = request.app.state.services.profile_service
-        return bool(ps.load().global_config.app_settings.autostart_lightweight)
+        return RuntimeMode(ps.load().global_config.app_settings.runtime_mode)
     except Exception as e:
-        api_logger.warning("读取自启动轻量模式失败，使用默认值: {}", e)
-        return True  # 默认轻量
+        api_logger.warning("读取自启动运行模式失败，使用默认值: {}", e)
+        return RuntimeMode.LIGHTWEIGHT
 
 
-def _save_autostart_lightweight(request: Request, lightweight: bool) -> None:
-    """通过 container 共享的 ProfileService 保存自启动轻量模式偏好。"""
+def _save_runtime_mode(request: Request, runtime_mode: RuntimeMode) -> None:
+    """保存自启动运行模式到配置。"""
     ps = request.app.state.services.profile_service
-    ps.update(lambda d: setattr(d.global_config, "app_settings",
-        d.global_config.app_settings.model_copy(update={"autostart_lightweight": lightweight})))
+    ps.update(
+        lambda d: setattr(
+            d.global_config,
+            "app_settings",
+            d.global_config.app_settings.model_copy(
+                update={"runtime_mode": runtime_mode}
+            ),
+        )
+    )
 
 
 @router.get("/api/autostart/status", response_model=AutoStartStatusResponse)
@@ -53,21 +67,17 @@ def autostart_status(
         enabled=bool(status.get("enabled", False)),
         method=str(status.get("method", "")),
         location=str(status.get("location", "")),
-        lightweight=_read_autostart_lightweight(request),
+        runtime_mode=_read_runtime_mode(request).value,
     )
 
 
 @router.post("/api/autostart/enable", response_model=ApiResponse)
 def enable_autostart(
     autostart_svc: AutoStartServiceDep,
-    request: Request,
-    body: AutostartEnableRequest | None = None,
 ) -> ApiResponse:
-    lightweight = body.lightweight if body else True
-    _save_autostart_lightweight(request, lightweight)
-    ok, message = autostart_svc.enable(lightweight=lightweight)
+    ok, message = autostart_svc.enable()
     if ok:
-        api_logger.info("启用自启动成功 (轻量={})", lightweight)
+        api_logger.info("启用自启动成功")
     else:
         api_logger.warning("启用自启动失败: {}", message)
     return ApiResponse(success=ok, message=message)
@@ -88,17 +98,11 @@ def disable_autostart(
 @router.post("/api/autostart/mode", response_model=ApiResponse)
 def set_autostart_mode(
     request: Request,
-    body: AutostartEnableRequest,
-    autostart_svc: AutoStartServiceDep,
+    body: AutostartModeRequest,
 ) -> ApiResponse:
-    """切换自启动运行模式（重新生成脚本）。"""
-    _save_autostart_lightweight(request, body.lightweight)
-    status = autostart_svc.status()
-    if not status.get("enabled"):
-        return ApiResponse(success=True, message="自启动未启用，模式已保存")
-    ok, message = autostart_svc.enable(lightweight=body.lightweight)
-    if ok:
-        api_logger.info("切换自启动模式成功 (轻量={})", body.lightweight)
-    else:
-        api_logger.warning("切换自启动模式失败: {}", message)
-    return ApiResponse(success=ok, message=message)
+    """切换自启动运行模式（仅保存配置，不重新生成脚本）。"""
+    _save_runtime_mode(request, body.runtime_mode)
+    api_logger.info("切换自启动模式: {}", body.runtime_mode.value)
+    return ApiResponse(
+        success=True, message=f"自启动模式已切换为 {body.runtime_mode.value}"
+    )

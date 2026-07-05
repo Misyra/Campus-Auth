@@ -147,10 +147,10 @@ export const DEFAULT_CONFIG = {
   app_settings: {
     block_proxy: true,
     shell_path: "",
-    minimize_to_tray: true,
     startup_action: "none",
-    autostart_lightweight: true,
+    runtime_mode: "full",
     lightweight_tray: true,
+    minimize_to_tray: true,
     auto_open_browser: false,
     proxy: "",
     app_port: 50721,

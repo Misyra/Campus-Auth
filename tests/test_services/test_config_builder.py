@@ -145,7 +145,7 @@ class TestFieldCompleteness:
                 shell_path="/usr/bin/bash",
                 minimize_to_tray=False,
                 startup_action="monitor",
-                autostart_lightweight=False,
+                runtime_mode="lightweight",
                 lightweight_tray=False,
                 auto_open_browser=True,
                 proxy="http://proxy:8080",
@@ -157,7 +157,7 @@ class TestFieldCompleteness:
         assert rc.app_settings.shell_path == "/usr/bin/bash"
         assert rc.app_settings.minimize_to_tray is False
         assert rc.app_settings.startup_action == "monitor"
-        assert rc.app_settings.autostart_lightweight is False
+        assert rc.app_settings.runtime_mode == "lightweight"
         assert rc.app_settings.lightweight_tray is False
         assert rc.app_settings.auto_open_browser is True
         assert rc.app_settings.proxy == "http://proxy:8080"
@@ -215,7 +215,7 @@ class TestEndToEnd:
                 shell_path="/bin/zsh",
                 minimize_to_tray=False,
                 startup_action="login_once",
-                autostart_lightweight=False,
+                runtime_mode="lightweight",
                 lightweight_tray=False,
                 auto_open_browser=True,
                 proxy="socks5://127.0.0.1:1080",

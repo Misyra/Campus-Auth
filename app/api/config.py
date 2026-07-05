@@ -157,7 +157,7 @@ def _log_config_changes(old_dict: dict, new_payload: ConfigSaveRequest) -> None:
         "app_settings.block_proxy": "屏蔽系统代理",
         "app_settings.minimize_to_tray": "最小化到托盘",
         "app_settings.auto_open_browser": "自动打开浏览器",
-        "app_settings.autostart_lightweight": "自启动轻量模式",
+        "app_settings.runtime_mode": "自启动运行模式",
         "logging.access_log": "HTTP访问日志",
         "browser.browser_channel": "浏览器类型",
         "browser.timeout": "浏览器超时",

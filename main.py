@@ -24,6 +24,7 @@ from app.services.launcher import (  # noqa: E402
     _terminate_process,
     launch_server,
 )
+from app.services.profile_service import create_profile_service  # noqa: E402
 from app.utils.process import (  # noqa: E402
     cleanup_pid,
     get_pid_file,
@@ -31,8 +32,6 @@ from app.utils.process import (  # noqa: E402
     is_service_running,
     read_pid_mode,
 )
-from app.services.profile_service import create_profile_service  # noqa: E402
-
 
 # ==================== CLI 命令 ====================
 
@@ -199,12 +198,14 @@ def main() -> None:
         "--runtime-mode",
         choices=["full", "lightweight"],
         default=None,
-        help="覆盖自启动运行模式（手动启动时始终为 full）",
+        help="覆盖运行模式（不指定时读取配置）",
     )
     parser.add_argument("--browser", action="store_true", help="自动打开浏览器")
     parser.add_argument("--no-browser", action="store_true", help="不自动打开浏览器")
     parser.add_argument("--tray", action="store_true", help="最小化到系统托盘")
-    parser.add_argument("--force", action="store_true", help="强制启动，清理残留 PID 文件")
+    parser.add_argument(
+        "--force", action="store_true", help="强制启动，清理残留 PID 文件"
+    )
     parser.add_argument("--no-tray", action="store_true", help="不最小化到系统托盘")
     parser.add_argument("--status", action="store_true", help="查看服务状态")
     parser.add_argument("--stop", action="store_true", help="停止服务")

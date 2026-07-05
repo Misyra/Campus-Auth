@@ -83,13 +83,13 @@
           <span class="field-help" tabindex="0" role="note" data-tip="轻量模式仅后台监控，不启动 Web 界面，可降低常态内存占用；完整模式启动 Web 管理界面。">?</span>
         </div>
         <custom-select
-          v-model="autostart.lightweight"
+          v-model="config.app_settings.runtime_mode"
           :options="autostartModeOptions"
           @change="setAutostartMode"
         ></custom-select>
       </div>
 
-      <template v-if="autostart.enabled && autostart.lightweight">
+      <template v-if="autostart.enabled && config.app_settings.runtime_mode === 'lightweight'">
         <div class="toggle-group settings-toggle-spacer">
           <div class="toggle-with-help">
             <label class="toggle toggle-help-inline">
