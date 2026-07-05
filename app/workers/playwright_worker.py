@@ -188,14 +188,19 @@ class PlaywrightWorker:
         loop = self._loop
         shutdown_cmd = WorkerCommand(type=CMD_SHUTDOWN)
         if loop is not None and loop.is_running():
+
+            def _put_shutdown():
+                try:
+                    self._cmd_queue.put_nowait(shutdown_cmd)
+                except asyncio.QueueFull:
+                    logger.warning("Worker 命令队列已满，强制停止事件循环")
+                    with contextlib.suppress(RuntimeError):
+                        loop.call_soon_threadsafe(loop.stop)
+
             try:
-                loop.call_soon_threadsafe(self._cmd_queue.put_nowait, shutdown_cmd)
+                loop.call_soon_threadsafe(_put_shutdown)
             except RuntimeError:
                 logger.warning("loop 已关闭，无法入队 SHUTDOWN 命令")
-            except asyncio.QueueFull:
-                logger.warning("Worker 命令队列已满，强制停止事件循环")
-                with contextlib.suppress(RuntimeError):
-                    loop.call_soon_threadsafe(loop.stop)
         else:
             try:
                 self._cmd_queue.put_nowait(shutdown_cmd)
@@ -282,8 +287,8 @@ class PlaywrightWorker:
         )
         loop = self._loop
         if loop is not None and loop.is_running():
-            # 跨线程入队：call_soon_threadsafe 保证 put_nowait 在 loop 线程执行
-            # QueueFull 异常在 loop 线程内被吞（日志），调用方靠 response_event.wait(timeout) 超时返回
+            # QueueFull 在 loop 线程内被吞，wait=True 靠 response_event.wait(timeout) 超时返回
+            # wait=False 无法同步获知队列满，但 maxsize=50 几乎不会满
             try:
                 loop.call_soon_threadsafe(self._cmd_queue.put_nowait, cmd)
             except RuntimeError:

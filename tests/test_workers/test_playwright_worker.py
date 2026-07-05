@@ -273,7 +273,7 @@ class TestStopJoinsOnQueueFull:
         fake_thread.join.assert_called()
 
     def test_stop_logs_warning_on_queue_full(self):
-        """队列满时记录 warning 日志（loop 运行时 call_soon_threadsafe 吞 QueueFull，不触发 stop 内 warning）。"""
+        """队列满时，lambda 包装器捕获 QueueFull 并记录 warning + 调用 loop.stop。"""
         from app.workers.playwright_worker import PlaywrightWorker
 
         worker = PlaywrightWorker()
@@ -284,18 +284,15 @@ class TestStopJoinsOnQueueFull:
 
         fake_loop = MagicMock()
         fake_loop.is_running.return_value = True
-        # call_soon_threadsafe 同步执行 fn，put_nowait 抛 QueueFull
-        def fake_call_soon(fn, *args):
-            with contextlib.suppress(asyncio.QueueFull):
-                fn(*args)
-        fake_loop.call_soon_threadsafe.side_effect = fake_call_soon
+        # call_soon_threadsafe 同步执行 fn（模拟 loop 线程行为）
+        fake_loop.call_soon_threadsafe.side_effect = lambda fn, *args: fn(*args)
         worker._loop = fake_loop
 
         with patch.object(worker._cmd_queue, "put_nowait", side_effect=asyncio.QueueFull):
             worker.stop(timeout=1)
 
-        # call_soon_threadsafe 吞掉 QueueFull → stop() 内 except QueueFull 分支不触发
-        # 但 join 后排干队列等流程仍正常完成
+        # lambda 包装器捕获 QueueFull → 调用 loop.call_soon_threadsafe(loop.stop)
+        fake_loop.stop.assert_called()
         fake_thread.join.assert_called()
 
 
