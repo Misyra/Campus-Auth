@@ -43,7 +43,7 @@ class TestInitMonitoringLogMasking:
             block_proxy=True,
         )
 
-        core = NetworkMonitorCore(config=config, logger=_CaptureLogger())
+        core = NetworkMonitorCore(get_config=lambda: config, logger=_CaptureLogger())
         # mock _get_test_sites 以避免真实网络调用
         with patch.object(core, "_get_test_sites", return_value=[("1.1.1.1", 80)]):
             core.init_monitoring()

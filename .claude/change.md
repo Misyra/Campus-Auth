@@ -2,6 +2,24 @@
 
 ## 2026-07-05
 
+### refactor(monitor): NetworkMonitorCore 改 getter 注入，reload 零停机
+
+- `app/services/monitor_service.py`：
+  - `__init__` 的 `config` 参数改为 `get_config: Callable[[], RuntimeConfig]`
+  - 所有 `self.config.X` 改为 `self._get_config().X`（14 处）
+  - `_get_test_sites` 删除缓存，每次重算
+  - `_start_bind_proxy` 记录指纹，新增 `_needs_bind_proxy_rebuild`
+  - 删除 `self._test_sites_cache` 和 `self.config`
+- `app/services/engine.py`：
+  - `_handle_start` 构造 NetworkMonitorCore 改传 getter（pure_mode 闭包捕获）
+  - `_handle_reload` 不再 stop+start，仅 bind 变化时重建 SOCKS5 Forwarder
+  - `_handle_apply_profile` 同上简化
+- 测试：
+  - `tests/test_services/test_monitor_core.py`：新增 `TestGetterInjection`（3 测试）
+  - `tests/test_core/test_monitor.py`：全部 `config=` 改为 `get_config=lambda: config`；`test_caching` 改为 `test_no_caching_returns_fresh`
+  - `tests/test_services/test_engine.py`：`test_handle_reload_monitoring` 断言不再 stop+start；新增 `test_reload_bind_change_rebuilds_proxy`、`test_apply_profile_bind_change_rebuilds`；`test_handle_start_pure_mode` 改查 `get_config` 参数
+  - `tests/test_services/test_monitor_service_masking.py`、`tests/test_integration/test_profile_connection.py`、`tests/test_integration/test_network_connection.py`：适配 getter 注入
+
 ### refactor(schemas): 持久化层 frozen 化，统一不可变风格
 
 - `app/schemas.py`：`GlobalConfig`、`ProfilesData`、`Profile` 加 `frozen=True`
