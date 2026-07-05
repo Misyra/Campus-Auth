@@ -81,9 +81,6 @@ class TestDictUpdateBreaksPydantic:
 
     def test_proper_rollback_via_model_copy(self):
         """正确的回滚方式：使用 model_copy(deep=True)，保持 Pydantic 内部状态一致。"""
-        data = ProfilesData(
-            profiles={"default": Profile(name="当前方案", username="current")},
-        )
         backup = ProfilesData(
             auto_switch=True,
             active_profile="custom",

@@ -218,18 +218,24 @@ class TestProfileServiceCache:
 class TestFrozenModels:
     def test_global_config_frozen(self):
         """GlobalConfig 应为 frozen。"""
+        from pydantic import ValidationError
+
         cfg = GlobalConfig()
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             cfg.browser = GlobalConfig().browser  # setattr 应抛错
 
     def test_profiles_data_frozen(self):
         """ProfilesData 应为 frozen。"""
+        from pydantic import ValidationError
+
         data = ProfilesData()
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             data.active_profile = "test"
 
     def test_profile_frozen(self):
         """Profile 应为 frozen。"""
+        from pydantic import ValidationError
+
         p = Profile()
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             p.name = "test"
