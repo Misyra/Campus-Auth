@@ -52,26 +52,26 @@ class ServiceContainer:
 
         # 新组件
 
-        # 1. 创建 LoginOrchestrator（executor 在 TaskExecutor 创建后绑定）
-        from app.services.login_orchestrator import LoginOrchestrator
-
-        self.login_orchestrator = LoginOrchestrator(
-            worker_getter=_get_worker,
-            login_history=self.login_history_service,
-            profile_service=self.profile_service,
-        )
-
-        # 2. 创建 TaskExecutor（传入 login_orchestrator）
+        # 1. 创建 TaskExecutor（login_orchestrator 延迟绑定，打破循环依赖）
         self.task_executor = TaskExecutor(
             registry=self.task_registry,
             history_store=self.task_history_store,
             worker_getter=_get_worker,
-            login_orchestrator=self.login_orchestrator,
             task_manager=self.task_manager,
         )
 
-        # 3. 绑定登录专用 executor（复用 TaskExecutor 内部的 login_executor）
-        self.login_orchestrator.set_executor(self.task_executor.login_executor)
+        # 2. 创建 LoginOrchestrator（executor 复用 TaskExecutor 的 login_executor）
+        from app.services.login_orchestrator import LoginOrchestrator
+
+        self.login_orchestrator = LoginOrchestrator(
+            worker_getter=_get_worker,
+            executor=self.task_executor.login_executor,
+            login_history=self.login_history_service,
+            profile_service=self.profile_service,
+        )
+
+        # 3. 反向绑定：让 TaskExecutor 持有 orchestrator
+        self.task_executor.bind_login_orchestrator(self.login_orchestrator)
 
         # 3.5 创建 SchedulerService
         from app.services.scheduler_service import SchedulerService
