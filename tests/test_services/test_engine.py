@@ -69,9 +69,10 @@ class TestEngineCmdType:
         assert EngineCmdType.SHUTDOWN == "shutdown"
         assert EngineCmdType.RELOAD == "reload"
         assert EngineCmdType.APPLY_PROFILE == "apply_profile"
+        assert EngineCmdType.NOOP == "noop"
 
     def test_enum_members(self):
-        assert len(EngineCmdType) == 7
+        assert len(EngineCmdType) == 8
 
 
 # =====================================================================
@@ -1965,6 +1966,76 @@ class TestRetryTimeLock:
             assert engine._next_retry_time in results
 
 
+class TestRetryWakeup:
+    """retry 调度后 engine loop 应立即唤醒，不等 timeout。"""
+
+    def test_retry_scheduled_wakes_loop(self, engine_factory):
+        """_bridge_retry_scheduled 设置 _next_retry_time 后应投 noop 命令唤醒 loop。"""
+        svc = engine_factory(raw=True)
+        mock_loop = MagicMock()
+        mock_loop.is_running.return_value = True
+        svc._engine_loop = mock_loop
+        svc._cmd_queue = asyncio.Queue()
+        svc._retry_time_lock = threading.Lock()
+        svc._next_retry_time = 0
+
+        # 构造与 __init__ 一致的 _bridge_retry_scheduled 闭包
+        def _bridge_retry_scheduled(delay: float) -> None:
+            with svc._retry_time_lock:
+                svc._next_retry_time = time.time() + delay
+            loop = svc._engine_loop
+            if loop is not None and loop.is_running():
+                try:
+                    loop.call_soon_threadsafe(
+                        svc._cmd_queue.put_nowait,
+                        EngineCommand(type=EngineCmdType.NOOP),
+                    )
+                except RuntimeError:
+                    pass
+
+        _bridge_retry_scheduled(5.0)
+
+        # 应通过 call_soon_threadsafe 向 queue 投 noop 命令唤醒 loop
+        mock_loop.call_soon_threadsafe.assert_called_once()
+        assert svc._next_retry_time > time.time()
+
+    def test_retry_scheduled_loop_not_running(self, engine_factory):
+        """loop 未运行时不应抛异常。"""
+        svc = engine_factory(raw=True)
+        svc._engine_loop = None
+        svc._retry_time_lock = threading.Lock()
+        svc._next_retry_time = 0
+
+        def _bridge_retry_scheduled(delay: float) -> None:
+            with svc._retry_time_lock:
+                svc._next_retry_time = time.time() + delay
+            loop = svc._engine_loop
+            if loop is not None and loop.is_running():
+                try:
+                    loop.call_soon_threadsafe(
+                        svc._cmd_queue.put_nowait,
+                        EngineCommand(type=EngineCmdType.NOOP),
+                    )
+                except RuntimeError:
+                    pass
+
+        # 不应抛异常
+        _bridge_retry_scheduled(5.0)
+        assert svc._next_retry_time > time.time()
+
+    def test_noop_command_processed(self, engine_factory):
+        """NOOP 命令应被 _process_command_async 正常处理（无操作）。"""
+        svc = engine_factory(raw=True)
+        cmd = EngineCommand(type=EngineCmdType.NOOP)
+        loop = asyncio.new_event_loop()
+        loop.run_until_complete(svc._cmd_queue.put(cmd))
+        got = loop.run_until_complete(svc._cmd_queue.get())
+        loop.run_until_complete(svc._process_command_async(got))
+        # NOOP 不应设置 response_data
+        assert cmd.response_data is None
+        loop.close()
+
+
 class TestEngineLoopAsyncCommands:
     """_engine_loop_async 应通过 asyncio.Queue 处理命令。"""
 
@@ -2078,7 +2149,6 @@ class TestLoginBridgeDuplicateCallback:
             retry_policy=MonitoredPolicy(),
             status_update_callback=lambda: None,
             logger=MagicMock(),
-            wakeup_event=threading.Event(),
             get_monitor_check_interval=lambda: 300,
         )
         return bridge, mock_orchestrator

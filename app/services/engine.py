@@ -48,6 +48,7 @@ class EngineCmdType(StrEnum):
     RELOAD = "reload"
     APPLY_PROFILE = "apply_profile"
     TEST_NETWORK = "test_network"
+    NOOP = "noop"  # 空操作，仅用于唤醒 loop
 
 
 class StartResult(Enum):
@@ -190,7 +191,6 @@ class LoginBridge:
         retry_policy: MonitoredPolicy,
         status_update_callback: Callable[[], None],
         logger,
-        wakeup_event: threading.Event,
         get_monitor_check_interval: Callable[[], int],
         on_retry_scheduled: Callable[[float], None] | None = None,
         on_login_success: Callable[[], None] | None = None,
@@ -201,11 +201,10 @@ class LoginBridge:
         self._retry_policy = retry_policy
         self._status_update_callback = status_update_callback
         self._logger = logger
-        self._wakeup_event = wakeup_event
         self._get_monitor_check_interval = get_monitor_check_interval
         self._registered_futures: set[Future] = set()
         self._futures_lock = threading.Lock()
-        self._on_retry_scheduled = on_retry_scheduled or self._default_retry_scheduled
+        self._on_retry_scheduled = on_retry_scheduled or (lambda delay: None)
         self._on_login_success = on_login_success or (lambda: None)
         self._on_retry_exhausted = on_retry_exhausted or (lambda: None)
 
@@ -336,10 +335,6 @@ class LoginBridge:
         handle.future.add_done_callback(_on_done)
         return True
 
-    def _default_retry_scheduled(self, delay: float) -> None:
-        """重试已调度 — 默认实现：唤醒引擎循环。"""
-        self._wakeup_event.set()
-
     def cancel_login(self) -> tuple[bool, str]:
         """取消当前正在执行的登录。"""
         orchestrator = self._get_orchestrator()
@@ -425,13 +420,19 @@ class ScheduleEngine:
         self._next_retry_time: float = 0  # 下次重试时间（独立于网络检测）
 
         # LoginBridge — 登录委托
-        _wakeup_placeholder = (
-            threading.Event()
-        )  # LoginBridge 兼容占位，引擎 loop 不依赖
-
         def _bridge_retry_scheduled(delay: float) -> None:
             with self._retry_time_lock:
                 self._next_retry_time = time.time() + delay
+            # 投 noop 命令唤醒 engine loop（不等 asyncio.wait_for timeout）
+            loop = self._engine_loop
+            if loop is not None and loop.is_running():
+                try:
+                    loop.call_soon_threadsafe(
+                        self._cmd_queue.put_nowait,
+                        EngineCommand(type=EngineCmdType.NOOP),
+                    )
+                except RuntimeError:
+                    pass  # loop 关闭瞬间，忽略
 
         def _bridge_login_success() -> None:
             with self._retry_time_lock:
@@ -447,7 +448,6 @@ class ScheduleEngine:
             retry_policy=self._retry_policy,
             status_update_callback=self._update_status_snapshot,
             logger=self._logger,
-            wakeup_event=_wakeup_placeholder,
             get_monitor_check_interval=lambda: self._monitor_check_interval,
             on_retry_scheduled=_bridge_retry_scheduled,
             on_login_success=_bridge_login_success,
@@ -559,6 +559,8 @@ class ScheduleEngine:
                 self._handle_apply_profile(cmd)
             elif cmd.type == EngineCmdType.TEST_NETWORK:
                 await self._handle_test_network(cmd)
+            elif cmd.type == EngineCmdType.NOOP:
+                pass  # 空操作，仅唤醒 loop
         except Exception:
             logger.warning("命令执行失败: {}", cmd.type, exc_info=True)
             if cmd.response_future and not cmd.response_future.done():
