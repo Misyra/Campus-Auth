@@ -1087,6 +1087,8 @@ class TestCorruptRenameEAFP:
         svc._profiles_dir = profiles_dir
         svc._lock = MagicMock()
         svc._data = None
+        svc._cache = None
+        svc._cache_mtime = None
 
         result = svc._load_unsafe()
 
@@ -1107,6 +1109,8 @@ class TestCorruptRenameEAFP:
         svc._profiles_dir = profiles_dir
         svc._lock = MagicMock()
         svc._data = None
+        svc._cache = None
+        svc._cache_mtime = None
 
         result = svc._load_unsafe()
 

@@ -2,6 +2,17 @@
 
 ## 2026-07-05
 
+### refactor(profile): ProfileService 加 mtime 内存缓存 + 单例化
+
+- `app/services/profile_service.py`：
+  - `__init__` 新增 `_cache` / `_cache_mtime` 字段
+  - `_load_unsafe` 改为 mtime 缓存：mtime 未变返回缓存引用，变化时读盘更新缓存
+  - `_save_unsafe` 写盘后同步刷新缓存
+  - 新增 `get_profile_service()` 双重检查锁定单例，`create_profile_service()` 改为兼容别名
+  - 新增 `reset_profile_service_singleton()` 仅供测试重置
+- `tests/test_services/test_profile_service.py`：新增 `autouse` fixture `_reset_singleton`；`test_load_returns_new_instance_each_time` 改为 `test_load_returns_cached_instance_when_unchanged`；新增 `TestProfileServiceCache`（3 测试：缓存命中、mtime 失效、update 刷新）
+- `tests/test_app/test_backend_services.py`：`TestCorruptRenameEAFP` 两处 `__new__` 构造补充 `_cache` / `_cache_mtime` 属性
+
 ### fix(engine): 修复 _reload_config_internal 裸写和 toggle_pure_mode TOCTOU
 
 - `app/services/engine.py`：
