@@ -64,8 +64,9 @@ uvx pre-commit run --all-files
 | 变量/函数 | `snake_case` | `get_profile`, `check_interval` |
 | 类名 | `PascalCase` | `RuntimeConfig`, `ScheduleEngine` |
 | 常量 | `UPPER_SNAKE_CASE` | `DEFAULT_TIMEOUT`, `PROJECT_ROOT` |
-| 私有成员 | 单下划线前缀 | `_internal_state`, `_cleanup()` |
-| 模块级私有 | 单下划线前缀 | `_TEMP_MAX_AGE = 7` |
+| 私有成员/模块级私有 | 单下划线前缀 | `self._state`、`_cleanup()`、`_TEMP_MAX_AGE` |
+
+**强制执行**：仅被同模块/同类内部调用的函数和变量，必须加 `_` 前缀。公共 API（被其他模块 import）不加前缀。审计时以此为准——无外部调用方的公开函数应降为私有。
 
 ### Ruff 规则集
 
