@@ -426,13 +426,11 @@ class ScheduleEngine:
             # 投 noop 命令唤醒 engine loop（不等 asyncio.wait_for timeout）
             loop = self._engine_loop
             if loop is not None and loop.is_running():
-                try:
+                with contextlib.suppress(RuntimeError):
                     loop.call_soon_threadsafe(
                         self._cmd_queue.put_nowait,
                         EngineCommand(type=EngineCmdType.NOOP),
                     )
-                except RuntimeError:
-                    pass  # loop 关闭瞬间，忽略
 
         def _bridge_login_success() -> None:
             with self._retry_time_lock:
