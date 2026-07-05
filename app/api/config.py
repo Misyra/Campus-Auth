@@ -64,11 +64,9 @@ def set_log_level(payload: LogLevelRequest, request: Request) -> ApiResponse:
     profile_service.update(
         lambda d: setattr(d.global_config, "logging", d.global_config.logging.model_copy(update={"level": actual}))
     )
-    # 同步更新引擎运行时配置，使监控线程立即感知新级别
+    # 同步更新引擎运行时配置（经公共方法，不再裸改私有属性）
     engine = request.app.state.services.engine
-    engine._runtime_config = engine._runtime_config.model_copy(
-        update={"logging": engine._runtime_config.logging.model_copy(update={"level": actual})}
-    )
+    engine.update_log_level(actual)
     return ApiResponse(success=True, message=f"已设置全局日志级别为 {actual}")
 
 

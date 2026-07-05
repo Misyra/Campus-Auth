@@ -2,6 +2,13 @@
 
 ## 2026-07-05
 
+### refactor(engine): 收敛 _runtime_config 写路径到 _swap_runtime_config
+
+- `app/services/engine.py`：新增 `_swap_runtime_config`（单一写入口，`_reload_lock` 下原子替换）和 `update_log_level` 公共方法；重写 `_reload_config_internal`（磁盘 IO 移出锁外，B5）；`toggle_pure_mode` 改用 `_swap` 替换运行时配置
+- `app/api/config.py`：`set_log_level` 路由改调 `engine.update_log_level()`，不再裸改私有属性
+- `tests/test_services/test_engine.py`：新增 `TestSwapRuntimeConfig`（2 测试）、`TestUpdateLogLevel`（2 测试）
+- `tests/test_api/test_api_config_routes.py`：调整 `set_log_level` 测试验证 `update_log_level` 被调用
+
 ### refactor(orchestrator): 移除 LoginOrchestrator 自建 fallback pool 死代码
 
 - `app/services/login_orchestrator.py`：executor 改为必传（body 校验），删除 pool 参数与 set_executor 方法，shutdown 不再关闭外部 executor
