@@ -2,6 +2,54 @@
 
 ## 2026-07-05
 
+### refactor(network): probes/decision 改 asyncio，消除 11 探测线程
+
+- `app/network/probes.py`：
+  - `socket.create_connection` → `asyncio.open_connection`，支持 `local_addr` 绑定源 IP
+  - `httpx.Client` → `httpx.AsyncClient`，per-call 创建替代全局单例
+  - 删除 `ThreadPoolExecutor(8)` 及相关同步客户端池（`_probe_client`、`_bound_clients`）
+  - 新增 `_race_first_success_async`（async 版 OR 语义竞态）
+  - `shutdown_probes()` 简化为仅设置 `_shutdown_event`
+- `app/network/decision.py`：
+  - `is_network_available()` → `async def`，`ThreadPoolExecutor(3)` + `as_completed` → `asyncio.gather`
+  - `check_network_status()` → `async def`
+  - 删除 `_decision_executor` 和 `shutdown_decision_executor()`
+- `app/services/monitor_service.py`：
+  - `NetworkMonitorCore.check_once()` → `async def`，内部 `await check_network_status()`
+  - 删除 `_check_bind_ip_change` 中的 `close_bound_client` 调用
+- `app/services/engine.py`：
+  - `_do_network_check_async`：`await asyncio.to_thread(core.check_once)` → `await core.check_once()`
+  - `test_network()`：改为通过 `_dispatch_command(TEST_NETWORK)` 派发到引擎 loop 异步执行
+  - 新增 `EngineCmdType.TEST_NETWORK` 和 `_handle_test_network` 处理器
+- `app/container.py`：删除 `shutdown_decision_executor()` 调用
+- `app/services/login_runner.py`：`check_network_status()` 改为 `asyncio.run(check_network_status())`
+- 测试适配：
+  - `tests/test_network/test_probes.py`：删除 executor/客户端池测试，新增 async 探测测试
+  - `tests/test_network/test_decision.py`：删除 executor 隔离测试，适配 async
+  - `tests/test_core/test_network_probes.py`：探测测试改为 async + `AsyncMock`
+  - `tests/test_services/test_engine.py`：`check_once` mock 改 `AsyncMock`，`test_network` 改 dispatch mock
+  - `tests/test_integration/`：适配 `check_network_status` 和 `check_once` async 化
+  - `tests/test_config/test_container.py`、`tests/test_app/`、`tests/test_services/test_container_cleanup.py`：删除 `shutdown_decision_executor` mock
+
+### fix(engine): 修复 start_thread 语义回归 + login 回调线程安全
+
+- `app/services/engine.py`：
+  - `start_thread()`：提取 `_start_engine_thread()` 内部方法，`start_thread()` 仅启动引擎 loop 线程不再调用 `start_monitoring()`，修复 `startup_action=none` 场景下监控被意外启动的语义回归
+  - `boot()`：引擎线程已运行时直接调用 `start_monitoring()`，否则先启动线程再启动监控
+  - `_handle_login` 的 `_on_complete` 回调：`cmd.response_future.set_result()` 改为 `self._engine_loop.call_soon_threadsafe(cmd.response_future.set_result, ...)`,修复 `concurrent.futures.Future.add_done_callback` 在工作线程中触发时对 `asyncio.Future.set_result()` 的线程安全问题
+- 测试：
+  - `tests/test_services/test_engine.py`：`test_handle_login_success` 改为使用运行中的 engine loop + `threading.Event` 同步，适配 `call_soon_threadsafe` 异步语义
+
+### fix(engine): 修复 frozen setattr 崩溃 + pure_mode getter 动态覆盖
+
+- `app/services/engine.py`：
+  - `toggle_pure_mode`：`setattr(d, "global_config", ...)` → `d.model_copy(update={...})`，修复 frozen 模型 ValidationError
+  - `_handle_start` pure_mode getter：闭包捕获副本改为动态覆盖 `base_getter` + `model_copy`，reload 后 config 变化自动生效
+- `app/api/autostart.py`：
+  - `_save_runtime_mode`：`setattr(d.global_config, "app_settings", ...)` → `d.model_copy(update={...})`，修复 frozen 模型 ValidationError
+- 测试：
+  - `tests/test_services/test_engine.py`：`TestTogglePureMode` 新增 `test_toggle_pure_mode_persists_to_disk`，用真实 frozen ProfilesData 验证 lambda 不崩溃
+
 ### refactor(monitor): NetworkMonitorCore 改 getter 注入，reload 零停机
 
 - `app/services/monitor_service.py`：

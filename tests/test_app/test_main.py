@@ -459,18 +459,25 @@ class TestRunLoginThenExit:
 
     def test_success_first_try(self, tmp_pid_dir):
         """首次登录成功应返回 SUCCESS。"""
-        from app.services.login_runner import run_login_then_exit as _run_login_then_exit
+        from app.services.login_runner import (
+            run_login_then_exit as _run_login_then_exit,
+        )
 
         mock_worker, mock_ps, mock_data = self._make_mocks()
         success_result = MagicMock(success=True, data="ok")
         mock_worker.submit.return_value = success_result
 
         # 所有 local import 需要 patch 到源模块
-        mock_ps.get_runtime_config.return_value = RuntimeConfig(credentials=_TEST_CREDS, retry=RetrySettings(max_retries=3))
+        mock_ps.get_runtime_config.return_value = RuntimeConfig(
+            credentials=_TEST_CREDS, retry=RetrySettings(max_retries=3)
+        )
         with (
             patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
             patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
-            patch("app.services.profile_service.create_profile_service", return_value=mock_ps),
+            patch(
+                "app.services.profile_service.create_profile_service",
+                return_value=mock_ps,
+            ),
             patch("app.workers.playwright_worker.cleanup_orphan_browsers"),
         ):
             mock_ps.load.return_value = mock_data
@@ -480,20 +487,28 @@ class TestRunLoginThenExit:
 
     def test_retries_exhausted(self, tmp_pid_dir):
         """单次提交失败，返回 TEMPORARY_FAILURE。"""
-        from app.services.login_runner import run_login_then_exit as _run_login_then_exit
+        from app.services.login_runner import (
+            run_login_then_exit as _run_login_then_exit,
+        )
 
         mock_worker, mock_ps, mock_data = self._make_mocks()
         fail_result = MagicMock(success=False, error="timeout")
         mock_worker.submit.return_value = fail_result
 
-        mock_ps.get_runtime_config.return_value = RuntimeConfig(credentials=_TEST_CREDS, retry=RetrySettings(max_retries=2, retry_interval=1))
+        mock_ps.get_runtime_config.return_value = RuntimeConfig(
+            credentials=_TEST_CREDS,
+            retry=RetrySettings(max_retries=2, retry_interval=1),
+        )
         with (
             patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
             patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
-            patch("app.services.profile_service.create_profile_service", return_value=mock_ps),
+            patch(
+                "app.services.profile_service.create_profile_service",
+                return_value=mock_ps,
+            ),
             patch(
                 "app.network.decision.check_network_status",
-                return_value=(False, "network_down", "none"),
+                new=AsyncMock(return_value=(False, "network_down", "none")),
             ),
             patch("app.workers.playwright_worker.cleanup_orphan_browsers"),
         ):
@@ -509,18 +524,25 @@ class TestRunLoginThenExit:
 
     def test_network_already_connected_exits(self, tmp_pid_dir):
         """网络已连接时应返回 SUCCESS，不启动浏览器登录。"""
-        from app.services.login_runner import run_login_then_exit as _run_login_then_exit
+        from app.services.login_runner import (
+            run_login_then_exit as _run_login_then_exit,
+        )
 
         mock_worker, mock_ps, mock_data = self._make_mocks()
 
-        mock_ps.get_runtime_config.return_value = RuntimeConfig(credentials=_TEST_CREDS, retry=RetrySettings(max_retries=3))
+        mock_ps.get_runtime_config.return_value = RuntimeConfig(
+            credentials=_TEST_CREDS, retry=RetrySettings(max_retries=3)
+        )
         with (
             patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
             patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
-            patch("app.services.profile_service.create_profile_service", return_value=mock_ps),
+            patch(
+                "app.services.profile_service.create_profile_service",
+                return_value=mock_ps,
+            ),
             patch(
                 "app.network.decision.check_network_status",
-                return_value=(True, "network_ok", "tcp"),
+                new=AsyncMock(return_value=(True, "network_ok", "tcp")),
             ),
         ):
             mock_ps.load.return_value = mock_data
@@ -532,20 +554,27 @@ class TestRunLoginThenExit:
 
     def test_network_down_proceeds_with_login(self, tmp_pid_dir):
         """网络未连接时应继续尝试登录，返回 SUCCESS。"""
-        from app.services.login_runner import run_login_then_exit as _run_login_then_exit
+        from app.services.login_runner import (
+            run_login_then_exit as _run_login_then_exit,
+        )
 
         mock_worker, mock_ps, mock_data = self._make_mocks()
         success_result = MagicMock(success=True, data="ok")
         mock_worker.submit.return_value = success_result
 
-        mock_ps.get_runtime_config.return_value = RuntimeConfig(credentials=_TEST_CREDS, retry=RetrySettings(max_retries=3))
+        mock_ps.get_runtime_config.return_value = RuntimeConfig(
+            credentials=_TEST_CREDS, retry=RetrySettings(max_retries=3)
+        )
         with (
             patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
             patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
-            patch("app.services.profile_service.create_profile_service", return_value=mock_ps),
+            patch(
+                "app.services.profile_service.create_profile_service",
+                return_value=mock_ps,
+            ),
             patch(
                 "app.network.decision.check_network_status",
-                return_value=(False, "network_down", "none"),
+                new=AsyncMock(return_value=(False, "network_down", "none")),
             ),
             patch("app.workers.playwright_worker.cleanup_orphan_browsers"),
         ):
@@ -557,17 +586,24 @@ class TestRunLoginThenExit:
 
     def test_network_check_exception_proceeds(self, tmp_pid_dir):
         """网络检测异常时应降级继续尝试登录，返回 SUCCESS。"""
-        from app.services.login_runner import run_login_then_exit as _run_login_then_exit
+        from app.services.login_runner import (
+            run_login_then_exit as _run_login_then_exit,
+        )
 
         mock_worker, mock_ps, mock_data = self._make_mocks()
         success_result = MagicMock(success=True, data="ok")
         mock_worker.submit.return_value = success_result
 
-        mock_ps.get_runtime_config.return_value = RuntimeConfig(credentials=_TEST_CREDS, retry=RetrySettings(max_retries=3))
+        mock_ps.get_runtime_config.return_value = RuntimeConfig(
+            credentials=_TEST_CREDS, retry=RetrySettings(max_retries=3)
+        )
         with (
             patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
             patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
-            patch("app.services.profile_service.create_profile_service", return_value=mock_ps),
+            patch(
+                "app.services.profile_service.create_profile_service",
+                return_value=mock_ps,
+            ),
             patch(
                 "app.network.decision.check_network_status",
                 side_effect=RuntimeError("probe failed"),
@@ -586,13 +622,16 @@ class TestLoginOnceRetryInterval:
 
     def test_login_timeout_passed_to_worker(self, tmp_pid_dir):
         """login_timeout 应从配置读取并传递给 worker。"""
-        from app.services.login_runner import execute_login_with_retries as _execute_login_with_retries
+        from app.services.login_runner import (
+            execute_login_with_retries as _execute_login_with_retries,
+        )
 
         mock_worker = MagicMock()
         success_result = MagicMock(success=True, data="ok")
         mock_worker.submit.return_value = success_result
 
         from app.schemas import BrowserSettings
+
         runtime_config = RuntimeConfig(
             credentials=_TEST_CREDS,
             retry=RetrySettings(max_retries=1),
@@ -614,13 +653,17 @@ class TestLoginOnceRetryInterval:
 
     def test_login_timeout_default(self, tmp_pid_dir):
         """配置中无 login_timeout 时由 Orchestrator 兜底（resolve_worker_timeout fallback=300）。"""
-        from app.services.login_runner import execute_login_with_retries as _execute_login_with_retries
+        from app.services.login_runner import (
+            execute_login_with_retries as _execute_login_with_retries,
+        )
 
         mock_worker = MagicMock()
         success_result = MagicMock(success=True, data="ok")
         mock_worker.submit.return_value = success_result
 
-        runtime_config = RuntimeConfig(credentials=_TEST_CREDS, retry=RetrySettings(max_retries=1))
+        runtime_config = RuntimeConfig(
+            credentials=_TEST_CREDS, retry=RetrySettings(max_retries=1)
+        )
 
         with (
             patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
@@ -667,7 +710,9 @@ class TestRunServer:
         mock_ctx.launch.source = LaunchSource.MANUAL
 
         with (
-            patch("app.services.launcher.is_service_running", return_value=(True, 1234)),
+            patch(
+                "app.services.launcher.is_service_running", return_value=(True, 1234)
+            ),
             patch("app.services.launcher.is_local_port_in_use", return_value=True),
             patch("app.utils.ports.resolve_port", return_value=50721),
         ):
@@ -698,7 +743,9 @@ class TestRunServer:
         mock_ctx.launch.source = LaunchSource.MANUAL
 
         with (
-            patch("app.services.launcher.is_service_running", return_value=(False, None)),
+            patch(
+                "app.services.launcher.is_service_running", return_value=(False, None)
+            ),
             patch("app.services.launcher.is_local_port_in_use", return_value=False),
             patch("app.workers.playwright_bootstrap.ensure_playwright_ready"),
             patch("app.utils.ports.resolve_port", return_value=50721),
@@ -748,7 +795,9 @@ class TestRunServer:
         mock_ctx.launch.source = LaunchSource.MANUAL
 
         with (
-            patch("app.services.launcher.is_service_running", return_value=(False, None)),
+            patch(
+                "app.services.launcher.is_service_running", return_value=(False, None)
+            ),
             patch("app.services.launcher.is_local_port_in_use", return_value=False),
             patch("app.workers.playwright_bootstrap.ensure_playwright_ready"),
             patch("app.utils.ports.resolve_port", return_value=50721),
@@ -799,7 +848,9 @@ class TestRunServer:
         mock_ctx.launch.source = LaunchSource.MANUAL
 
         with (
-            patch("app.services.launcher.is_service_running", return_value=(False, None)),
+            patch(
+                "app.services.launcher.is_service_running", return_value=(False, None)
+            ),
             patch("app.services.launcher.is_local_port_in_use", return_value=False),
             patch("app.workers.playwright_bootstrap.ensure_playwright_ready"),
             patch("app.utils.ports.resolve_port", return_value=50721),
@@ -813,7 +864,8 @@ class TestRunServer:
             patch("app.services.launcher.os._exit"),
             patch.object(time, "sleep", side_effect=[None, KeyboardInterrupt]),
             patch(
-                "app.services.launcher.handle_startup_action", return_value=(MagicMock(), False)
+                "app.services.launcher.handle_startup_action",
+                return_value=(MagicMock(), False),
             ) as mock_handle,
         ):
             mock_ps = MagicMock()
@@ -871,7 +923,9 @@ class TestSignalHandler:
             return handler
 
         with (
-            patch("app.services.launcher.is_service_running", return_value=(False, None)),
+            patch(
+                "app.services.launcher.is_service_running", return_value=(False, None)
+            ),
             patch("app.services.launcher.is_local_port_in_use", return_value=False),
             patch("app.workers.playwright_bootstrap.ensure_playwright_ready"),
             patch("app.utils.ports.resolve_port", return_value=50721),
@@ -923,7 +977,9 @@ class TestSignalHandler:
             return handler
 
         with (
-            patch("app.services.launcher.is_service_running", return_value=(False, None)),
+            patch(
+                "app.services.launcher.is_service_running", return_value=(False, None)
+            ),
             patch("app.services.launcher.is_local_port_in_use", return_value=False),
             patch("app.workers.playwright_bootstrap.ensure_playwright_ready"),
             patch("app.utils.ports.resolve_port", return_value=50721),
@@ -1164,7 +1220,9 @@ class TestLoginOnceAllDisabled:
 
         with (
             patch("app.services.login_runner.load_login_config") as mock_load,
-            patch("app.network.decision.check_network_status") as mock_check,
+            patch(
+                "app.network.decision.check_network_status", new_callable=AsyncMock
+            ) as mock_check,
             patch("app.services.login_runner.execute_login_with_retries") as mock_exec,
         ):
             mock_load.return_value = (RuntimeConfig(), None)
