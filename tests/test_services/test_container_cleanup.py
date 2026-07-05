@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 import shutil
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -30,7 +30,6 @@ def mock_container_deps():
         patch("app.container.TaskRegistry") as tr,
         patch("app.container.TaskHistoryStore") as ths,
         patch("app.container.TaskExecutor") as te,
-        patch("app.network.decision.shutdown_decision_executor"),
         patch("app.network.probes.shutdown_probes"),
     ):
         # ws_manager.close_all() 需要可 await

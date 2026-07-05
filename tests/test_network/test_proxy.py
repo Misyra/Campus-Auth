@@ -1,4 +1,5 @@
 """SOCKS5 Forwarder 单元测试。"""
+
 from __future__ import annotations
 
 import socket

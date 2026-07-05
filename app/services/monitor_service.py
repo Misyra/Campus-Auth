@@ -87,9 +87,12 @@ class NetworkMonitorCore:
         # bind_interface_name 指纹：变化时需重建 SOCKS5 Forwarder
         self._last_bind_interface: str = ""
 
-    def log_message(self, message: str, level: str = "INFO", exc_info: bool = False) -> None:
+    def log_message(
+        self, message: str, level: str = "INFO", exc_info: bool = False
+    ) -> None:
         if exc_info:
             import traceback
+
             tb = traceback.format_exc()
             if tb and tb != "NoneType: None\n":
                 message = f"{message}\n{tb}"
@@ -198,8 +201,8 @@ class NetworkMonitorCore:
         # 绑定网卡：启动 SOCKS5 Forwarder
         self._start_bind_proxy()
 
-    def check_once(self) -> CheckOnceResult:
-        """执行一次网络检测（不阻塞，不做登录重试）。"""
+    async def check_once(self) -> CheckOnceResult:
+        """执行一次网络检测（async，不阻塞，不做登录重试）。"""
         interval = self._get_monitor_interval()
         test_sites = self._get_test_sites()
 
@@ -252,7 +255,9 @@ class NetworkMonitorCore:
         self._check_bind_ip_change()
 
         # 3. 网络状态检测
-        net_ok, net_reason, net_method = check_network_status(self._get_config().monitor)
+        net_ok, net_reason, net_method = await check_network_status(
+            self._get_config().monitor
+        )
         if net_ok:
             self._update_state(
                 login_attempt_count=0,
@@ -363,7 +368,11 @@ class NetworkMonitorCore:
     def _check_bind_ip_change(self) -> None:
         """检测绑定网卡的 IP 变化，自动更新代理绑定。"""
         bind_name = self._get_config().monitor.bind_interface_name
-        if not bind_name or not hasattr(self, "_interface_mgr") or not self._interface_mgr:
+        if (
+            not bind_name
+            or not hasattr(self, "_interface_mgr")
+            or not self._interface_mgr
+        ):
             return
 
         new_ip = self._interface_mgr.resolve_ip(bind_name)
@@ -376,10 +385,7 @@ class NetworkMonitorCore:
             self._socks5_server.update_bind_ip(new_ip)
             self.log_message(f"DHCP IP 变化: {old_ip} -> {new_ip}，已更新代理")
 
-        if old_ip:
-            from app.network.probes import close_bound_client
-
-            close_bound_client(old_ip)
+        # probe 客户端已改为 per-call 创建，无需手动关闭旧客户端
 
     def _get_test_sites(self) -> list[tuple[str, int]]:
         """获取测试站点列表（每次重算，targets 量小无需缓存）。"""

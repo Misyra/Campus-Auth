@@ -15,13 +15,9 @@ from app.utils.ports import resolve_port
 
 @pytest.fixture(autouse=True)
 def _mock_decision_executor_shutdown(monkeypatch):
-    """避免 container.shutdown() 真正关闭模块级 _decision_executor 和 probes。"""
-    monkeypatch.setattr(
-        "app.network.decision.shutdown_decision_executor", MagicMock()
-    )
-    monkeypatch.setattr(
-        "app.network.probes.shutdown_probes", MagicMock()
-    )
+    """避免 container.shutdown() 真正关闭模块级资源。"""
+    monkeypatch.setattr("app.network.probes.shutdown_probes", MagicMock())
+
 
 # ── resolve_port ──
 
@@ -193,7 +189,9 @@ class TestCleanupScreenshots:
         nonexistent_temp = tmp_path / "nonexistent_temp"
         with (
             patch("app.application.TEMP_DIR", nonexistent_temp),
-            patch("app.application.SCREENSHOTS_DIR", tmp_path / "nonexistent_screenshots"),
+            patch(
+                "app.application.SCREENSHOTS_DIR", tmp_path / "nonexistent_screenshots"
+            ),
         ):
             _cleanup_screenshots()
 

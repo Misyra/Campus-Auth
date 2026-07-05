@@ -24,8 +24,7 @@ def project_root(tmp_path: Path) -> Path:
 
 @pytest.fixture(autouse=True)
 def _mock_decision_executor_shutdown(monkeypatch):
-    """避免 container.shutdown() 真正关闭模块级 _decision_executor。"""
-    monkeypatch.setattr("app.network.decision.shutdown_decision_executor", MagicMock())
+    """避免 container.shutdown() 真正关闭模块级资源。"""
     monkeypatch.setattr("app.network.probes.shutdown_probes", MagicMock())
 
 
@@ -290,9 +289,7 @@ class TestShutdown:
 
         asyncio.run(_run())
 
-    def test_shutdown_handles_cross_loop_ws_drain_task(
-        self, container_for_shutdown
-    ):
+    def test_shutdown_handles_cross_loop_ws_drain_task(self, container_for_shutdown):
         """跨事件循环的 ws_drain_task 不应引发 RuntimeError。"""
 
         # 在另一个线程中创建 task，模拟守护线程创建的 ws_drain_task
