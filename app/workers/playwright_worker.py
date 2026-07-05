@@ -4,7 +4,7 @@
   PlaywrightWorker 采用与 MonitorService 相同的 Actor 模型:
     - 外部调用者通过 submit() 提交 WorkerCommand 到内部队列
     - 常驻守护线程运行独立 asyncio 事件循环
-    - _async_run() 协程轮询队列并派发命令
+    - _async_run() 协程从队列取命令并派发
     - 所有 Playwright 操作限制在 Worker 线程内执行，避免跨线程竞争
 
 命令派发流程:
@@ -320,7 +320,7 @@ class PlaywrightWorker:
         """异步主循环 — 从 asyncio.Queue 获取命令并派发。
 
         使用 asyncio.Queue.get() 原生阻塞，零延迟、零轮询。
-        外部 submit()/stop() 通过 call_soon_threadsafe(put_nowait) 唤醒。
+        外部 submit()/stop() 通过 put_nowait(cmd) 直接入队，asyncio.Queue.get() 自动唤醒。
         收到 CMD_SHUTDOWN 后退出循环，触发事件循环停止。
         """
         try:
