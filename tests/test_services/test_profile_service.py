@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 import pytest
 
-from app.schemas import Profile, ProfilesData
+from app.schemas import GlobalConfig, Profile, ProfilesData
 from app.services.profile_service import ProfileService, reset_profile_service_singleton
 
 
@@ -213,3 +213,23 @@ class TestProfileServiceCache:
         with patch.object(Path, "read_text") as mock_read:
             mock_read.side_effect = AssertionError("update 后应命中缓存")
             ps.load()
+
+
+class TestFrozenModels:
+    def test_global_config_frozen(self):
+        """GlobalConfig 应为 frozen。"""
+        cfg = GlobalConfig()
+        with pytest.raises(Exception):
+            cfg.browser = GlobalConfig().browser  # setattr 应抛错
+
+    def test_profiles_data_frozen(self):
+        """ProfilesData 应为 frozen。"""
+        data = ProfilesData()
+        with pytest.raises(Exception):
+            data.active_profile = "test"
+
+    def test_profile_frozen(self):
+        """Profile 应为 frozen。"""
+        p = Profile()
+        with pytest.raises(Exception):
+            p.name = "test"

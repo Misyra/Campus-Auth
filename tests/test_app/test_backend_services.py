@@ -318,6 +318,7 @@ class TestProfileServiceRuntimeConfig:
 class TestConfigBuilderBuild:
     def test_basic(self):
         from app.schemas import Profile
+
         config = RuntimeConfig()
         profile = Profile(
             username="admin",
@@ -333,6 +334,7 @@ class TestConfigBuilderBuild:
 
     def test_carrier_custom(self):
         from app.schemas import Profile
+
         config = RuntimeConfig()
         profile = Profile(carrier="自定义", carrier_custom="校园网")
         result = build_runtime_config(config, profile)
@@ -340,6 +342,7 @@ class TestConfigBuilderBuild:
 
     def test_carrier_none(self):
         from app.schemas import Profile
+
         config = RuntimeConfig()
         profile = Profile(carrier="无")
         result = build_runtime_config(config, profile)
@@ -347,11 +350,11 @@ class TestConfigBuilderBuild:
 
     def test_masked_password_returns_empty(self):
         from app.schemas import Profile
+
         config = RuntimeConfig()
         profile = Profile(password="••••••••")
         result = build_runtime_config(config, profile)
         assert result.credentials.password == ""
-
 
 
 # =====================================================================
@@ -666,8 +669,12 @@ class TestProfileService:
         )
         service.save(data)
 
-        def modifier(d: ProfilesData):
-            d.profiles["default"].username = "admin"
+        def modifier(d: ProfilesData) -> ProfilesData:
+            old = d.profiles["default"]
+            new_profile = old.model_copy(update={"username": "admin"})
+            return d.model_copy(
+                update={"profiles": {**d.profiles, "default": new_profile}}
+            )
 
         service.update(modifier)
         loaded = service.load()

@@ -98,16 +98,22 @@ class ProfileService:
         with self._lock:
             self._save_unsafe(data)
 
-    def update(self, func: Callable[[ProfilesData], None]) -> None:
-        """原子化读-改-写操作。
+    def update(self, func: Callable[[ProfilesData], ProfilesData | None]) -> None:
+        """原子化读-改-写操作（不可变版本）。
 
         持锁执行 load → func(data) → save，确保并发安全。
-        func 在锁内调用，应快速返回，不要做 I/O 或网络操作。
+        func 接收当前 ProfilesData，返回新的 ProfilesData（frozen 不可变）。
+        func 应快速返回，不要做 I/O 或网络操作。
+
+        兼容旧签名：若 func 返回 None（原地修改风格），回退到旧逻辑
+        （仅用于过渡期，新代码应返回新对象）。
         """
         with self._lock:
             data = self._load_unsafe()
-            func(data)
-            self._save_unsafe(data)
+            new_data = func(data)
+            if new_data is None:
+                new_data = data
+            self._save_unsafe(new_data)
 
     def get_active_profile(self) -> Profile:
         """获取当前活动方案的设置（返回值由 load() 深拷贝保护，无需再次拷贝）"""
@@ -135,8 +141,8 @@ class ProfileService:
                 return False, f"方案 '{profile_id}' 不存在"
 
             profile_name = data.profiles[profile_id].name
-            data.active_profile = profile_id
-            self._save_unsafe(data)
+            new_data = data.model_copy(update={"active_profile": profile_id})
+            self._save_unsafe(new_data)
         profile_logger.info("切换活动方案 {} 成功", profile_id)
         return True, f"已切换到方案: {profile_name}"
 
@@ -155,21 +161,23 @@ class ProfileService:
 
             # 处理密码字段：None 表示不修改，保留原值
             if settings.password is None:
-                settings.password = existing.password if existing else ""
+                new_password = existing.password if existing else ""
             else:
-                settings.password = save_password_field(
+                new_password = save_password_field(
                     settings.password,
                     existing.password if existing else "",
                 )
+            new_settings = settings.model_copy(update={"password": new_password})
 
-            data.profiles[profile_id] = settings
+            new_profiles = {**data.profiles, profile_id: new_settings}
+            update: dict = {"profiles": new_profiles}
+            if len(new_profiles) == 1:
+                update["active_profile"] = profile_id
+            new_data = data.model_copy(update=update)
 
-            if len(data.profiles) == 1:
-                data.active_profile = profile_id
-
-            self._save_unsafe(data)
-        profile_logger.info("保存方案 {} 成功 ({})", profile_id, settings.name)
-        return True, f"方案 '{settings.name}' 保存成功"
+            self._save_unsafe(new_data)
+        profile_logger.info("保存方案 {} 成功 ({})", profile_id, new_settings.name)
+        return True, f"方案 '{new_settings.name}' 保存成功"
 
     def delete_profile(self, profile_id: str) -> tuple[bool, str]:
         """删除一个方案"""
@@ -184,12 +192,13 @@ class ProfileService:
             if len(data.profiles) <= 1:
                 return False, "至少需要保留一个方案"
 
-            del data.profiles[profile_id]
-
+            new_profiles = {k: v for k, v in data.profiles.items() if k != profile_id}
+            update: dict = {"profiles": new_profiles}
             if data.active_profile == profile_id:
-                data.active_profile = next(iter(data.profiles))
+                update["active_profile"] = next(iter(new_profiles))
 
-            self._save_unsafe(data)
+            new_data = data.model_copy(update=update)
+            self._save_unsafe(new_data)
         profile_logger.info("删除方案 {} 成功", profile_id)
         return True, "方案删除成功"
 
@@ -275,8 +284,8 @@ class ProfileService:
         """设置自动切换开关"""
         with self._lock:
             data = self._load_unsafe()
-            data.auto_switch = enabled
-            self._save_unsafe(data)
+            new_data = data.model_copy(update={"auto_switch": enabled})
+            self._save_unsafe(new_data)
         profile_logger.info("自动切换: {}", "开启" if enabled else "关闭")
 
 
@@ -325,14 +334,12 @@ class SaveResult:
     message: str
 
 
-def _rollback_config(data: ProfilesData, backup_data: ProfilesData) -> None:
-    """回滚配置到备份状态。
+def _rollback_config(data: ProfilesData, backup_data: ProfilesData) -> ProfilesData:
+    """回滚配置到备份状态（不可变版本）。
 
-    使用逐字段赋值而非 __dict__.update，确保 Pydantic 内部状态
-    （如 model_fields_set）保持一致。
+    直接返回 backup_data 的副本（frozen 对象可安全共享，无需 deepcopy）。
     """
-    for field_name in ProfilesData.model_fields:
-        setattr(data, field_name, getattr(backup_data, field_name))
+    return backup_data.model_copy(deep=True)
 
 
 def save_global_and_profile(
@@ -343,16 +350,14 @@ def save_global_and_profile(
     """原子保存全局配置 + 方案凭据。"""
     backup_data = copy.deepcopy(profile_service.load())
 
-    def _apply(data: ProfilesData):
+    def _apply(data: ProfilesData) -> ProfilesData:
         # 1. 更新全局配置
-        logging = payload.logging
-
-        data.global_config = GlobalConfig(
+        new_global = GlobalConfig(
             browser=payload.browser,
             monitor=payload.monitor,
             retry=payload.retry,
             pause=payload.pause,
-            logging=logging,
+            logging=payload.logging,
             app_settings=payload.app_settings,
         )
 
@@ -380,8 +385,7 @@ def save_global_and_profile(
                 existing.password or "",
             )
 
-        # 使用 model_validate 确保验证（model_copy 不触发验证）
-        data.profiles[profile_id] = Profile.model_validate(
+        new_profile = Profile.model_validate(
             {
                 **existing.model_dump(),
                 "username": payload.username or "",
@@ -390,6 +394,14 @@ def save_global_and_profile(
                 "carrier": carrier,
                 "carrier_custom": carrier_custom,
                 "active_task": payload.active_task or "",
+            }
+        )
+
+        new_profiles = {**data.profiles, profile_id: new_profile}
+        return data.model_copy(
+            update={
+                "global_config": new_global,
+                "profiles": new_profiles,
             }
         )
 
