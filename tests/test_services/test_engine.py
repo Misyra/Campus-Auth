@@ -1574,6 +1574,36 @@ class TestTogglePureMode:
         svc.toggle_pure_mode()
         assert svc._runtime_config.browser.pure_mode is True
 
+    def test_toggle_pure_mode_persists_to_disk(self, engine_factory):
+        """toggle_pure_mode 应成功持久化到磁盘（frozen 模型不抛 ValidationError）。
+
+        验证传给 profile_service.update 的 lambda 在真实 frozen ProfilesData 上不崩溃。
+        """
+        from app.schemas import ProfilesData
+
+        svc = engine_factory(raw=True)
+        svc._reload_lock = threading.Lock()
+        svc._runtime_config = RuntimeConfig()
+        svc._pure_mode = False
+
+        # 捕获 update 传入的 lambda，用真实 frozen model 验证
+        captured_lambdas = []
+
+        def fake_update(func):
+            captured_lambdas.append(func)
+
+        svc._profile_service.update = fake_update
+
+        result = svc.toggle_pure_mode()
+        assert result is True
+        assert len(captured_lambdas) == 1
+
+        # 用真实 frozen ProfilesData 执行 lambda，不应抛 ValidationError
+        data = ProfilesData()
+        new_data = captured_lambdas[0](data)
+        assert new_data is not None
+        assert new_data.global_config.browser.pure_mode is True
+
 
 # =====================================================================
 # 属性
