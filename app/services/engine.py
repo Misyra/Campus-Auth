@@ -693,7 +693,12 @@ class ScheduleEngine:
         def _on_complete(ok: bool, msg: str) -> None:
             cmd.response_data = (ok, msg)
             if cmd.response_future and not cmd.response_future.done():
-                cmd.response_future.set_result(cmd.response_data)
+                # _on_complete 由 concurrent.futures.Future.add_done_callback 触发，
+                # 可能在 TaskExecutor 的工作线程中执行，必须用 call_soon_threadsafe
+                # 将结果安全地设置到 engine loop 上的 asyncio.Future。
+                loop = self._engine_loop
+                if loop and not loop.is_closed():
+                    loop.call_soon_threadsafe(cmd.response_future.set_result, cmd.response_data)
 
         self._login_bridge.submit_login(
             is_manual=True,
@@ -791,12 +796,20 @@ class ScheduleEngine:
         用于 startup_action=none 场景：引擎线程必须运行以处理
         配置保存等命令，但监控由用户手动启动。
         """
-        self.boot()
-
-    def boot(self) -> None:
-        """启动引擎 loop 线程。"""
         if self._engine_thread is not None and self._engine_thread.is_alive():
             return
+        self._start_engine_thread()
+
+    def boot(self) -> None:
+        """启动引擎 loop 线程并自动启动监控。"""
+        if self._engine_thread is not None and self._engine_thread.is_alive():
+            self.start_monitoring()
+            return
+        self._start_engine_thread()
+        self.start_monitoring()
+
+    def _start_engine_thread(self) -> None:
+        """启动引擎 loop 线程（内部方法）。"""
         # 启动前清理孤儿浏览器（所有启动入口统一执行）
         from app.workers.playwright_worker import cleanup_orphan_browsers
         try:
@@ -815,7 +828,6 @@ class ScheduleEngine:
             logger.warning("Engine 启动失败: loop 超时")
         else:
             logger.info("Engine 启动成功")
-        self.start_monitoring()
 
     def set_dashboard_sink(self, sink) -> None:
         self._status_manager.set_dashboard_sink(sink)

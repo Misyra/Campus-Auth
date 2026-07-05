@@ -482,16 +482,43 @@ class TestHandleLogin:
         mock_future = Future()
         mock_handle.future = mock_future
         svc._orchestrator.submit.return_value = mock_handle
+
+        # _on_complete 通过 call_soon_threadsafe 设置结果，需要一个运行中的 loop
         loop = asyncio.new_event_loop()
-        response_future = loop.create_future()
+        svc._engine_loop = loop
+        loop_thread = threading.Thread(target=loop.run_forever, daemon=True)
+        loop_thread.start()
+
+        # 在 engine loop 上创建 response_future，用 Event 同步完成
+        done_event = threading.Event()
+        result_holder = {}
+
+        async def _create_and_watch():
+            fut = loop.create_future()
+            return fut
+
+        response_future = asyncio.run_coroutine_threadsafe(
+            _create_and_watch(), loop
+        ).result()
+
+        # 监听 response_future 完成
+        def _on_future_done(f):
+            result_holder["result"] = f.result()
+            done_event.set()
+
+        response_future.add_done_callback(_on_future_done)
+
         cmd = EngineCommand(type=EngineCmdType.LOGIN, response_future=response_future)
         svc._handle_login(cmd)
         # 异步模式：模拟登录完成，触发回调
         mock_future.set_result((True, "登录成功"))
-        # 等待回调完成（add_done_callback 在主线程执行）
-        time.sleep(0.1)
+        # 等待 call_soon_threadsafe 调度的结果被 loop 处理
+        assert done_event.wait(timeout=2.0), "response_future 未在超时内完成"
+        assert result_holder["result"] == (True, "登录成功")
         assert cmd.response_data == (True, "登录成功")
-        assert response_future.done()
+
+        loop.call_soon_threadsafe(loop.stop)
+        loop_thread.join(timeout=2.0)
         loop.close()
 
     def test_handle_login_already_in_progress(self, engine_factory):

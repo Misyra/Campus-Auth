@@ -2,6 +2,15 @@
 
 ## 2026-07-05
 
+### fix(engine): 修复 start_thread 语义回归 + login 回调线程安全
+
+- `app/services/engine.py`：
+  - `start_thread()`：提取 `_start_engine_thread()` 内部方法，`start_thread()` 仅启动引擎 loop 线程不再调用 `start_monitoring()`，修复 `startup_action=none` 场景下监控被意外启动的语义回归
+  - `boot()`：引擎线程已运行时直接调用 `start_monitoring()`，否则先启动线程再启动监控
+  - `_handle_login` 的 `_on_complete` 回调：`cmd.response_future.set_result()` 改为 `self._engine_loop.call_soon_threadsafe(cmd.response_future.set_result, ...)`,修复 `concurrent.futures.Future.add_done_callback` 在工作线程中触发时对 `asyncio.Future.set_result()` 的线程安全问题
+- 测试：
+  - `tests/test_services/test_engine.py`：`test_handle_login_success` 改为使用运行中的 engine loop + `threading.Event` 同步，适配 `call_soon_threadsafe` 异步语义
+
 ### fix(engine): 修复 frozen setattr 崩溃 + pure_mode getter 动态覆盖
 
 - `app/services/engine.py`：
