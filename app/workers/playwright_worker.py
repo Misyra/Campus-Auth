@@ -186,14 +186,15 @@ class PlaywrightWorker:
         # 放入 SHUTDOWN 命令确保事件循环能正常退出
         loop = self._loop
         try:
-            if loop is not None and loop.is_running():
-                loop.call_soon_threadsafe(self._cmd_queue.put_nowait, WorkerCommand(type=CMD_SHUTDOWN))
-            else:
-                self._cmd_queue.put_nowait(WorkerCommand(type=CMD_SHUTDOWN))
+            self._cmd_queue.put_nowait(WorkerCommand(type=CMD_SHUTDOWN))
         except asyncio.QueueFull:
             logger.warning("Worker 命令队列已满，强制停止事件循环")
             if loop is not None and loop.is_running():
                 loop.call_soon_threadsafe(loop.stop)
+
+        # 唤醒事件循环（可能阻塞在 selector.select()）
+        if loop is not None and loop.is_running():
+            loop.call_soon_threadsafe(lambda: None)
 
         # 等待消费者线程正常退出
         if self._consumer_thread:
@@ -270,16 +271,15 @@ class PlaywrightWorker:
             data=data or {},
             response_event=threading.Event() if wait else None,
         )
-        # 跨线程入队：call_soon_threadsafe 一次性完成入队+唤醒 asyncio.Queue.get()
         loop = self._loop
         try:
-            if loop is not None and loop.is_running():
-                loop.call_soon_threadsafe(self._cmd_queue.put_nowait, cmd)
-            else:
-                # loop 未运行，直接 put_nowait（asyncio.Queue 同步方法，无需 loop）
-                self._cmd_queue.put_nowait(cmd)
+            self._cmd_queue.put_nowait(cmd)
         except asyncio.QueueFull:
             return WorkerResponse(success=False, error="命令队列已满，提交超时")
+
+        # 唤醒事件循环（可能阻塞在 selector.select()）
+        if loop is not None and loop.is_running():
+            loop.call_soon_threadsafe(lambda: None)
 
         if not wait:
             return WorkerResponse(success=True)
