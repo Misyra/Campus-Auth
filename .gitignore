@@ -48,6 +48,7 @@ debug/
 .idea/
 *.swp
 *.swo
+.workbuddy/
 
 # 本地工具（不随仓库分发）
 launcher.py
@@ -83,3 +84,4 @@ pyrightconfig.json
 
 # Brainstorm visual companion (local mockups)
 .superpowers/
+superpowers/
