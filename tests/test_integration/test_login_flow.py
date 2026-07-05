@@ -9,13 +9,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import itertools
 import threading
 import time
 from concurrent.futures import Future
 from unittest.mock import MagicMock
-
-import pytest
 
 from app.network.decision import NetworkCheckResult
 from app.schemas import LoginCredentials, MonitorSettings, RuntimeConfig
@@ -23,11 +22,10 @@ from app.services.engine import (
     EngineCmdType,
     EngineCommand,
     ScheduleEngine,
+    StatusManager,
 )
-from app.services.engine import StatusManager, StatusSnapshot
 from app.services.monitor_service import CheckOnceResult
 from app.services.retry_policy import MonitoredPolicy
-
 
 # ── 辅助工厂 ──
 
@@ -35,10 +33,13 @@ from app.services.retry_policy import MonitoredPolicy
 def _make_raw_engine() -> ScheduleEngine:
     """创建一个用 __new__ 跳过 __init__ 的空引擎，用于隔离测试。"""
     svc = ScheduleEngine.__new__(ScheduleEngine)
-    svc._cmd_queue = __import__("queue").Queue(maxsize=50)
+    svc._cmd_queue = asyncio.Queue(maxsize=50)
     svc._shutdown_event = threading.Event()
-    svc._monitor_core = None
+    svc._engine_loop = None
+    svc._engine_thread = None
     svc._engine_running = False
+    svc._engine_ready = threading.Event()
+    svc._monitor_core = None
     svc._retry_policy = MonitoredPolicy()
     svc._runtime_config = RuntimeConfig()
     svc._monitor_check_interval = 300
@@ -49,8 +50,6 @@ def _make_raw_engine() -> ScheduleEngine:
     svc._scheduler.has_enabled_tasks.return_value = False
     svc._task_registry = MagicMock()
     svc._task_executor = MagicMock()
-    svc._engine_thread = MagicMock()
-    svc._engine_thread.is_alive.return_value = False
     svc._manual_login_in_progress = False
     svc._manual_login_lock = threading.Lock()
     svc._reload_lock = threading.Lock()
@@ -68,16 +67,16 @@ def _make_raw_engine() -> ScheduleEngine:
     svc._logger = MagicMock()
     svc._update_status_snapshot = MagicMock()
     svc._orchestrator = MagicMock()
-    svc._wakeup_event = threading.Event()
     # LoginBridge — 登录委托
     from app.services.engine import LoginBridge
+    _wakeup_placeholder = threading.Event()
     svc._login_bridge = LoginBridge(
         get_orchestrator=lambda: svc._orchestrator,
         get_runtime_config=lambda: svc._runtime_config,
         retry_policy=svc._retry_policy,
         status_update_callback=svc._update_status_snapshot,
         logger=svc._logger,
-        wakeup_event=svc._wakeup_event,
+        wakeup_event=_wakeup_placeholder,
         get_monitor_check_interval=lambda: svc._monitor_check_interval,
     )
     svc._retry_time_lock = threading.Lock()
@@ -85,7 +84,6 @@ def _make_raw_engine() -> ScheduleEngine:
     def _bridge_retry_scheduled(delay: float) -> None:
         with svc._retry_time_lock:
             svc._next_retry_time = _time.time() + delay
-        svc._wakeup_event.set()
     def _bridge_login_success() -> None:
         with svc._retry_time_lock:
             svc._next_retry_time = 0
@@ -130,13 +128,11 @@ class TestFullLoginSequence:
         handle.future = mock_future
         svc._orchestrator.submit.return_value = handle
 
-        cmd = EngineCommand(
-            type=EngineCmdType.LOGIN, response_event=threading.Event()
-        )
+        cmd = EngineCommand(type=EngineCmdType.LOGIN)
         svc._handle_login(cmd)
         # 异步模式：模拟登录完成，触发回调
         mock_future.set_result((True, "登录成功"))
-        cmd.response_event.wait(timeout=2)
+        time.sleep(0.1)  # 等待回调执行
 
         assert cmd.response_data == (True, "登录成功")
         call_kwargs = svc._orchestrator.submit.call_args[1]
@@ -156,9 +152,7 @@ class TestFullLoginSequence:
         handle.future = None  # 去重命中
         svc._orchestrator.submit.return_value = handle
 
-        cmd = EngineCommand(
-            type=EngineCmdType.LOGIN, response_event=threading.Event()
-        )
+        cmd = EngineCommand(type=EngineCmdType.LOGIN)
         svc._handle_login(cmd)
 
         assert cmd.response_data == (False, "登录任务已在执行中，请稍后再试")
@@ -174,9 +168,7 @@ class TestFullLoginSequence:
         handle.rejected_reason = "登录配置不完整（请先设置认证地址、用户名和密码）"
         svc._orchestrator.submit.return_value = handle
 
-        cmd = EngineCommand(
-            type=EngineCmdType.LOGIN, response_event=threading.Event()
-        )
+        cmd = EngineCommand(type=EngineCmdType.LOGIN)
         svc._handle_login(cmd)
 
         success, message = cmd.response_data
@@ -203,17 +195,10 @@ class TestFullLoginSequence:
         assert result is True
 
     def test_full_sequence_manual_login(self):
-        """完整手动登录序列：run_manual_login → 队列 → handle_login → async_login。"""
+        """完整手动登录序列：run_manual_login → _dispatch_command → handle_login。"""
         svc = _make_raw_engine()
-
-        # 模拟入队并立即执行
-        def fake_enqueue(cmd):
-            cmd.response_data = (True, "登录成功")
-            if cmd.response_event:
-                cmd.response_event.set()
-            return True
-
-        svc._enqueue = fake_enqueue
+        svc._dispatch_command = MagicMock(return_value=(True, "登录成功"))
+        svc._update_status_snapshot = MagicMock()
 
         success, message = svc.run_manual_login()
 
@@ -221,16 +206,9 @@ class TestFullLoginSequence:
         assert "成功" in message
 
     def test_full_sequence_manual_login_failure(self):
-        """完整手动登录失败序列：run_manual_login → 队列 → handle_login → 失败。"""
+        """完整手动登录失败序列：run_manual_login → _dispatch_command → 失败。"""
         svc = _make_raw_engine()
-
-        def fake_enqueue(cmd):
-            cmd.response_data = (False, "认证地址不可达")
-            if cmd.response_event:
-                cmd.response_event.set()
-            return True
-
-        svc._enqueue = fake_enqueue
+        svc._dispatch_command = MagicMock(return_value=(False, "认证地址不可达"))
 
         success, message = svc.run_manual_login()
 
@@ -247,7 +225,7 @@ class TestFullLoginSequence:
 class TestLoginWithNetworkDetection:
     """带网络检测的登录流程：网络异常触发登录 → 登录后验证网络恢复。"""
 
-    def test_network_check_triggers_login(self):
+    async def test_network_check_triggers_login(self):
         """网络检测发现 need_login 时，触发异步登录。"""
         svc = _make_raw_engine()
         mock_core = MagicMock()
@@ -256,11 +234,11 @@ class TestLoginWithNetworkDetection:
         svc._monitor_core = mock_core
         svc._do_async_login = MagicMock()
 
-        svc._do_network_check()
+        await svc._do_network_check_async()
 
         svc._do_async_login.assert_called_once()
 
-    def test_network_check_no_login_needed(self):
+    async def test_network_check_no_login_needed(self):
         """网络正常时，不触发登录，通过 _retry_policy 重置退避。"""
         svc = _make_raw_engine()
         mock_core = MagicMock()
@@ -270,12 +248,12 @@ class TestLoginWithNetworkDetection:
         svc._retry_policy._attempt = 2
         svc._retry_policy._prev_network_ok = False  # 模拟之前断开
 
-        svc._do_network_check()
+        await svc._do_network_check_async()
 
         assert svc._retry_policy._attempt == 0
         assert svc._next_network_check > time.time()
 
-    def test_network_check_updates_interval(self):
+    async def test_network_check_updates_interval(self):
         """网络检测后更新检测间隔。"""
         svc = _make_raw_engine()
         mock_core = MagicMock()
@@ -283,11 +261,11 @@ class TestLoginWithNetworkDetection:
         mock_core.consume_profile_switch_flag.return_value = False
         svc._monitor_core = mock_core
 
-        svc._do_network_check()
+        await svc._do_network_check_async()
 
         assert svc._monitor_check_interval == 120
 
-    def test_network_check_with_profile_switch(self):
+    async def test_network_check_with_profile_switch(self):
         """网络检测时检测到方案切换，重启监控。"""
         svc = _make_raw_engine()
         mock_core = MagicMock()
@@ -298,24 +276,24 @@ class TestLoginWithNetworkDetection:
         svc._reload_config_internal = MagicMock()
         svc._handle_start = MagicMock()
 
-        svc._do_network_check()
+        await svc._do_network_check_async()
 
         svc._handle_stop.assert_called_once()
         svc._reload_config_internal.assert_called_once()
         svc._handle_start.assert_called_once()
 
-    def test_network_check_exception_continues(self):
+    async def test_network_check_exception_continues(self):
         """网络检测异常时不影响引擎运行，设置下次检测时间。"""
         svc = _make_raw_engine()
         mock_core = MagicMock()
         mock_core.check_once.side_effect = RuntimeError("检测超时")
         svc._monitor_core = mock_core
 
-        svc._do_network_check()
+        await svc._do_network_check_async()
 
         assert svc._next_network_check > time.time()
 
-    def test_login_then_network_recovery(self):
+    async def test_login_then_network_recovery(self):
         """登录成功后，下次网络检测应恢复正常状态。"""
         svc = _make_raw_engine()
 
@@ -327,18 +305,18 @@ class TestLoginWithNetworkDetection:
         svc._runtime_config = RuntimeConfig()
         svc._do_async_login = MagicMock()
 
-        svc._do_network_check()
+        await svc._do_network_check_async()
         svc._do_async_login.assert_called_once()
 
         # 第二次检测：网络恢复正常
         mock_core.check_once.return_value = CheckOnceResult(paused=False, net_ok=True, net_reason="", need_login=False, check_num=1, interval=300, result=NetworkCheckResult(available=True, method="tcp", latency_ms=0, detail=""))
         svc._do_async_login.reset_mock()
 
-        svc._do_network_check()
+        await svc._do_network_check_async()
 
         svc._do_async_login.assert_not_called()
 
-    def test_engine_loop_integration_with_network_login(self):
+    async def test_engine_loop_integration_with_network_login(self):
         """引擎循环中网络检测触发登录的集成测试。"""
         svc = _make_raw_engine()
 
@@ -378,7 +356,7 @@ class TestLoginWithNetworkDetection:
         # 手动执行一次循环逻辑（_is_monitoring 是 property，通过 mock_core.monitoring 控制）
         assert svc._is_monitoring is True
         assert now >= svc._next_network_check
-        svc._do_network_check()
+        await svc._do_network_check_async()
 
         # 网络检测应触发自动登录提交到 orchestrator
         svc._orchestrator.submit.assert_called_once()
@@ -510,14 +488,7 @@ class TestLoginConcurrencyProtection:
     def test_login_lock_released_after_completion(self):
         """手动登录完成后释放锁。"""
         svc = _make_raw_engine()
-
-        def fake_enqueue(cmd):
-            cmd.response_data = (True, "登录成功")
-            if cmd.response_event:
-                cmd.response_event.set()
-            return True
-
-        svc._enqueue = fake_enqueue
+        svc._dispatch_command = MagicMock(return_value=(True, "登录成功"))
 
         svc.run_manual_login()
 
@@ -526,15 +497,8 @@ class TestLoginConcurrencyProtection:
     def test_login_lock_released_on_timeout(self):
         """手动登录超时后释放锁。"""
         svc = _make_raw_engine()
-
-        def fake_enqueue(cmd):
-            return True  # 不设置 response_data，模拟超时
-
-        svc._enqueue = fake_enqueue
-        from app.schemas import BrowserSettings
-        svc._runtime_config = svc._runtime_config.model_copy(update={
-            "browser": svc._runtime_config.browser.model_copy(update={"login_timeout": 0.01})
-        })
+        svc._dispatch_command = MagicMock(return_value=(False, "操作超时 (login)"))
+        svc._login_bridge.cancel_login = MagicMock(return_value=(True, "取消"))
 
         svc.run_manual_login()
 

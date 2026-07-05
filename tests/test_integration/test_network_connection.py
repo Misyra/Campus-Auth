@@ -87,7 +87,7 @@ class TestNetworkConnection:
         assert result.paused is True
         assert result.need_login is False
 
-    def test_probe_exception(self, integration_stack):
+    async def test_probe_exception(self, integration_stack):
         """探测抛异常 → 引擎继续运行。"""
         engine, profile_service, task_executor, _, mock_worker = integration_stack
 
@@ -99,13 +99,13 @@ class TestNetworkConnection:
             "app.services.monitor_service.check_network_status",
             side_effect=RuntimeError("探测失败"),
         ):
-            # _do_network_check 内部捕获异常，不会传播
-            engine._do_network_check()
+            # _do_network_check_async 内部捕获异常，不会传播
+            await engine._do_network_check_async()
 
         # 引擎仍在运行（_monitor_core 未被清除）
         assert engine._monitor_core is not None
 
-    def test_profile_switch_signal(self, integration_stack):
+    async def test_profile_switch_signal(self, integration_stack):
         """方案切换 → engine reload + restart。"""
         engine, profile_service, task_executor, _, mock_worker = integration_stack
 
@@ -123,7 +123,7 @@ class TestNetworkConnection:
                 with patch.object(engine, "_reload_config_internal", return_value=True):
                     with patch.object(engine, "_handle_stop") as mock_stop:
                         with patch.object(engine, "_handle_start") as mock_start:
-                            engine._do_network_check()
+                            await engine._do_network_check_async()
 
         # 方案切换触发了 stop + start
         mock_stop.assert_called_once()
