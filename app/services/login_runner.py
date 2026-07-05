@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING
 
 from app.schemas import LoginResult, RuntimeConfig
@@ -49,7 +50,9 @@ def execute_login_with_retries(runtime_config: RuntimeConfig, logger) -> LoginRe
     profile_service = create_profile_service()
     history = LoginHistoryService(AUTH_DATA_DIR)
     # login_once 是单次登录后退出，用一次性 executor 即可
-    one_shot_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="login-once")
+    one_shot_executor = ThreadPoolExecutor(
+        max_workers=1, thread_name_prefix="login-once"
+    )
     orchestrator = LoginOrchestrator(
         worker_getter=get_worker,
         executor=one_shot_executor,
@@ -91,7 +94,9 @@ def run_login_then_exit(ctx: ApplicationContext, logger) -> LoginResult:
     try:
         from app.network.decision import check_network_status
 
-        network_ok, reason, _ = check_network_status(runtime_config.monitor)
+        network_ok, reason, _ = asyncio.run(
+            check_network_status(runtime_config.monitor)
+        )
         if network_ok:
             logger.info("网络已连接，无需登录")
             return LoginResult.SUCCESS

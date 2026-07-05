@@ -10,7 +10,7 @@ import asyncio
 import threading
 import time
 from concurrent.futures import Future
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -46,6 +46,7 @@ def _make_future_with_callback(result):
         def _wrapped(f):
             cb(f)
             callback_done.set()
+
         _orig_adc(_wrapped)
 
     future.add_done_callback = _wrapping_adc
@@ -53,7 +54,6 @@ def _make_future_with_callback(result):
     handle.rejected_reason = None
     handle.future = future
     return future, callback_done, handle
-
 
 
 # =====================================================================
@@ -71,7 +71,7 @@ class TestEngineCmdType:
         assert EngineCmdType.APPLY_PROFILE == "apply_profile"
 
     def test_enum_members(self):
-        assert len(EngineCmdType) == 6
+        assert len(EngineCmdType) == 7
 
 
 # =====================================================================
@@ -474,7 +474,9 @@ class TestHandleLogin:
         svc = engine_factory(raw=True)
         svc._runtime_config = RuntimeConfig(
             credentials=LoginCredentials(
-                username="u", password="p", auth_url="http://test.com",
+                username="u",
+                password="p",
+                auth_url="http://test.com",
             ),
         )
         mock_handle = MagicMock()
@@ -525,7 +527,9 @@ class TestHandleLogin:
         svc = engine_factory(raw=True)
         svc._runtime_config = RuntimeConfig(
             credentials=LoginCredentials(
-                username="u", password="p", auth_url="http://test.com",
+                username="u",
+                password="p",
+                auth_url="http://test.com",
             ),
         )
         mock_handle = MagicMock()
@@ -543,7 +547,9 @@ class TestHandleLogin:
         svc = engine_factory(raw=True)
         svc._runtime_config = RuntimeConfig(
             credentials=LoginCredentials(
-                username="u", password="p", auth_url="http://test.com",
+                username="u",
+                password="p",
+                auth_url="http://test.com",
             ),
         )
         mock_handle = MagicMock()
@@ -630,9 +636,7 @@ class TestHandleApplyProfile:
             credentials=LoginCredentials(auth_url="http://test.com", username="u"),
         )
         svc._reload_config_internal = MagicMock()
-        cmd = EngineCommand(
-            type=EngineCmdType.APPLY_PROFILE, data={"profile_id": "p1"}
-        )
+        cmd = EngineCommand(type=EngineCmdType.APPLY_PROFILE, data={"profile_id": "p1"})
         svc._handle_apply_profile(cmd)
         svc._reload_config_internal.assert_called_once()
 
@@ -649,9 +653,7 @@ class TestHandleApplyProfile:
         svc._reload_config_internal = MagicMock()
         svc._handle_stop = MagicMock()
         svc._handle_start = MagicMock()
-        cmd = EngineCommand(
-            type=EngineCmdType.APPLY_PROFILE, data={"profile_id": "p1"}
-        )
+        cmd = EngineCommand(type=EngineCmdType.APPLY_PROFILE, data={"profile_id": "p1"})
         svc._handle_apply_profile(cmd)
         svc._handle_stop.assert_not_called()
         svc._reload_config_internal.assert_called_once()
@@ -668,9 +670,7 @@ class TestHandleApplyProfile:
             credentials=LoginCredentials(auth_url="http://test.com", username="u"),
         )
         svc._reload_config_internal = MagicMock()
-        cmd = EngineCommand(
-            type=EngineCmdType.APPLY_PROFILE, data={"profile_id": "p1"}
-        )
+        cmd = EngineCommand(type=EngineCmdType.APPLY_PROFILE, data={"profile_id": "p1"})
         svc._handle_apply_profile(cmd)
         svc._reload_config_internal.assert_called_once()
         mock_core.stop_monitoring.assert_called_once()
@@ -690,7 +690,19 @@ class TestDoNetworkCheck:
     async def test_do_network_check_need_login(self, engine_factory):
         svc = engine_factory(raw=True)
         mock_core = MagicMock()
-        mock_core.check_once.return_value = CheckOnceResult(paused=False, net_ok=False, net_reason="down", need_login=True, check_num=1, interval=300, result=NetworkCheckResult(available=False, method="none", latency_ms=0, detail="down"))
+        mock_core.check_once = AsyncMock(
+            return_value=CheckOnceResult(
+                paused=False,
+                net_ok=False,
+                net_reason="down",
+                need_login=True,
+                check_num=1,
+                interval=300,
+                result=NetworkCheckResult(
+                    available=False, method="none", latency_ms=0, detail="down"
+                ),
+            )
+        )
         mock_core.consume_profile_switch_flag.return_value = False
         svc._monitor_core = mock_core
         svc._do_async_login = MagicMock()
@@ -700,7 +712,19 @@ class TestDoNetworkCheck:
     async def test_do_network_check_no_login_needed(self, engine_factory):
         svc = engine_factory(raw=True)
         mock_core = MagicMock()
-        mock_core.check_once.return_value = CheckOnceResult(paused=False, net_ok=True, net_reason="", need_login=False, check_num=1, interval=600, result=NetworkCheckResult(available=True, method="tcp", latency_ms=0, detail=""))
+        mock_core.check_once = AsyncMock(
+            return_value=CheckOnceResult(
+                paused=False,
+                net_ok=True,
+                net_reason="",
+                need_login=False,
+                check_num=1,
+                interval=600,
+                result=NetworkCheckResult(
+                    available=True, method="tcp", latency_ms=0, detail=""
+                ),
+            )
+        )
         mock_core.consume_profile_switch_flag.return_value = False
         svc._monitor_core = mock_core
         await svc._do_network_check_async()
@@ -709,7 +733,19 @@ class TestDoNetworkCheck:
     async def test_do_network_check_profile_switch(self, engine_factory):
         svc = engine_factory(raw=True)
         mock_core = MagicMock()
-        mock_core.check_once.return_value = CheckOnceResult(paused=False, net_ok=True, net_reason="", need_login=False, check_num=1, interval=300, result=NetworkCheckResult(available=True, method="tcp", latency_ms=0, detail=""))
+        mock_core.check_once = AsyncMock(
+            return_value=CheckOnceResult(
+                paused=False,
+                net_ok=True,
+                net_reason="",
+                need_login=False,
+                check_num=1,
+                interval=300,
+                result=NetworkCheckResult(
+                    available=True, method="tcp", latency_ms=0, detail=""
+                ),
+            )
+        )
         mock_core.consume_profile_switch_flag.return_value = True
         svc._monitor_core = mock_core
         svc._handle_stop = MagicMock()
@@ -723,7 +759,7 @@ class TestDoNetworkCheck:
     async def test_do_network_check_exception(self, engine_factory):
         svc = engine_factory(raw=True)
         mock_core = MagicMock()
-        mock_core.check_once.side_effect = RuntimeError("boom")
+        mock_core.check_once = AsyncMock(side_effect=RuntimeError("boom"))
         svc._monitor_core = mock_core
         await svc._do_network_check_async()
         assert svc._next_network_check > time.time()
@@ -744,7 +780,19 @@ class TestNetworkCheckBackoff:
         """need_login=True 应调用 _do_async_login。"""
         svc = engine_factory(raw=True)
         mock_core = MagicMock()
-        mock_core.check_once.return_value = CheckOnceResult(paused=False, net_ok=False, net_reason="down", need_login=True, check_num=1, interval=300, result=NetworkCheckResult(available=False, method="none", latency_ms=0, detail="down"))
+        mock_core.check_once = AsyncMock(
+            return_value=CheckOnceResult(
+                paused=False,
+                net_ok=False,
+                net_reason="down",
+                need_login=True,
+                check_num=1,
+                interval=300,
+                result=NetworkCheckResult(
+                    available=False, method="none", latency_ms=0, detail="down"
+                ),
+            )
+        )
         mock_core.consume_profile_switch_flag.return_value = False
         svc._monitor_core = mock_core
         svc._do_async_login = MagicMock()
@@ -755,7 +803,19 @@ class TestNetworkCheckBackoff:
         """need_login=False 应通过 _retry_policy.on_network_check 重置退避。"""
         svc = engine_factory(raw=True)
         mock_core = MagicMock()
-        mock_core.check_once.return_value = CheckOnceResult(paused=False, net_ok=True, net_reason="", need_login=False, check_num=1, interval=600, result=NetworkCheckResult(available=True, method="tcp", latency_ms=0, detail=""))
+        mock_core.check_once = AsyncMock(
+            return_value=CheckOnceResult(
+                paused=False,
+                net_ok=True,
+                net_reason="",
+                need_login=False,
+                check_num=1,
+                interval=600,
+                result=NetworkCheckResult(
+                    available=True, method="tcp", latency_ms=0, detail=""
+                ),
+            )
+        )
         mock_core.consume_profile_switch_flag.return_value = False
         svc._monitor_core = mock_core
         svc._retry_policy._attempt = 5
@@ -768,7 +828,9 @@ class TestNetworkCheckBackoff:
         svc = engine_factory(raw=True)
         svc._runtime_config = RuntimeConfig(
             credentials=LoginCredentials(
-                username="u", password="p", auth_url="http://x",
+                username="u",
+                password="p",
+                auth_url="http://x",
             ),
         )
         svc._retry_policy._attempt = 3
@@ -784,7 +846,9 @@ class TestNetworkCheckBackoff:
         svc = engine_factory(raw=True)
         svc._runtime_config = RuntimeConfig(
             credentials=LoginCredentials(
-                username="u", password="p", auth_url="http://x",
+                username="u",
+                password="p",
+                auth_url="http://x",
             ),
         )
         svc._retry_policy._attempt = 0
@@ -800,7 +864,9 @@ class TestNetworkCheckBackoff:
         svc = engine_factory(raw=True)
         svc._runtime_config = RuntimeConfig(
             credentials=LoginCredentials(
-                username="u", password="p", auth_url="http://x",
+                username="u",
+                password="p",
+                auth_url="http://x",
             ),
         )
         svc._retry_policy._attempt = 2  # 再失败一次就到 attempt=3，delay=20
@@ -818,7 +884,9 @@ class TestNetworkCheckBackoff:
         svc = engine_factory(raw=True)
         svc._runtime_config = RuntimeConfig(
             credentials=LoginCredentials(
-                username="u", password="p", auth_url="http://x",
+                username="u",
+                password="p",
+                auth_url="http://x",
             ),
         )
         svc._retry_policy._attempt = 2
@@ -835,7 +903,9 @@ class TestNetworkCheckBackoff:
         svc = engine_factory(raw=True)
         svc._runtime_config = RuntimeConfig(
             credentials=LoginCredentials(
-                username="u", password="p", auth_url="http://x",
+                username="u",
+                password="p",
+                auth_url="http://x",
             ),
         )
         svc._retry_policy._attempt = 2
@@ -858,7 +928,9 @@ class TestDoAsyncLogin:
         svc = engine_factory(raw=True)
         svc._runtime_config = RuntimeConfig(
             credentials=LoginCredentials(
-                username="u", password="p", auth_url="http://x",
+                username="u",
+                password="p",
+                auth_url="http://x",
             ),
         )
         handle = MagicMock()
@@ -872,7 +944,9 @@ class TestDoAsyncLogin:
         svc = engine_factory(raw=True)
         svc._runtime_config = RuntimeConfig(
             credentials=LoginCredentials(
-                username="u", password="p", auth_url="http://x",
+                username="u",
+                password="p",
+                auth_url="http://x",
             ),
         )
         handle = MagicMock()
@@ -885,7 +959,9 @@ class TestDoAsyncLogin:
         svc = engine_factory(raw=True)
         svc._runtime_config = RuntimeConfig(
             credentials=LoginCredentials(
-                username="u", password="p", auth_url="http://x",
+                username="u",
+                password="p",
+                auth_url="http://x",
             ),
         )
         future = Future()
@@ -900,7 +976,9 @@ class TestDoAsyncLogin:
         svc = engine_factory(raw=True)
         svc._runtime_config = RuntimeConfig(
             credentials=LoginCredentials(
-                username="u", password="p", auth_url="http://x",
+                username="u",
+                password="p",
+                auth_url="http://x",
             ),
         )
         svc._orchestrator.submit.side_effect = RuntimeError("boom")
@@ -912,7 +990,9 @@ class TestDoAsyncLogin:
         svc = engine_factory(raw=True)
         svc._runtime_config = RuntimeConfig(
             credentials=LoginCredentials(
-                username="u", password="p", auth_url="http://x",
+                username="u",
+                password="p",
+                auth_url="http://x",
             ),
         )
         svc._orchestrator.submit.side_effect = RuntimeError("pool closed")
@@ -926,7 +1006,9 @@ class TestDoAsyncLogin:
         svc = engine_factory(raw=True)
         svc._runtime_config = RuntimeConfig(
             credentials=LoginCredentials(
-                username="u", password="p", auth_url="http://x",
+                username="u",
+                password="p",
+                auth_url="http://x",
             ),
         )
         future = Future()
@@ -999,7 +1081,9 @@ class TestDoAsyncLogin:
         svc = engine_factory(raw=True)
         svc._runtime_config = RuntimeConfig()  # 运行时配置为空
         snapshot = RuntimeConfig(
-            credentials=LoginCredentials(username="u", password="p", auth_url="http://x"),
+            credentials=LoginCredentials(
+                username="u", password="p", auth_url="http://x"
+            ),
         )
         future = Future()
         handle = MagicMock()
@@ -1008,7 +1092,6 @@ class TestDoAsyncLogin:
         svc._orchestrator.submit.return_value = handle
         result = svc._do_async_login(config_snapshot=snapshot)
         assert result is True
-
 
 
 # =====================================================================
@@ -1145,14 +1228,18 @@ class TestQueueStatusBroadcast:
     def test_queue_status_broadcast_delegates_to_ws_manager(self, engine_factory):
         svc = engine_factory(raw=True)
         # 直接测试 StatusManager 的 _queue_status_broadcast
-        svc._status_manager.get_status = MagicMock(return_value=MagicMock(model_dump=lambda: {"monitoring": False}))
+        svc._status_manager.get_status = MagicMock(
+            return_value=MagicMock(model_dump=lambda: {"monitoring": False})
+        )
         svc._status_manager._queue_status_broadcast()
         svc._ws_manager.enqueue_status.assert_called_once_with({"monitoring": False})
 
     def test_queue_status_broadcast_no_ws_manager(self, engine_factory):
         svc = engine_factory(raw=True)
         svc._status_manager._ws_manager = None
-        svc._status_manager.get_status = MagicMock(return_value=MagicMock(model_dump=lambda: {"monitoring": False}))
+        svc._status_manager.get_status = MagicMock(
+            return_value=MagicMock(model_dump=lambda: {"monitoring": False})
+        )
         # 不应抛异常
         svc._status_manager._queue_status_broadcast()
 
@@ -1331,7 +1418,9 @@ class TestApplyProfile:
 
     def test_apply_profile_dispatch_timeout(self, engine_factory):
         svc = engine_factory(raw=True)
-        svc._dispatch_command = MagicMock(return_value=(False, "操作超时 (apply_profile)"))
+        svc._dispatch_command = MagicMock(
+            return_value=(False, "操作超时 (apply_profile)")
+        )
         ok, msg = svc.apply_profile("p1")
         assert ok is False
         assert "超时" in msg
@@ -1407,9 +1496,13 @@ class TestRunManualLogin:
 
         svc._dispatch_command = fake_dispatch
         svc._update_status_snapshot = MagicMock()
-        svc._runtime_config = svc._runtime_config.model_copy(update={
-            "browser": svc._runtime_config.browser.model_copy(update={"login_timeout": 150})
-        })
+        svc._runtime_config = svc._runtime_config.model_copy(
+            update={
+                "browser": svc._runtime_config.browser.model_copy(
+                    update={"login_timeout": 150}
+                )
+            }
+        )
 
         ok, msg = svc.run_manual_login()
         assert ok is True
@@ -1462,35 +1555,34 @@ class TestCancelLogin:
 
 
 class TestNetwork:
-    @patch("app.services.engine.is_network_available", return_value=True)
-    def test_network_ok(self, mock_is_available, engine_factory):
+    def test_network_ok(self, engine_factory):
         svc = engine_factory(raw=True)
         svc._runtime_config = RuntimeConfig()
+        svc._dispatch_command = MagicMock(return_value=(True, "网络连接正常"))
         ok, msg = svc.test_network()
         assert ok is True
         assert "正常" in msg
-        mock_is_available.assert_called_once()
 
-    @patch("app.services.engine.is_network_available", return_value=False)
-    def test_network_fail(self, mock_is_available, engine_factory):
+    def test_network_fail(self, engine_factory):
         svc = engine_factory(raw=True)
         svc._runtime_config = RuntimeConfig()
+        svc._dispatch_command = MagicMock(return_value=(False, "网络连接异常"))
         ok, msg = svc.test_network()
         assert ok is False
         assert "异常" in msg
 
-    @patch("app.services.engine.is_network_available", side_effect=TimeoutError("timeout"))
-    def test_network_exception(self, mock_is_available, engine_factory):
+    def test_network_exception(self, engine_factory):
         svc = engine_factory(raw=True)
         svc._runtime_config = RuntimeConfig()
+        svc._dispatch_command = MagicMock(return_value=(False, "网络测试失败: timeout"))
         ok, msg = svc.test_network()
         assert ok is False
         assert "失败" in msg
 
-    @patch("app.services.engine.is_network_available", return_value=True)
-    def test_network_with_targets(self, mock_is_available, engine_factory):
+    def test_network_with_targets(self, engine_factory):
         svc = engine_factory(raw=True)
         svc._runtime_config = RuntimeConfig()
+        svc._dispatch_command = MagicMock(return_value=(True, "网络连接正常"))
         ok, msg = svc.test_network()
         assert ok is True
 
@@ -1515,6 +1607,7 @@ class TestSwapRuntimeConfig:
     def test_swap_under_lock(self, engine_factory):
         """_swap_runtime_config 必须持 _reload_lock 执行。"""
         import threading
+
         svc = engine_factory(raw=True)
         lock = svc._reload_lock
         held = threading.Event()
@@ -1712,7 +1805,9 @@ class TestGetConfig:
 class TestNotifyNetworkStateChanged:
     def test_notify_network_state_changed(self, engine_factory):
         svc = engine_factory(raw=True)
-        svc.notify_network_state_changed = ScheduleEngine.notify_network_state_changed.__get__(svc)
+        svc.notify_network_state_changed = (
+            ScheduleEngine.notify_network_state_changed.__get__(svc)
+        )
         svc._update_status_snapshot = MagicMock()
         svc.notify_network_state_changed()
         svc._update_status_snapshot.assert_called_once()
@@ -1784,6 +1879,7 @@ class TestRetryTimeLock:
         def _bridge_retry_scheduled(delay: float) -> None:
             with engine._retry_time_lock:
                 engine._next_retry_time = time.time() + delay
+
         engine._login_bridge._on_retry_scheduled = _bridge_retry_scheduled
 
         engine._login_bridge._on_retry_scheduled(30.0)
@@ -1817,6 +1913,7 @@ class TestRetryTimeLock:
         def _bridge_login_success() -> None:
             with engine._retry_time_lock:
                 engine._next_retry_time = 0
+
         engine._login_bridge._on_login_success = _bridge_login_success
 
         engine._login_bridge._on_login_success()
@@ -1833,6 +1930,7 @@ class TestRetryTimeLock:
         def _bridge_retry_exhausted() -> None:
             with engine._retry_time_lock:
                 engine._next_retry_time = 0
+
         engine._login_bridge._on_retry_exhausted = _bridge_retry_exhausted
 
         engine._login_bridge._on_retry_exhausted()
@@ -1853,7 +1951,9 @@ class TestRetryTimeLock:
                 engine._next_retry_time = time.time() + delay
                 results.append(engine._next_retry_time)
 
-        threads = [threading.Thread(target=writer, args=(d,)) for d in [10.0, 20.0, 30.0]]
+        threads = [
+            threading.Thread(target=writer, args=(d,)) for d in [10.0, 20.0, 30.0]
+        ]
         for t in threads:
             t.start()
         for t in threads:
@@ -1937,8 +2037,10 @@ class TestPureModeLockConsolidation:
 
         t1 = threading.Thread(target=toggle_worker)
         t2 = threading.Thread(target=read_worker)
-        t1.start(); t2.start()
-        t1.join(); t2.join()
+        t1.start()
+        t2.start()
+        t1.join()
+        t2.join()
 
         # 互斥锁保护下，计数器最终应为 0
         assert counter == 0
