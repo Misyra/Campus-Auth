@@ -405,9 +405,9 @@ def run(
             if existing_container is not None:
                 profile_service = existing_container.profile_service
             else:
-                from app.services.profile_service import ProfileService
+                from app.services.profile_service import get_profile_service
 
-                profile_service = ProfileService(PROJECT_ROOT)
+                profile_service = get_profile_service(PROJECT_ROOT)
             logging_settings = profile_service.load().global_config.logging
         except Exception:
             startup_logger.warning("读取日志配置失败，使用默认值", exc_info=True)
