@@ -7,6 +7,7 @@ test_playwright_bootstrap.py、test_playwright_worker.py。
 
 from __future__ import annotations
 
+import contextlib
 import os
 
 import threading
@@ -1422,24 +1423,29 @@ class TestSubmitQueueFull:
     """submit 队列满时的行为。"""
 
     def test_queue_full_returns_error(self):
-        """队列满时返回错误（put_nowait 直接调用，异常立即捕获）。"""
+        """队列满时返回错误（call_soon_threadsafe 内部 put_nowait 抛 QueueFull，被吞，调用方靠超时返回）。"""
         import asyncio
 
         worker = PlaywrightWorker()
         worker._consumer_thread = MagicMock()
         worker._consumer_thread.is_alive.return_value = True
         worker._stop_event.clear()
-        worker._loop = MagicMock()
-        worker._loop.is_running.return_value = True
+        fake_loop = MagicMock()
+        fake_loop.is_running.return_value = True
+        # 模拟 call_soon_threadsafe 内部 put_nowait 抛 QueueFull
+        def fake_call_soon(fn, *args):
+            with contextlib.suppress(asyncio.QueueFull):
+                fn(*args)
+        fake_loop.call_soon_threadsafe.side_effect = fake_call_soon
+        worker._loop = fake_loop
 
-        # put_nowait 直接在调用线程执行，QueueFull 被 try/except 捕获
         with patch.object(worker._cmd_queue, "put_nowait", side_effect=asyncio.QueueFull):
-            result = worker.submit("test_cmd", wait=False)
+            result = worker.submit("test_cmd", wait=True, timeout=0.1)
+        # QueueFull 被吞 → response_event 未 set → wait 超时返回错误
         assert result.success is False
-        assert "队列已满" in result.error
 
     def test_queue_full_when_loop_none(self):
-        """loop 为 None 时队列满仍返回错误。"""
+        """loop 为 None 时直接 put_nowait，QueueFull 同步捕获。"""
         import asyncio
 
         worker = PlaywrightWorker()
@@ -1448,7 +1454,6 @@ class TestSubmitQueueFull:
         worker._stop_event.clear()
         worker._loop = None
 
-        # loop 为 None → submit() 直接用 put_nowait
         with patch.object(worker._cmd_queue, "put_nowait", side_effect=asyncio.QueueFull):
             result = worker.submit("test_cmd", wait=False)
         assert result.success is False
@@ -1467,16 +1472,14 @@ class TestSubmitTimeout:
         worker._consumer_thread = MagicMock()
         worker._consumer_thread.is_alive.return_value = True
         worker._stop_event.clear()
+        fake_loop = MagicMock()
+        fake_loop.is_running.return_value = True
+        fake_loop.call_soon_threadsafe.side_effect = lambda fn, *args: fn(*args)
+        worker._loop = fake_loop
 
-        cmd = None
-
-        def capture_cmd(cmd_obj, timeout=None):
-            nonlocal cmd
-            cmd = cmd_obj
-
+        # put_nowait 成功，但 response_event 不被 set → 超时
         with patch.object(worker._cmd_queue, "put_nowait"):
-            with patch.object(worker, "_loop", None):
-                result = worker.submit("test_cmd", wait=True, timeout=0.01)
+            result = worker.submit("test_cmd", wait=True, timeout=0.01)
 
         assert result.success is False
         assert "超时" in result.error or "无响应" in result.error
@@ -1501,9 +1504,13 @@ class TestSubmitResponseData:
             if cmd.response_event:
                 cmd.response_event.set()
 
+        fake_loop = MagicMock()
+        fake_loop.is_running.return_value = True
+        fake_loop.call_soon_threadsafe.side_effect = lambda fn, *args: fn(*args)
+        worker._loop = fake_loop
+
         with patch.object(worker._cmd_queue, "put_nowait", side_effect=fake_put_nowait):
-            with patch.object(worker, "_loop", None):
-                result = worker.submit("test_cmd", wait=True)
+            result = worker.submit("test_cmd", wait=True)
 
         assert result.success is True
         assert result.data == "result"
@@ -1520,9 +1527,13 @@ class TestSubmitResponseData:
             if cmd.response_event:
                 cmd.response_event.set()
 
+        fake_loop = MagicMock()
+        fake_loop.is_running.return_value = True
+        fake_loop.call_soon_threadsafe.side_effect = lambda fn, *args: fn(*args)
+        worker._loop = fake_loop
+
         with patch.object(worker._cmd_queue, "put_nowait", side_effect=fake_put_nowait):
-            with patch.object(worker, "_loop", None):
-                result = worker.submit("test_cmd", wait=True)
+            result = worker.submit("test_cmd", wait=True)
 
         assert result.success is True
         assert result.data == "plain_value"
