@@ -1272,7 +1272,7 @@ class TestCmdQueueType:
     def test_no_wake_event_attribute(self):
         """_wake_event 字段应已移除。"""
         worker = PlaywrightWorker()
-        assert not hasattr(worker, "_wake_event") or worker._wake_event is None
+        assert not hasattr(worker, "_wake_event")
 
     def test_no_wake_async_method(self):
         """_wake_async 方法应已移除。"""
