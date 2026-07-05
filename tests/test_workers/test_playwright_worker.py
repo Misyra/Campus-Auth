@@ -187,7 +187,7 @@ class TestStopJoinsOnQueueFull:
     """stop() 在命令队列满时仍应等待消费者线程退出。"""
 
     def test_stop_joins_consumer_when_queue_full(self):
-        """队列满 → put_nowait 抛 QueueFull → 仍调用 join 等待消费者线程。"""
+        """队列满 → call_soon_threadsafe 抛 QueueFull → 仍调用 join 等待消费者线程。"""
         from app.workers.playwright_worker import PlaywrightWorker
 
         worker = PlaywrightWorker()
@@ -200,8 +200,18 @@ class TestStopJoinsOnQueueFull:
         fake_loop.is_running.return_value = True
         worker._loop = fake_loop
 
-        with patch.object(worker._cmd_queue, "put_nowait", side_effect=asyncio.QueueFull):
-            worker.stop(timeout=1)
+        # call_soon_threadsafe 第一次调用（put_nowait）抛 QueueFull，
+        # 后续调用（loop.stop 等）正常执行
+        call_count = 0
+
+        def raise_on_first(fn, *args):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise asyncio.QueueFull
+
+        fake_loop.call_soon_threadsafe.side_effect = raise_on_first
+        worker.stop(timeout=1)
 
         fake_thread.join.assert_called()
 
@@ -219,8 +229,16 @@ class TestStopJoinsOnQueueFull:
         fake_loop.is_running.return_value = True
         worker._loop = fake_loop
 
-        with patch.object(worker._cmd_queue, "put_nowait", side_effect=asyncio.QueueFull):
-            worker.stop(timeout=2)
+        # call_soon_threadsafe 第一次调用（put_nowait）抛 QueueFull，
+        # 后续调用（loop.stop）正常执行
+        call_count = 0
+        def raise_on_first(fn, *args):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise asyncio.QueueFull
+        fake_loop.call_soon_threadsafe.side_effect = raise_on_first
+        worker.stop(timeout=2)
 
         fake_loop.call_soon_threadsafe.assert_any_call(fake_loop.stop)
         fake_thread.join.assert_called()
@@ -239,6 +257,7 @@ class TestStopJoinsOnQueueFull:
         fake_loop.is_running.return_value = False
         worker._loop = fake_loop
 
+        # loop 未运行 → stop() 用 put_nowait（不走 call_soon_threadsafe）
         with patch.object(worker._cmd_queue, "put_nowait", side_effect=asyncio.QueueFull):
             worker.stop(timeout=1)
 
@@ -259,6 +278,7 @@ class TestStopJoinsOnQueueFull:
         worker._consumer_thread = fake_thread
         worker._loop = None
 
+        # loop 为 None → stop() 用 put_nowait（不走 call_soon_threadsafe）
         with patch.object(worker._cmd_queue, "put_nowait", side_effect=asyncio.QueueFull):
             worker.stop(timeout=1)
 
@@ -278,10 +298,18 @@ class TestStopJoinsOnQueueFull:
         fake_loop.is_running.return_value = True
         worker._loop = fake_loop
 
-        with (
-            patch.object(worker._cmd_queue, "put_nowait", side_effect=asyncio.QueueFull),
-            patch("app.workers.playwright_worker.logger") as mock_logger,
-        ):
+        # call_soon_threadsafe 第一次调用（put_nowait）抛 QueueFull，
+        # 后续调用（loop.stop 等）正常执行
+        call_count = 0
+
+        def raise_on_first(fn, *args):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise asyncio.QueueFull
+
+        fake_loop.call_soon_threadsafe.side_effect = raise_on_first
+        with patch("app.workers.playwright_worker.logger") as mock_logger:
             worker.stop(timeout=1)
 
         mock_logger.warning.assert_any_call("Worker 命令队列已满，强制停止事件循环")
