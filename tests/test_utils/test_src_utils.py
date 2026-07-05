@@ -1444,6 +1444,28 @@ class TestSubmitQueueFull:
         # QueueFull 被吞 → response_event 未 set → wait 超时返回错误
         assert result.success is False
 
+    def test_queue_full_wait_false_returns_success(self):
+        """队列满 + wait=False → call_soon_threadsafe 吞 QueueFull，返回 success=True（已接受的 trade-off）。"""
+        import asyncio
+
+        worker = PlaywrightWorker()
+        worker._consumer_thread = MagicMock()
+        worker._consumer_thread.is_alive.return_value = True
+        worker._stop_event.clear()
+        fake_loop = MagicMock()
+        fake_loop.is_running.return_value = True
+        # 模拟真实行为：call_soon_threadsafe 不传播回调中的 QueueFull
+        def fake_call_soon(fn, *args):
+            with contextlib.suppress(asyncio.QueueFull):
+                fn(*args)
+        fake_loop.call_soon_threadsafe.side_effect = fake_call_soon
+        worker._loop = fake_loop
+
+        with patch.object(worker._cmd_queue, "put_nowait", side_effect=asyncio.QueueFull):
+            result = worker.submit("test_cmd", wait=False)
+        # call_soon_threadsafe 吞掉 QueueFull → submit 无法同步获知，返回 success=True
+        assert result.success is True
+
     def test_queue_full_when_loop_none(self):
         """loop 为 None 时直接 put_nowait，QueueFull 同步捕获。"""
         import asyncio
