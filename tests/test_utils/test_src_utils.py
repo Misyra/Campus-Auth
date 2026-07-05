@@ -1422,14 +1422,34 @@ class TestSubmitQueueFull:
     """submit 队列满时的行为。"""
 
     def test_queue_full_returns_error(self):
-        """队列满时返回错误。"""
+        """队列满时返回错误（loop 运行中走 call_soon_threadsafe）。"""
         import asyncio
 
         worker = PlaywrightWorker()
         worker._consumer_thread = MagicMock()
         worker._consumer_thread.is_alive.return_value = True
         worker._stop_event.clear()
+        worker._loop = MagicMock()
+        worker._loop.is_running.return_value = True
 
+        # loop 运行中 → submit() 用 call_soon_threadsafe(put_nowait)
+        # mock call_soon_threadsafe 抛 QueueFull
+        worker._loop.call_soon_threadsafe.side_effect = asyncio.QueueFull
+        result = worker.submit("test_cmd", wait=False)
+        assert result.success is False
+        assert "队列已满" in result.error
+
+    def test_queue_full_when_loop_none(self):
+        """loop 为 None 时队列满仍返回错误。"""
+        import asyncio
+
+        worker = PlaywrightWorker()
+        worker._consumer_thread = MagicMock()
+        worker._consumer_thread.is_alive.return_value = True
+        worker._stop_event.clear()
+        worker._loop = None
+
+        # loop 为 None → submit() 直接用 put_nowait
         with patch.object(worker._cmd_queue, "put_nowait", side_effect=asyncio.QueueFull):
             result = worker.submit("test_cmd", wait=False)
         assert result.success is False
