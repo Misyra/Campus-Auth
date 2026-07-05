@@ -874,10 +874,11 @@ class ScheduleEngine:
 
         if level not in VALID_LOG_LEVELS:
             raise ValueError(f"无效的日志级别: {level}")
-        new_config = self._runtime_config.model_copy(
-            update={"logging": self._runtime_config.logging.model_copy(update={"level": level})}
-        )
-        self._swap_runtime_config(new_config)
+        with self._reload_lock:
+            new_config = self._runtime_config.model_copy(
+                update={"logging": self._runtime_config.logging.model_copy(update={"level": level})}
+            )
+            self._runtime_config = new_config
 
     def _reload_config_internal(self) -> bool:
         """从 settings.json 重新加载 UI 和运行时配置。返回 True 表示成功。
@@ -1087,7 +1088,6 @@ class ScheduleEngine:
         """
         with self._reload_lock:
             new_value = not self._pure_mode
-            self._pure_mode = new_value
             base_config = self._runtime_config
         # 磁盘持久化（profile_service 内部有自己的锁，无需 _reload_lock 保护）
         self._profile_service.update(
@@ -1098,11 +1098,11 @@ class ScheduleEngine:
                 }),
             )
         )
-        # 原子替换运行时配置
+        # 原子替换运行时配置（通过 _swap_runtime_config 同步 _pure_mode）
         new_config = base_config.model_copy(
             update={"browser": base_config.browser.model_copy(update={"pure_mode": new_value})}
         )
-        self._swap_runtime_config(new_config)
+        self._swap_runtime_config(new_config, pure_mode=new_value)
         return new_value
 
     def get_runtime_config(self) -> RuntimeConfig:
