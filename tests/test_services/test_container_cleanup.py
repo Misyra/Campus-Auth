@@ -22,7 +22,7 @@ def mock_container_deps():
     mocks = {}
     with (
         patch("app.container.WebSocketManager") as ws,
-        patch("app.container.ProfileService") as ps,
+        patch("app.container.get_profile_service") as ps,
         patch("app.container.LoginHistoryService") as lhs,
         patch("app.container.ScheduleEngine") as se,
         patch("app.container.TaskManager") as ts,
