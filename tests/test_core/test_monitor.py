@@ -238,7 +238,9 @@ class TestMonitorCoreGetTestSites:
             assert isinstance(port, int)
 
     def test_custom_targets(self):
-        config = RuntimeConfig(monitor=MonitorSettings(ping_targets=["8.8.8.8:53", "1.1.1.1:443"]))
+        config = RuntimeConfig(
+            monitor=MonitorSettings(ping_targets=["8.8.8.8:53", "1.1.1.1:443"])
+        )
         core = NetworkMonitorCore(get_config=lambda: config)
         sites = core._get_test_sites()
         assert ("8.8.8.8", 53) in sites
@@ -246,14 +248,18 @@ class TestMonitorCoreGetTestSites:
 
     def test_string_targets(self):
         """字符串格式的目标应被正确解析"""
-        config = RuntimeConfig(monitor=MonitorSettings(ping_targets=["8.8.8.8:53", "1.1.1.1:443"]))
+        config = RuntimeConfig(
+            monitor=MonitorSettings(ping_targets=["8.8.8.8:53", "1.1.1.1:443"])
+        )
         core = NetworkMonitorCore(get_config=lambda: config)
         sites = core._get_test_sites()
         assert len(sites) == 2
 
     def test_targets_without_port(self):
         """缺少端口的目标应自动补全"""
-        config = RuntimeConfig(monitor=MonitorSettings(ping_targets=["8.8.8.8", "www.baidu.com"]))
+        config = RuntimeConfig(
+            monitor=MonitorSettings(ping_targets=["8.8.8.8", "www.baidu.com"])
+        )
         core = NetworkMonitorCore(get_config=lambda: config)
         sites = core._get_test_sites()
         # IP 默认 53，域名默认 443
@@ -382,5 +388,3 @@ class TestMonitorCoreLogMessage:
         core = NetworkMonitorCore(get_config=lambda: RuntimeConfig())
         # 不应抛异常
         core.log_message("测试消息", "INFO")
-
-

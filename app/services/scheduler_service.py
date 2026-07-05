@@ -115,7 +115,8 @@ class SchedulerService:
         if diff > self.MAX_CATCHUP_MINUTES:
             logger.warning(
                 "距离上次调度已过去 {} 分钟，超过追赶窗口（{} 分钟），跳过追赶",
-                diff, self.MAX_CATCHUP_MINUTES,
+                diff,
+                self.MAX_CATCHUP_MINUTES,
             )
             return [current]
 
@@ -139,4 +140,8 @@ class SchedulerService:
 
     def has_enabled_tasks(self) -> bool:
         """检查是否存在启用的定时任务。"""
-        return self._task_executor.registry.has_enabled_tasks() if self._task_executor else False
+        return (
+            self._task_executor.registry.has_enabled_tasks()
+            if self._task_executor
+            else False
+        )

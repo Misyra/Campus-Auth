@@ -1,4 +1,5 @@
 """最小 SOCKS5 Forwarder：仅 CONNECT，IPv4 + 域名，无认证。"""
+
 from __future__ import annotations
 
 import contextlib
@@ -121,9 +122,7 @@ class Socks5Server:
         except Exception as e:
             logger.debug("SOCKS5 connection error: {}", e)
             with contextlib.suppress(OSError):
-                client.sendall(
-                    bytes([0x05, 0x05, 0x00, 0x01, 0, 0, 0, 0, 0, 0])
-                )
+                client.sendall(bytes([0x05, 0x05, 0x00, 0x01, 0, 0, 0, 0, 0, 0]))
         finally:
             # 半关闭写端，确保对端能读取到已发送的数据后再关闭
             with contextlib.suppress(OSError):

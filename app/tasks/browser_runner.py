@@ -84,11 +84,11 @@ class BrowserTaskRunner:
             if frames:
                 for frame_selector in frames:
                     try:
-                        await page.wait_for_selector(
-                            frame_selector, timeout=5000
-                        )
+                        await page.wait_for_selector(frame_selector, timeout=5000)
                     except PlaywrightTimeout:
-                        logger.warning("预热等待超时: {} (5s)，继续执行", frame_selector)
+                        logger.warning(
+                            "预热等待超时: {} (5s)，继续执行", frame_selector
+                        )
             else:
                 try:
                     await page.wait_for_selector("input,textarea", timeout=5000)
@@ -152,13 +152,19 @@ class BrowserTaskRunner:
         except (PlaywrightTimeout, OSError) as e:
             total_elapsed = (time.perf_counter() - task_start) * 1000
             logger.exception(
-                "任务执行异常: {} (耗时 {:.0f}ms): {}", self.config.name, total_elapsed, e
+                "任务执行异常: {} (耗时 {:.0f}ms): {}",
+                self.config.name,
+                total_elapsed,
+                e,
             )
             return await self._handle_failure(page, None, str(e))
         except Exception as e:
             total_elapsed = (time.perf_counter() - task_start) * 1000
             logger.exception(
-                "任务执行异常: {} (耗时 {:.0f}ms): {}", self.config.name, total_elapsed, e
+                "任务执行异常: {} (耗时 {:.0f}ms): {}",
+                self.config.name,
+                total_elapsed,
+                e,
             )
             try:
                 return await self._handle_failure(page, None, f"内部错误: {e}")
@@ -176,9 +182,7 @@ class BrowserTaskRunner:
         if not url:
             url = self.template_vars.get("LOGIN_URL", "").strip()
         if url:
-            logger.debug(
-                "自动导航: {} (超时={}ms)", url, self.navigation_timeout
-            )
+            logger.debug("自动导航: {} (超时={}ms)", url, self.navigation_timeout)
             await page.goto(url, wait_until="load", timeout=self.navigation_timeout)
             await self._wait_url_stable(page)
             if self.config.navigation_wait > 0:
@@ -325,20 +329,21 @@ class BrowserTaskRunner:
             from app.schemas import MonitorSettings
 
             cfg = self.monitor_config
-            monitor = MonitorSettings(**{
-                k: v for k, v in cfg.items()
-                if k in MonitorSettings.model_fields
-                and v is not None
-                and not (isinstance(v, (list, str, dict)) and not v)
-            })
+            monitor = MonitorSettings(
+                **{
+                    k: v
+                    for k, v in cfg.items()
+                    if k in MonitorSettings.model_fields
+                    and v is not None
+                    and not (isinstance(v, (list, str, dict)) and not v)
+                }
+            )
 
             # 等待网址响应处理认证请求
             delay = cfg.get("post_login_delay")
             await asyncio.sleep(delay if delay is not None else 5)
 
-            ok, status, method = await asyncio.to_thread(
-                check_network_status, monitor
-            )
+            ok, status, method = await asyncio.to_thread(check_network_status, monitor)
 
             if ok:
                 logger.info("网络已恢复，登录认证生效 (检测方式={})", method)
@@ -385,7 +390,9 @@ class BrowserTaskRunner:
                 # 计算相对于 TEMP_DIR 的子目录路径，确保 URL 与实际存储路径一致
                 try:
                     rel = self._screenshot_dir.relative_to(TEMP_DIR)
-                    url_prefix = f"/temp/{rel.as_posix()}" if str(rel) != "." else "/temp"
+                    url_prefix = (
+                        f"/temp/{rel.as_posix()}" if str(rel) != "." else "/temp"
+                    )
                 except ValueError:
                     url_prefix = "/temp"
             else:

@@ -154,7 +154,10 @@ class TestGetDefaultShell:
             mock_sys.platform = "linux"
             with (
                 patch("app.utils.shell_utils.os.environ", {"SHELL": "/bin/zsh"}),
-                patch("app.utils.shell_utils.shutil.which", side_effect=lambda x: x if x == "/bin/zsh" else None),
+                patch(
+                    "app.utils.shell_utils.shutil.which",
+                    side_effect=lambda x: x if x == "/bin/zsh" else None,
+                ),
             ):
                 result = get_default_shell()
                 assert result == "/bin/zsh"

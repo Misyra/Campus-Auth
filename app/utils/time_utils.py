@@ -17,7 +17,9 @@ def _parse_pause_range(raw: str) -> tuple[datetime.time, datetime.time]:
     return start, end
 
 
-def is_in_pause_period(now: datetime.datetime, ranges: list[tuple[datetime.time, datetime.time]]) -> bool:
+def is_in_pause_period(
+    now: datetime.datetime, ranges: list[tuple[datetime.time, datetime.time]]
+) -> bool:
     """检查指定时间是否在暂停时段内。
 
     参数:

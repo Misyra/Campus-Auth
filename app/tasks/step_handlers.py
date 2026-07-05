@@ -408,15 +408,16 @@ class SelectHandler(StepHandler):
                 try:
                     result = await element.select_option(label=current, timeout=timeout)
                     if result:
-                        logger.debug("[select] 标签精确匹配: '{}', '{}'", value, current)
+                        logger.debug(
+                            "[select] 标签精确匹配: '{}', '{}'", value, current
+                        )
                         return True
                 except Exception:
                     continue
 
         # 第二轮：包含匹配，仅唯一匹配时采用（避免 "本科" 误选 "本科生"）
         contains = [
-            t for t in option_texts
-            if t and normalized_target in str(t).strip().lower()
+            t for t in option_texts if t and normalized_target in str(t).strip().lower()
         ]
         if len(contains) == 1:
             text = str(contains[0]).strip()
@@ -428,9 +429,7 @@ class SelectHandler(StepHandler):
             except Exception:
                 pass
         elif len(contains) > 1:
-            logger.warning(
-                "[select] 包含匹配到多个选项 {}，已跳过以防误选", contains
-            )
+            logger.warning("[select] 包含匹配到多个选项 {}，已跳过以防误选", contains)
 
         return False
 
@@ -479,7 +478,9 @@ class ClickSelectHandler(StepHandler):
         logger.debug("[click_select] 触发器已点击，等待 {}ms 后查找选项", select_delay)
         await page.wait_for_timeout(select_delay)
 
-        clicked = await self._click_option(ctx, value, option_selector, timeout, trigger)
+        clicked = await self._click_option(
+            ctx, value, option_selector, timeout, trigger
+        )
         if not clicked:
             logger.debug("[click_select] 未匹配到选项，跳过: {}", value)
             if step.required:
@@ -507,9 +508,7 @@ class ClickSelectHandler(StepHandler):
             # 优先在触发器父容器内搜索，避免全页面搜索误点到同名元素
             container = trigger.locator("..")
             option = container.get_by_text(text, exact=False).first
-            logger.debug(
-                "[click_select] 在触发器父容器内搜索选项 '{}'", text
-            )
+            logger.debug("[click_select] 在触发器父容器内搜索选项 '{}'", text)
             try:
                 await option.wait_for(state="visible", timeout=timeout)
                 await option.click(timeout=timeout)
@@ -517,9 +516,7 @@ class ClickSelectHandler(StepHandler):
                 return True
             except Exception:
                 # Portal 框架下选项渲染在 body 而非父容器，回退到全局搜索
-                logger.debug(
-                    "[click_select] 父容器内未找到，回退全局搜索 '{}'", text
-                )
+                logger.debug("[click_select] 父容器内未找到，回退全局搜索 '{}'", text)
         # 全局搜索（option_selector 为空，或 trigger 父容器未命中）
         try:
             option = ctx.get_by_text(text, exact=False).first
@@ -582,7 +579,10 @@ class WaitUrlHandler(StepHandler):
         try:
             compiled = re.compile(pattern)
         except re.error as e:
-            return False, f"wait_url 步骤的 pattern 不是有效的正则表达式: {pattern} ({e})"
+            return (
+                False,
+                f"wait_url 步骤的 pattern 不是有效的正则表达式: {pattern} ({e})",
+            )
 
         logger.debug("[wait_url] pattern={}", pattern)
         deadline = time.monotonic() + timeout / 1000
@@ -687,7 +687,9 @@ class SleepHandler(StepHandler):
         try:
             duration = int(params.get("duration", 1000))
         except (ValueError, TypeError):
-            logger.warning("[sleep] duration 无法转换为整数: {}", params.get("duration"))
+            logger.warning(
+                "[sleep] duration 无法转换为整数: {}", params.get("duration")
+            )
             duration = 1000
 
         if duration < 0:

@@ -21,6 +21,7 @@ async def get_browsers(
     """获取浏览器列表和当前配置。"""
     try:
         import asyncio
+
         browsers = await asyncio.to_thread(detect_browsers)
 
         profile_data = profile_svc.load()

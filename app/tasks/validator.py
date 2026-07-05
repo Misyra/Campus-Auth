@@ -53,7 +53,10 @@ class TaskValidator:
 
         variables = config.get("variables")
         if variables is not None and not isinstance(variables, dict):
-            errors.append("'variables' 必须是对象（dict），当前值类型: " + type(variables).__name__)
+            errors.append(
+                "'variables' 必须是对象（dict），当前值类型: "
+                + type(variables).__name__
+            )
 
         timeout = config.get("timeout")
         if timeout is not None and (

@@ -121,7 +121,9 @@ class DashboardSink:
 
     _MAX_MSG_LEN = 2000  # 消息截断上限，防止单条日志携带大量 traceback
 
-    def __init__(self, maxlen: int = LOG_BUFFER_MAXLEN, broadcast_maxlen: int = STATUS_LOG_MAXLEN):
+    def __init__(
+        self, maxlen: int = LOG_BUFFER_MAXLEN, broadcast_maxlen: int = STATUS_LOG_MAXLEN
+    ):
         self.buffer: deque[dict] = deque(maxlen=maxlen)
         self.broadcast_queue: deque[dict] = deque(maxlen=broadcast_maxlen)
         self._lock = threading.Lock()
@@ -283,6 +285,8 @@ class LogConfigCenter:
                 filter=lambda record: record["extra"].get("source") == "frontend",
             )
 
-            logger.info("日志系统启动成功 (目录={}, 保留={}天)", log_dir, retention_days)
+            logger.info(
+                "日志系统启动成功 (目录={}, 保留={}天)", log_dir, retention_days
+            )
         except Exception as e:
             logger.warning("启用文件日志失败: {}", e)

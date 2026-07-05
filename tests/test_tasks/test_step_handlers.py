@@ -31,6 +31,7 @@ class TestWaitUrlHandlerTimeSource:
     def test_uses_time_monotonic(self):
         """源码中使用 time.monotonic 而非 asyncio.get_running_loop().time()。"""
         import inspect
+
         source = inspect.getsource(WaitUrlHandler.execute)
         assert "time.monotonic()" in source
         assert "get_running_loop().time()" not in source

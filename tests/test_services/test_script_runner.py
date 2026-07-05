@@ -195,7 +195,9 @@ class TestScriptRunnerBuildCmd:
         with pytest.raises(ValueError, match="JSON 脚本格式错误"):
             runner._load_script_content()
 
-    @pytest.mark.skipif(sys.platform != "win32", reason="Windows 路径反斜杠仅在 Windows 上解析正确")
+    @pytest.mark.skipif(
+        sys.platform != "win32", reason="Windows 路径反斜杠仅在 Windows 上解析正确"
+    )
     @patch("app.workers.script_runner.platform.system", return_value="Windows")
     def test_cmd_binary_on_windows(self, _mock_sys, tmp_path: Path):
         script = tmp_path / "test.py"
@@ -320,12 +322,16 @@ class TestGetInterpreterName:
         """Unix 路径 python3.12。"""
         assert _get_interpreter_name("/usr/bin/python3.12") == "python"
 
-    @pytest.mark.skipif(sys.platform != "win32", reason="Windows 路径反斜杠仅在 Windows 上解析正确")
+    @pytest.mark.skipif(
+        sys.platform != "win32", reason="Windows 路径反斜杠仅在 Windows 上解析正确"
+    )
     def test_windows_python_exe(self) -> None:
         """Windows 路径 python.exe。"""
         assert _get_interpreter_name("C:\\Python312\\python.exe") == "python"
 
-    @pytest.mark.skipif(sys.platform != "win32", reason="Windows 路径反斜杠仅在 Windows 上解析正确")
+    @pytest.mark.skipif(
+        sys.platform != "win32", reason="Windows 路径反斜杠仅在 Windows 上解析正确"
+    )
     def test_windows_python_with_spaces(self) -> None:
         """Windows 路径含空格。"""
         assert (
@@ -378,7 +384,9 @@ class TestGetTempExtension:
         """PowerShell -> .ps1。"""
         assert _get_temp_extension("pwsh.exe") == ".ps1"
 
-    @pytest.mark.skipif(sys.platform != "win32", reason="Windows 路径反斜杠仅在 Windows 上解析正确")
+    @pytest.mark.skipif(
+        sys.platform != "win32", reason="Windows 路径反斜杠仅在 Windows 上解析正确"
+    )
     def test_cmd(self) -> None:
         """cmd -> .bat。"""
         assert _get_temp_extension("C:\\Windows\\System32\\cmd.exe") == ".bat"

@@ -13,9 +13,19 @@ from fastapi import APIRouter
 # ── 辅助 fixtures ──
 
 _ROUTER_NAMES = [
-    "monitor", "config", "tasks", "profiles", "debug",
-    "repo", "system", "autostart", "ocr", "tools",
-    "scripts", "scheduled_tasks", "history",
+    "monitor",
+    "config",
+    "tasks",
+    "profiles",
+    "debug",
+    "repo",
+    "system",
+    "autostart",
+    "ocr",
+    "tools",
+    "scripts",
+    "scheduled_tasks",
+    "history",
 ]
 
 
@@ -50,8 +60,11 @@ def _make_mock_container():
     mock_container.start_web_services = MagicMock()
     mock_container.shutdown = AsyncMock()
     mock_container.engine.get_config.return_value = MagicMock(
-        username="", password="", auth_url="",
-        carrier="默认", check_interval_seconds=60,
+        username="",
+        password="",
+        auth_url="",
+        carrier="默认",
+        check_interval_seconds=60,
     )
     return mock_container
 
@@ -99,8 +112,7 @@ class TestCreateAppInitialization:
 
         result = create_app()
         mounted_paths = [
-            r.path for r in result.routes
-            if hasattr(r, "path") and hasattr(r, "name")
+            r.path for r in result.routes if hasattr(r, "path") and hasattr(r, "name")
         ]
         assert "/static" in mounted_paths
         assert "/debug" in mounted_paths
@@ -112,8 +124,7 @@ class TestCreateAppInitialization:
 
         result = create_app()
         ws_routes = [
-            r for r in result.routes
-            if hasattr(r, "path") and r.path == "/ws/logs"
+            r for r in result.routes if hasattr(r, "path") and r.path == "/ws/logs"
         ]
         assert len(ws_routes) >= 1
 
@@ -132,7 +143,8 @@ class TestCreateAppInitialization:
 
         result = create_app()
         cors_middleware = [
-            m for m in result.user_middleware
+            m
+            for m in result.user_middleware
             if hasattr(m, "cls") and "CORS" in m.cls.__name__
         ]
         assert len(cors_middleware) >= 1
@@ -237,8 +249,11 @@ class TestAppLifespan:
         mock_container.engine.has_enabled_tasks.return_value = True
         mock_container.engine.start_scheduler = MagicMock()
         mock_container.engine.get_config.return_value = MagicMock(
-            username="admin", password="secret", auth_url="http://auth.example.com",
-            carrier="中国移动", check_interval_seconds=30,
+            username="admin",
+            password="secret",
+            auth_url="http://auth.example.com",
+            carrier="中国移动",
+            check_interval_seconds=30,
         )
         _app = create_app(existing_container=mock_container)
 
@@ -305,8 +320,10 @@ class TestDependencyInjection:
         from app.application import create_app
 
         mock_config = MagicMock(
-            username="testuser", password="testpass",
-            auth_url="http://example.com", carrier="中国电信",
+            username="testuser",
+            password="testpass",
+            auth_url="http://example.com",
+            carrier="中国电信",
             check_interval_seconds=120,
         )
         mock_container = _make_mock_container()

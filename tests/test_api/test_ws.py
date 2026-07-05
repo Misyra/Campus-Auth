@@ -125,10 +125,12 @@ class TestFrontendLog:
     @pytest.mark.asyncio
     async def test_frontend_log_with_default_level(self):
         """frontend_log 消息默认使用 INFO 级别。"""
-        msg = json.dumps({
-            "type": "frontend_log",
-            "data": {"message": "test log", "scope": "test"},
-        })
+        msg = json.dumps(
+            {
+                "type": "frontend_log",
+                "data": {"message": "test log", "scope": "test"},
+            }
+        )
         ws = _make_ws([msg])
         mgr = _make_manager()
 
@@ -139,10 +141,12 @@ class TestFrontendLog:
     @pytest.mark.asyncio
     async def test_frontend_log_with_explicit_level(self):
         """frontend_log 消息使用指定的日志级别。"""
-        msg = json.dumps({
-            "type": "frontend_log",
-            "data": {"message": "warning msg", "scope": "auth", "level": "WARNING"},
-        })
+        msg = json.dumps(
+            {
+                "type": "frontend_log",
+                "data": {"message": "warning msg", "scope": "auth", "level": "WARNING"},
+            }
+        )
         ws = _make_ws([msg])
         mgr = _make_manager()
 
@@ -153,10 +157,12 @@ class TestFrontendLog:
     @pytest.mark.asyncio
     async def test_frontend_log_with_invalid_level_falls_back_to_info(self):
         """frontend_log 消息使用无效级别时降级为 INFO。"""
-        msg = json.dumps({
-            "type": "frontend_log",
-            "data": {"message": "msg", "scope": "s", "level": "INVALID"},
-        })
+        msg = json.dumps(
+            {
+                "type": "frontend_log",
+                "data": {"message": "msg", "scope": "s", "level": "INVALID"},
+            }
+        )
         ws = _make_ws([msg])
         mgr = _make_manager()
 
@@ -167,10 +173,12 @@ class TestFrontendLog:
     @pytest.mark.asyncio
     async def test_frontend_log_empty_message_not_logged(self):
         """frontend_log 空消息不触发日志调用。"""
-        msg = json.dumps({
-            "type": "frontend_log",
-            "data": {"message": "", "scope": "test"},
-        })
+        msg = json.dumps(
+            {
+                "type": "frontend_log",
+                "data": {"message": "", "scope": "test"},
+            }
+        )
         ws = _make_ws([msg])
         mgr = _make_manager()
 
@@ -193,10 +201,12 @@ class TestFrontendLog:
     async def test_frontend_log_message_truncated_to_10000(self):
         """frontend_log 消息超过 10000 字符时被截断。"""
         long_msg = "x" * 15000
-        msg = json.dumps({
-            "type": "frontend_log",
-            "data": {"message": long_msg, "scope": "test"},
-        })
+        msg = json.dumps(
+            {
+                "type": "frontend_log",
+                "data": {"message": long_msg, "scope": "test"},
+            }
+        )
         ws = _make_ws([msg])
         mgr = _make_manager()
 
@@ -210,10 +220,12 @@ class TestFrontendLog:
     async def test_frontend_log_scope_truncated_to_200(self):
         """frontend_log scope 超过 200 字符时被截断。"""
         long_scope = "y" * 300
-        msg = json.dumps({
-            "type": "frontend_log",
-            "data": {"message": "test", "scope": long_scope},
-        })
+        msg = json.dumps(
+            {
+                "type": "frontend_log",
+                "data": {"message": "test", "scope": long_scope},
+            }
+        )
         ws = _make_ws([msg])
         mgr = _make_manager()
 
@@ -270,10 +282,12 @@ class TestUnknownMessageType:
     async def test_known_types_do_not_log_warning(self):
         """已知消息类型不触发未知类型警告。"""
         ping_msg = json.dumps({"type": "ping"})
-        log_msg = json.dumps({
-            "type": "frontend_log",
-            "data": {"message": "test", "scope": "s"},
-        })
+        log_msg = json.dumps(
+            {
+                "type": "frontend_log",
+                "data": {"message": "test", "scope": "s"},
+            }
+        )
         ws = _make_ws([ping_msg, log_msg])
         mgr = _make_manager()
 

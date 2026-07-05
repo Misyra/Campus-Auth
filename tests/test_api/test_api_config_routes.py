@@ -47,7 +47,9 @@ class TestGetConfig:
 
     def test_get_config_returns_200(self, api_client):
         test_client, mock_services = api_client
-        mock_services.profile_service.build_runtime_config.return_value = _make_runtime_config()
+        mock_services.profile_service.build_runtime_config.return_value = (
+            _make_runtime_config()
+        )
         mock_profile = MagicMock()
         mock_profile.carrier = "移动"
         mock_services.profile_service.get_active_profile.return_value = mock_profile
@@ -59,7 +61,9 @@ class TestGetConfig:
 
     def test_get_config_contains_expected_fields(self, api_client):
         test_client, mock_services = api_client
-        mock_services.profile_service.build_runtime_config.return_value = _make_runtime_config()
+        mock_services.profile_service.build_runtime_config.return_value = (
+            _make_runtime_config()
+        )
         mock_profile = MagicMock()
         mock_profile.carrier = "移动"
         mock_services.profile_service.get_active_profile.return_value = mock_profile
@@ -88,7 +92,9 @@ class TestSaveConfig:
     def test_save_config_success(self, mock_save, api_client):
         test_client, mock_services = api_client
         mock_save.return_value = SaveResult(success=True, message="配置保存成功")
-        mock_services.profile_service.build_runtime_config.return_value = _make_runtime_config()
+        mock_services.profile_service.build_runtime_config.return_value = (
+            _make_runtime_config()
+        )
 
         # 构建完整 payload（含必填嵌套字段）
         payload = {
@@ -112,7 +118,9 @@ class TestSetLogLevel:
     """测试 PUT /api/config/log-level 端点。"""
 
     @patch("app.utils.logging.LogConfigCenter")
-    def test_set_log_level_calls_update_log_level(self, mock_log_center_cls, api_client):
+    def test_set_log_level_calls_update_log_level(
+        self, mock_log_center_cls, api_client
+    ):
         """设置日志级别后应调用 engine.update_log_level()。"""
         test_client, mock_services = api_client
 
@@ -129,7 +137,9 @@ class TestSetLogLevel:
         mock_services.engine.update_log_level.assert_called_once_with("DEBUG")
 
     @patch("app.utils.logging.LogConfigCenter")
-    def test_set_log_level_invalid_level_rejected(self, mock_log_center_cls, api_client):
+    def test_set_log_level_invalid_level_rejected(
+        self, mock_log_center_cls, api_client
+    ):
         """无效日志级别应返回 400。"""
         test_client, _ = api_client
 
@@ -137,7 +147,9 @@ class TestSetLogLevel:
         assert resp.status_code == 400
 
     @patch("app.utils.logging.LogConfigCenter")
-    def test_set_log_level_updates_profile_service(self, mock_log_center_cls, api_client):
+    def test_set_log_level_updates_profile_service(
+        self, mock_log_center_cls, api_client
+    ):
         """设置日志级别后应更新 profile_service。"""
         test_client, mock_services = api_client
 
@@ -146,7 +158,9 @@ class TestSetLogLevel:
         mock_log_center_cls.get_instance.return_value = mock_center
 
         mock_engine = MagicMock()
-        mock_engine._runtime_config = RuntimeConfig(logging=LoggingSettings(level="INFO"))
+        mock_engine._runtime_config = RuntimeConfig(
+            logging=LoggingSettings(level="INFO")
+        )
         mock_services.engine = mock_engine
 
         resp = test_client.put("/api/config/log-level", json={"level": "WARNING"})

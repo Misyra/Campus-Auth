@@ -59,7 +59,11 @@ class TestGetterInjection:
         """config 应通过 getter 实时获取，不持有副本。"""
         config1 = RuntimeConfig()
         config2 = config1.model_copy(
-            update={"monitor": config1.monitor.model_copy(update={"check_interval_seconds": 99})}
+            update={
+                "monitor": config1.monitor.model_copy(
+                    update={"check_interval_seconds": 99}
+                )
+            }
         )
         current = [config1]
 

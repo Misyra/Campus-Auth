@@ -196,7 +196,9 @@ class DebugSessionManager:
             async with self._lock:
                 await self._cancel_debug_timer()
                 await self._close_debug_browser()
-            debug_logger.warning("调试会话启动失败: task={}, {}", task_id, response.error)
+            debug_logger.warning(
+                "调试会话启动失败: task={}, {}", task_id, response.error
+            )
             raise RuntimeError(f"调试会话启动失败: {response.error}")
 
         if isinstance(response.data, dict):
@@ -217,7 +219,10 @@ class DebugSessionManager:
                 idx = session.current_step
 
                 if idx >= len(session.steps):
-                    return {**debug_to_response(self._session), "message": "所有步骤已执行完毕"}
+                    return {
+                        **debug_to_response(self._session),
+                        "message": "所有步骤已执行完毕",
+                    }
 
             response = await asyncio.to_thread(
                 lambda: get_worker().submit(CMD_DEBUG_STEP, data={"step_index": idx})
@@ -261,7 +266,10 @@ class DebugSessionManager:
             from_idx = session.current_step
 
             if from_idx >= len(session.steps):
-                return {**debug_to_response(self._session), "message": "所有步骤已执行完毕"}
+                return {
+                    **debug_to_response(self._session),
+                    "message": "所有步骤已执行完毕",
+                }
 
         # 一次性获取信号量，持有到整个批量执行完成，防止 next_step 插入
         async with self._exec_sem:
@@ -334,7 +342,9 @@ class DebugSessionManager:
         except FileNotFoundError:
             pass
         except Exception:
-            debug_logger.warning("调试临时目录清理失败: {}", self._temp_dir, exc_info=True)
+            debug_logger.warning(
+                "调试临时目录清理失败: {}", self._temp_dir, exc_info=True
+            )
         debug_logger.info("停止调试会话成功")
         return {"running": False, "message": "调试会话已关闭"}
 

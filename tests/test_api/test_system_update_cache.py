@@ -50,7 +50,9 @@ class TestUpdateCache:
 
         # 设置过期缓存
         sys_mod._update_cache = {"latest": "v1.0.0", "has_update": False}
-        sys_mod._update_cache_time = time_mod.monotonic() - sys_mod._UPDATE_CACHE_TTL - 100
+        sys_mod._update_cache_time = (
+            time_mod.monotonic() - sys_mod._UPDATE_CACHE_TTL - 100
+        )
 
         mock_resp = MagicMock()
         mock_resp.status_code = 200
@@ -98,9 +100,7 @@ class TestUpdateCache:
             return mock_resp
 
         with patch("httpx.AsyncClient.get", mock_get):
-            results = await asyncio.gather(
-                *[sys_mod.check_update() for _ in range(5)]
-            )
+            results = await asyncio.gather(*[sys_mod.check_update() for _ in range(5)])
 
         # 所有请求都应返回有效结果
         assert all(r.current for r in results)

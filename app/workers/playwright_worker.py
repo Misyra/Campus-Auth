@@ -115,7 +115,6 @@ class PlaywrightWorker:
         )
         self._last_browser_settings: dict | None = None  # 缓存最近一次浏览器设置
 
-
     # ── 只读属性（供同线程调用者访问，如 BrowserContextManager）──
 
     @property
@@ -444,8 +443,12 @@ class PlaywrightWorker:
             outcome = await session.run()
             return WorkerResponse(
                 success=outcome.type == AttemptOutcomeType.SUCCESS,
-                data=outcome.message if outcome.type == AttemptOutcomeType.SUCCESS else None,
-                error=outcome.message if outcome.type != AttemptOutcomeType.SUCCESS else None,
+                data=outcome.message
+                if outcome.type == AttemptOutcomeType.SUCCESS
+                else None,
+                error=outcome.message
+                if outcome.type != AttemptOutcomeType.SUCCESS
+                else None,
             )
         except Exception as e:
             # 程序异常（Attempt 未捕获的）在此兜底，与现有行为一致
@@ -810,11 +813,21 @@ class PlaywrightWorker:
                 # 持久化上下文：使用独立用户数据目录，保留 cookies
                 user_data_dir = self._get_user_data_dir(channel)
                 user_data_dir.mkdir(parents=True, exist_ok=True)
-                launch_args = [] if pure_mode else self._build_launch_args(browser_settings, channel)
+                launch_args = (
+                    []
+                    if pure_mode
+                    else self._build_launch_args(browser_settings, channel)
+                )
                 ctx_opts = self._build_context_options(browser_settings)
                 logger.debug("使用持久化上下文: {}", user_data_dir)
                 self._context = await self._launch_persistent_context(
-                    self._playwright, channel, custom_path, headless, launch_args, str(user_data_dir), ctx_opts
+                    self._playwright,
+                    channel,
+                    custom_path,
+                    headless,
+                    launch_args,
+                    str(user_data_dir),
+                    ctx_opts,
                 )
                 # launch_persistent_context 直接返回 context，无独立 browser 对象
                 self._browser = None
@@ -886,7 +899,9 @@ class PlaywrightWorker:
         launch_args: list,
     ):
         """根据 channel 启动对应的浏览器（非持久化模式）。"""
-        launcher, resolved_path = self._resolve_launcher(playwright, channel, custom_path)
+        launcher, resolved_path = self._resolve_launcher(
+            playwright, channel, custom_path
+        )
         kwargs = {"headless": headless, "args": launch_args}
         if resolved_path:
             kwargs["executable_path"] = resolved_path
@@ -905,7 +920,9 @@ class PlaywrightWorker:
         ctx_opts: dict,
     ):
         """使用持久化上下文启动浏览器（保留 cookies）。"""
-        launcher, resolved_path = self._resolve_launcher(playwright, channel, custom_path)
+        launcher, resolved_path = self._resolve_launcher(
+            playwright, channel, custom_path
+        )
         kwargs = {"headless": headless, "args": launch_args, **ctx_opts}
         if resolved_path:
             kwargs["executable_path"] = resolved_path

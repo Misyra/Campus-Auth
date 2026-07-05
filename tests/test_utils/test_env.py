@@ -14,7 +14,10 @@ class TestBuildLoginTemplateVars:
             auth_url="http://10.0.0.1/login",
             task_url="http://10.0.0.1/login?redirect={{LOGIN_URL}}",
         )
-        assert result["LOGIN_URL"] == "http://10.0.0.1/login?redirect=http://10.0.0.1/login"
+        assert (
+            result["LOGIN_URL"]
+            == "http://10.0.0.1/login?redirect=http://10.0.0.1/login"
+        )
 
     def test_undefined_var_unchanged(self):
         """未定义的变量应保留原始占位符。"""

@@ -47,6 +47,7 @@ class SystemTray:
 
     def _create_menu(self):
         """创建托盘菜单（需要先调用 start() 初始化模块）。"""
+
         def _open_console(icon, item):
             if self.on_open_console:
                 self.on_open_console()

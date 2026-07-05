@@ -15,12 +15,17 @@ from app.workers.playwright_worker import WorkerResponse
 def _ensure_login_config(engine) -> None:
     """确保引擎运行时配置包含登录所需字段。"""
     old = engine._runtime_config
-    engine._runtime_config = old.model_copy(update={
-        "credentials": LoginCredentials(
-            username="testuser", password="testpass", auth_url="http://10.0.0.1",
-            isp=old.credentials.isp, carrier_custom=old.credentials.carrier_custom,
-        ),
-    })
+    engine._runtime_config = old.model_copy(
+        update={
+            "credentials": LoginCredentials(
+                username="testuser",
+                password="testpass",
+                auth_url="http://10.0.0.1",
+                isp=old.credentials.isp,
+                carrier_custom=old.credentials.carrier_custom,
+            ),
+        }
+    )
 
 
 class TestLightweightMode:
@@ -66,7 +71,9 @@ class TestLightweightMode:
         # t3: 手动登录
         login_done.clear()
         mock_worker.submit.side_effect = None
-        mock_worker.submit.return_value = WorkerResponse(success=True, data="手动登录成功")
+        mock_worker.submit.return_value = WorkerResponse(
+            success=True, data="手动登录成功"
+        )
 
         ok, msg = engine.run_manual_login()
         assert ok is True

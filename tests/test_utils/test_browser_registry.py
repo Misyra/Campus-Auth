@@ -115,7 +115,9 @@ def test_has_playwright_chromium_arm64_linux(tmp_path):
 
     with (
         patch("app.utils.browser_registry.platform.machine", return_value="arm64"),
-        patch("app.utils.browser_registry.get_playwright_cache_dir", return_value=tmp_path),
+        patch(
+            "app.utils.browser_registry.get_playwright_cache_dir", return_value=tmp_path
+        ),
     ):
         assert has_playwright_chromium() is True
 
@@ -128,7 +130,9 @@ def test_has_playwright_chromium_arm64_mac(tmp_path):
 
     with (
         patch("app.utils.browser_registry.platform.machine", return_value="arm64"),
-        patch("app.utils.browser_registry.get_playwright_cache_dir", return_value=tmp_path),
+        patch(
+            "app.utils.browser_registry.get_playwright_cache_dir", return_value=tmp_path
+        ),
     ):
         assert has_playwright_chromium() is True
 
@@ -144,6 +148,8 @@ def test_has_playwright_chromium_non_arm64_no_arm64_paths(tmp_path):
 
     with (
         patch("app.utils.browser_registry.platform.machine", return_value="x86_64"),
-        patch("app.utils.browser_registry.get_playwright_cache_dir", return_value=tmp_path),
+        patch(
+            "app.utils.browser_registry.get_playwright_cache_dir", return_value=tmp_path
+        ),
     ):
         assert has_playwright_chromium() is False

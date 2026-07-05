@@ -345,7 +345,9 @@ class TestFetchUrlContentLength:
             from app.api.tools import fetch_background_url
 
             with pytest.raises(Exception) as exc_info:
-                await fetch_background_url(FetchUrlRequest(url="https://example.com/big.png"))
+                await fetch_background_url(
+                    FetchUrlRequest(url="https://example.com/big.png")
+                )
             assert exc_info.value.status_code == 400
             assert "5MB" in exc_info.value.detail
 
@@ -371,7 +373,9 @@ class TestFetchUrlContentLength:
         ):
             from app.api.tools import fetch_background_url
 
-            result = await fetch_background_url(FetchUrlRequest(url="https://example.com/small.png"))
+            result = await fetch_background_url(
+                FetchUrlRequest(url="https://example.com/small.png")
+            )
             assert result.success is True
             assert "filename" in result.data
             assert result.data["url"].startswith("/api/background/")
@@ -398,6 +402,8 @@ class TestFetchUrlContentLength:
         ):
             from app.api.tools import fetch_background_url
 
-            result = await fetch_background_url(FetchUrlRequest(url="https://example.com/no-header.png"))
+            result = await fetch_background_url(
+                FetchUrlRequest(url="https://example.com/no-header.png")
+            )
             assert result.success is True
             assert "filename" in result.data

@@ -34,7 +34,10 @@ class TestAutostartStatus:
     def test_autostart_status_returns_200(self, api_client):
         test_client, mock_services = api_client
         mock_services.autostart_service.status.return_value = {
-            "platform": "windows", "enabled": False, "method": "", "location": "",
+            "platform": "windows",
+            "enabled": False,
+            "method": "",
+            "location": "",
         }
         resp = test_client.get("/api/autostart/status")
         assert resp.status_code == 200
@@ -47,7 +50,10 @@ class TestAutostartStatus:
     def test_autostart_status_default_disabled(self, api_client):
         test_client, mock_services = api_client
         mock_services.autostart_service.status.return_value = {
-            "platform": "windows", "enabled": False, "method": "", "location": "",
+            "platform": "windows",
+            "enabled": False,
+            "method": "",
+            "location": "",
         }
         data = test_client.get("/api/autostart/status").json()
         assert data["enabled"] is False
@@ -220,7 +226,9 @@ class TestAutoStartServiceStatus:
     @patch("app.services.autostart.is_linux", return_value=False)
     @patch("app.services.autostart.is_windows", return_value=False)
     @patch("app.services.autostart.get_platform", return_value="FreeBSD")
-    def test_status_unsupported(self, mock_gp, mock_win, mock_linux, mock_mac, tmp_path):
+    def test_status_unsupported(
+        self, mock_gp, mock_win, mock_linux, mock_mac, tmp_path
+    ):
         svc = AutoStartService(tmp_path)
         result = svc.status()
         assert result["enabled"] is False
@@ -234,7 +242,9 @@ class TestAutoStartServiceEnableDisable:
     @patch("app.services.autostart.is_linux", return_value=False)
     @patch("app.services.autostart.is_windows", return_value=False)
     @patch("app.services.autostart.get_platform", return_value="FreeBSD")
-    def test_enable_unsupported(self, mock_gp, mock_win, mock_linux, mock_mac, tmp_path):
+    def test_enable_unsupported(
+        self, mock_gp, mock_win, mock_linux, mock_mac, tmp_path
+    ):
         svc = AutoStartService(tmp_path)
         success, msg = svc.enable()
         assert success is False
@@ -244,7 +254,9 @@ class TestAutoStartServiceEnableDisable:
     @patch("app.services.autostart.is_linux", return_value=False)
     @patch("app.services.autostart.is_windows", return_value=False)
     @patch("app.services.autostart.get_platform", return_value="FreeBSD")
-    def test_disable_unsupported(self, mock_gp, mock_win, mock_linux, mock_mac, tmp_path):
+    def test_disable_unsupported(
+        self, mock_gp, mock_win, mock_linux, mock_mac, tmp_path
+    ):
         svc = AutoStartService(tmp_path)
         success, msg = svc.disable()
         assert success is False

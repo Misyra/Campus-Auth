@@ -16,7 +16,11 @@ class TestListProfiles:
     def test_list_profiles_returns_200(self, api_client):
         test_client, mock_services = api_client
         profile_data = ProfilesData(
-            profiles={"default": Profile(name="默认方案", username="testuser", password="ENC:test")},
+            profiles={
+                "default": Profile(
+                    name="默认方案", username="testuser", password="ENC:test"
+                )
+            },
         )
         mock_services.profile_service.load.return_value = profile_data
         resp = test_client.get("/api/profiles")
@@ -29,7 +33,11 @@ class TestListProfiles:
     def test_list_profiles_content(self, api_client):
         test_client, mock_services = api_client
         profile_data = ProfilesData(
-            profiles={"default": Profile(name="默认方案", username="testuser", password="ENC:test")},
+            profiles={
+                "default": Profile(
+                    name="默认方案", username="testuser", password="ENC:test"
+                )
+            },
         )
         mock_services.profile_service.load.return_value = profile_data
         data = test_client.get("/api/profiles").json()
@@ -43,7 +51,11 @@ class TestGetProfile:
     def test_get_profile_found(self, api_client):
         test_client, mock_services = api_client
         profile_data = ProfilesData(
-            profiles={"default": Profile(name="默认方案", username="testuser", password="ENC:test")},
+            profiles={
+                "default": Profile(
+                    name="默认方案", username="testuser", password="ENC:test"
+                )
+            },
         )
         mock_services.profile_service.load.return_value = profile_data
         resp = test_client.get("/api/profiles/default")
@@ -55,7 +67,11 @@ class TestGetProfile:
     def test_get_profile_not_found(self, api_client):
         test_client, mock_services = api_client
         profile_data = ProfilesData(
-            profiles={"default": Profile(name="默认方案", username="testuser", password="ENC:test")},
+            profiles={
+                "default": Profile(
+                    name="默认方案", username="testuser", password="ENC:test"
+                )
+            },
         )
         mock_services.profile_service.load.return_value = profile_data
         resp = test_client.get("/api/profiles/nonexistent")
@@ -109,7 +125,9 @@ class TestDeleteProfile:
         mock_services.profile_service.delete_profile.return_value = (True, "删除成功")
         # 模拟还有剩余方案
         remaining_data = ProfilesData(
-            profiles={"backup": Profile(name="备用方案", username="u", password="ENC:p")},
+            profiles={
+                "backup": Profile(name="备用方案", username="u", password="ENC:p")
+            },
             active_profile="backup",
         )
         mock_services.profile_service.load.return_value = remaining_data

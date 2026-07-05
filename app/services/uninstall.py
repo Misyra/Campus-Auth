@@ -99,6 +99,7 @@ def _get_autostart_service():
     global _autostart_service
     if _autostart_service is None:
         from app.services.autostart import AutoStartService
+
         _autostart_service = AutoStartService(PROJECT_ROOT)
     return _autostart_service
 
@@ -166,4 +167,3 @@ def _remove_playwright_cache(cache_dir: Path) -> tuple[bool, str]:
         return True, f"已删除 {cache_dir}"
     except Exception as exc:
         return False, f"删除 Playwright 缓存失败: {exc}"
-

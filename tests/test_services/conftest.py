@@ -92,7 +92,9 @@ def engine_factory():
         svc._profile_service.set_active_profile.return_value = (True, "ok")
         svc.project_root = MagicMock()
         svc._logger = MagicMock()
-        svc._update_status_snapshot = ScheduleEngine._update_status_snapshot.__get__(svc)
+        svc._update_status_snapshot = ScheduleEngine._update_status_snapshot.__get__(
+            svc
+        )
 
         # StatusManager — 状态快照与广播
         svc._status_manager = StatusManager(
@@ -106,7 +108,9 @@ def engine_factory():
         def _fake_submit_login(is_manual=False, config_snapshot=None, on_complete=None):
             """模拟 LoginBridge.submit_login：委托 orchestrator 并调用 on_complete。"""
             orchestrator = svc._orchestrator
-            config = config_snapshot if config_snapshot is not None else svc._runtime_config
+            config = (
+                config_snapshot if config_snapshot is not None else svc._runtime_config
+            )
             source = "manual" if is_manual else "auto"
             handle = orchestrator.submit(source=source, config=config)
             if handle.rejected_reason is not None:

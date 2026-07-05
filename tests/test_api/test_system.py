@@ -18,6 +18,7 @@ class TestSafePsutilCall:
 
     def test_returns_empty_list_on_access_denied(self):
         """AccessDenied 异常时返回空列表。"""
+
         def raise_access_denied():
             raise psutil.AccessDenied(pid=1)
 
@@ -27,6 +28,7 @@ class TestSafePsutilCall:
 
     def test_returns_empty_list_on_no_such_process(self):
         """NoSuchProcess 异常时返回空列表。"""
+
         def raise_no_such_process():
             raise psutil.NoSuchProcess(pid=999999)
 
@@ -36,6 +38,7 @@ class TestSafePsutilCall:
 
     def test_returns_empty_list_on_zombie_process(self):
         """ZombieProcess 异常时返回空列表。"""
+
         def raise_zombie():
             raise psutil.ZombieProcess(pid=999999)
 
@@ -45,6 +48,7 @@ class TestSafePsutilCall:
 
     def test_returns_custom_default_when_provided(self):
         """传入自定义 default 时使用该默认值。"""
+
         def raise_access_denied():
             raise psutil.AccessDenied(pid=1)
 
@@ -53,6 +57,7 @@ class TestSafePsutilCall:
 
     def test_default_none_becomes_empty_list(self):
         """default=None 时内部转换为空列表。"""
+
         def raise_access_denied():
             raise psutil.AccessDenied(pid=1)
 
@@ -62,6 +67,7 @@ class TestSafePsutilCall:
 
     def test_other_exceptions_propagate(self):
         """非 psutil 异常正常抛出。"""
+
         def raise_value_error():
             raise ValueError("unexpected")
 

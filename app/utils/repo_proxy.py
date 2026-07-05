@@ -37,17 +37,23 @@ def _normalize_repo_url(url: str) -> str:
         return f"https://raw.githubusercontent.com/{m.group(1)}/{m.group(2)}/{m.group(3)}/{m.group(4)}"
     m = re.match(r"https?://gitee\.com/([^/]+)/([^/]+)/blob/([^/]+)/(.+)", url)
     if m:
-        return f"https://gitee.com/{m.group(1)}/{m.group(2)}/raw/{m.group(3)}/{m.group(4)}"
+        return (
+            f"https://gitee.com/{m.group(1)}/{m.group(2)}/raw/{m.group(3)}/{m.group(4)}"
+        )
     return url
 
 
-async def async_repo_fetch_json(url: str, expected_type: type, label: str, proxy: str = ""):
+async def async_repo_fetch_json(
+    url: str, expected_type: type, label: str, proxy: str = ""
+):
     """异步版本的远程 JSON 获取：校验类型 + 统一异常处理。供异步路由使用。"""
     url = _normalize_repo_url(url)
     logger.debug("获取远程{}: {}", label, url)
     try:
         headers = {"User-Agent": "Campus-Auth"}
-        async with httpx.AsyncClient(proxy=proxy or None, timeout=httpx.Timeout(15)) as client:
+        async with httpx.AsyncClient(
+            proxy=proxy or None, timeout=httpx.Timeout(15)
+        ) as client:
             resp = await client.get(url, headers=headers)
             resp.raise_for_status()
         data = resp.json()
