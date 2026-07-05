@@ -50,7 +50,6 @@ class TestInitMonitoringLogMasking:
 
         # 在测试后清理状态，避免影响其他测试
         core.monitoring = False
-        core._test_sites_cache = None
 
         return "\n".join(captured_logs)
 
