@@ -29,6 +29,7 @@ if TYPE_CHECKING:
     from playwright.async_api import Route
 
 from app.constants import (
+    BROWSER_DATA_DIR,
     WORKER_JOIN_TIMEOUT,
     WORKER_QUEUE_PUT_TIMEOUT,
     WORKER_READY_TIMEOUT,
@@ -674,8 +675,9 @@ class PlaywrightWorker:
         复用已存在的浏览器实例，仅在未就绪或配置变更时重建。
         """
         browser_settings = config.get("browser_settings", {})
+        has_browser = self._browser is not None or self._context is not None
         if (
-            self._browser is not None
+            has_browser
             and await self._health_check()
             and self._last_browser_settings == browser_settings
         ):
@@ -692,6 +694,11 @@ class PlaywrightWorker:
         "--memory-pressure-off",
         "--disable-web-security",
     }
+
+    @staticmethod
+    def _get_user_data_dir(channel: str) -> Path:
+        """获取持久化上下文的用户数据目录（按浏览器 channel 隔离）。"""
+        return BROWSER_DATA_DIR / channel
 
     def _build_launch_args(
         self, browser_settings: dict, channel: str = "playwright"
@@ -799,9 +806,25 @@ class PlaywrightWorker:
         )
 
         self._playwright = await async_playwright().start()
+        persistent = browser_settings.get("persistent_context", False)
 
         try:
-            if pure_mode:
+            if persistent:
+                # 持久化上下文：使用独立用户数据目录，保留 cookies
+                user_data_dir = self._get_user_data_dir(channel)
+                user_data_dir.mkdir(parents=True, exist_ok=True)
+                launch_args = [] if pure_mode else self._build_launch_args(browser_settings, channel)
+                ctx_opts = self._build_context_options(browser_settings)
+                logger.debug("使用持久化上下文: {}", user_data_dir)
+                self._context = await self._launch_persistent_context(
+                    self._playwright, channel, custom_path, headless, launch_args, str(user_data_dir), ctx_opts
+                )
+                # launch_persistent_context 直接返回 context，无独立 browser 对象
+                self._browser = None
+                # 非纯净模式下应用反检测和路由拦截
+                if not pure_mode:
+                    await self._apply_stealth_and_routes(browser_settings)
+            elif pure_mode:
                 # 纯净模式：无扩展无自定义参数
                 self._browser = await self._launch_browser(
                     self._playwright, channel, custom_path, headless, []
@@ -831,15 +854,8 @@ class PlaywrightWorker:
 
         logger.info("浏览器启动成功")
 
-    async def _launch_browser(
-        self,
-        playwright,
-        channel: str,
-        custom_path: str,
-        headless: bool,
-        launch_args: list,
-    ):
-        """根据 channel 启动对应的浏览器。"""
+    def _resolve_launcher(self, playwright, channel: str, custom_path: str):
+        """根据 channel 解析对应的 launcher 对象。"""
         if channel == "custom" and custom_path:
             if not Path(custom_path).exists():
                 raise FileNotFoundError(f"自定义浏览器路径不存在: {custom_path}")
@@ -853,36 +869,73 @@ class PlaywrightWorker:
             else:
                 engine = "chromium"
             logger.debug("使用自定义浏览器: {} (engine={})", custom_path, engine)
-            launcher = getattr(playwright, engine)
-            return await launcher.launch(
-                executable_path=custom_path, headless=headless, args=launch_args
-            )
+            return getattr(playwright, engine), custom_path
         elif channel == "firefox":
-            # Firefox 使用 firefox.launch()
             logger.debug("使用 Firefox 浏览器")
-            return await playwright.firefox.launch(headless=headless, args=launch_args)
+            return playwright.firefox, None
         elif channel == "playwright":
-            # Playwright 自带 Chromium
             logger.debug("使用 Playwright Chromium")
-            return await playwright.chromium.launch(headless=headless, args=launch_args)
+            return playwright.chromium, None
         else:
-            # msedge 或 chrome，使用 channel 参数
             logger.debug("使用系统浏览器: {}", channel)
-            return await playwright.chromium.launch(
-                channel=channel, headless=headless, args=launch_args
-            )
+            return playwright.chromium, None
+
+    async def _launch_browser(
+        self,
+        playwright,
+        channel: str,
+        custom_path: str,
+        headless: bool,
+        launch_args: list,
+    ):
+        """根据 channel 启动对应的浏览器（非持久化模式）。"""
+        launcher, resolved_path = self._resolve_launcher(playwright, channel, custom_path)
+        kwargs = {"headless": headless, "args": launch_args}
+        if resolved_path:
+            kwargs["executable_path"] = resolved_path
+        elif channel not in ("firefox", "playwright"):
+            kwargs["channel"] = channel
+        return await launcher.launch(**kwargs)
+
+    async def _launch_persistent_context(
+        self,
+        playwright,
+        channel: str,
+        custom_path: str,
+        headless: bool,
+        launch_args: list,
+        user_data_dir: str,
+        ctx_opts: dict,
+    ):
+        """使用持久化上下文启动浏览器（保留 cookies）。"""
+        launcher, resolved_path = self._resolve_launcher(playwright, channel, custom_path)
+        kwargs = {"headless": headless, "args": launch_args, **ctx_opts}
+        if resolved_path:
+            kwargs["executable_path"] = resolved_path
+        elif channel not in ("firefox", "playwright"):
+            kwargs["channel"] = channel
+        return await launcher.launch_persistent_context(user_data_dir, **kwargs)
 
     async def _health_check(self) -> bool:
         """检查浏览器健康状态。
 
-        调用 browser.is_connected() 判断浏览器实例是否仍存活。
-        适用于命令执行前的预检查，避免使用已崩溃的浏览器。
+        持久化上下文模式下尝试访问 pages 检测存活；
+        非持久化模式调用 browser.is_connected()。
 
         返回:
             bool: True 表示浏览器存活且可用，False 表示需要重建
         """
+        # 持久化上下文模式：browser 为 None，通过 context.pages 检测
         if self._browser is None:
-            return False
+            if self._context is None:
+                return False
+            try:
+                # 访问 pages 属性会抛出异常如果底层浏览器已崩溃
+                _ = self._context.pages
+                return True
+            except Exception:
+                logger.debug("持久化上下文健康检查失败，浏览器可能已崩溃")
+                return False
         try:
             return self._browser.is_connected()
         except Exception:

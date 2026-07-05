@@ -18,6 +18,7 @@ DEBUG_DIR = PROJECT_ROOT / "debug"
 LOGS_DIR = DEBUG_DIR / "logs"
 SCREENSHOTS_DIR = DEBUG_DIR / "screenshots"
 TEMP_DIR = PROJECT_ROOT / "temp"
+BROWSER_DATA_DIR = PROJECT_ROOT / "config" / "browser-data"
 
 # 默认网络检测目标（单一来源，避免 schemas/config_service/monitor_service 重复）
 DEFAULT_NETWORK_TARGETS: str = "8.8.8.8:53,114.114.114.114:53,www.baidu.com:443"

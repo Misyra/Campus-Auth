@@ -281,6 +281,7 @@ class BrowserSettings(BaseModel, frozen=True):
     browser_channel: BrowserChannel = BrowserChannel.MSEdge
     browser_custom_path: str = ""
     custom_browser_engine: str = "auto"
+    persistent_context: bool = False
 
 
 class LoginCredentials(BaseModel, frozen=True):
