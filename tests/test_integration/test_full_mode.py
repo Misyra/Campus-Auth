@@ -29,7 +29,7 @@ def _ensure_login_config(engine) -> None:
 class TestFullMode:
     """完整模式全生命周期。"""
 
-    def test_full_lifecycle(self, integration_stack):
+    async def test_full_lifecycle(self, integration_stack):
         """完整模式：启动 → 断网登录 → 定时任务 → 手动登录 → 配置重载 → 关闭。"""
         engine, profile_service, task_executor, task_registry, mock_worker = integration_stack
         _ensure_login_config(engine)
@@ -69,7 +69,7 @@ class TestFullMode:
                 return_value=(False, ""),
             ),
         ):
-            engine._do_network_check()
+            await engine._do_network_check_async()
         login_done.wait(timeout=5)
 
         # t3: 验证定时任务已注册

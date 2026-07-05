@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import queue
+import asyncio
 import threading
 import time
 from unittest.mock import MagicMock, patch
@@ -10,8 +10,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from app.schemas import RuntimeConfig
-from app.services.engine import ScheduleEngine
-from app.services.engine import StatusManager, StatusSnapshot
+from app.services.engine import ScheduleEngine, StatusManager
 from app.services.retry_policy import MonitoredPolicy
 
 
@@ -62,11 +61,13 @@ def engine_factory():
     def _make_raw():
         """原始模式：跳过 __init__，手动设置所有属性。"""
         svc = ScheduleEngine.__new__(ScheduleEngine)
-        svc._cmd_queue = queue.Queue(maxsize=50)
+        svc._cmd_queue = asyncio.Queue(maxsize=50)
         svc._shutdown_event = threading.Event()
-        svc._wakeup_event = threading.Event()
-        svc._monitor_core = None
+        svc._engine_loop = None
+        svc._engine_thread = None
         svc._engine_running = False
+        svc._engine_ready = threading.Event()
+        svc._monitor_core = None
         svc._retry_policy = MonitoredPolicy()
         svc._runtime_config = RuntimeConfig()
         svc._monitor_check_interval = 300
@@ -77,8 +78,6 @@ def engine_factory():
         svc._scheduler.has_enabled_tasks.return_value = False
         svc._task_registry = MagicMock()
         svc._task_executor = MagicMock()
-        svc._engine_thread = MagicMock()
-        svc._engine_thread.is_alive.return_value = False
         svc._manual_login_in_progress = False
         svc._manual_login_lock = threading.Lock()
         svc._reload_lock = threading.Lock()
@@ -138,7 +137,6 @@ def engine_factory():
                         else:
                             with svc._retry_time_lock:
                                 svc._next_retry_time = time.time() + delay
-                            svc._wakeup_event.set()
 
             handle.future.add_done_callback(_on_done)
             return True

@@ -13,12 +13,10 @@ import threading
 import time
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from app.network.decision import NetworkCheckResult
-from app.services.engine import EngineCmdType, EngineCommand, ScheduleEngine
-from app.services.monitor_service import CheckOnceResult
 from app.schemas import LoginCredentials
+from app.services.engine import EngineCmdType, EngineCommand
+from app.services.monitor_service import CheckOnceResult
 from app.workers.playwright_worker import WorkerResponse
 
 
@@ -82,18 +80,11 @@ class TestFullEngineLoginChain:
 
         mock_worker.submit.return_value = WorkerResponse(success=True, data="登录成功")
 
-        cmd = EngineCommand(
-            type=EngineCmdType.LOGIN, response_event=threading.Event()
-        )
-        engine._handle_login(cmd)
-
-        # 异步模式：等待回调完成
-        assert cmd.response_event.wait(timeout=10), "登录回调未在超时内完成"
-
-        # _handle_login 通过回调返回登录结果
-        assert cmd.response_data == (True, "登录成功")
-
-        # worker.submit 被调且传入了正确的第一个参数
+        # 直接测试 orchestrator 提交 + worker 调用链路
+        config = engine.get_runtime_config()
+        handle = engine._orchestrator.submit(source="manual", config=config)
+        result = handle.future.result(timeout=10)
+        assert result == (True, "登录成功")
         mock_worker.submit.assert_called_once()
 
         # 手动登录不触发自动失败计数
@@ -107,16 +98,11 @@ class TestFullEngineLoginChain:
             success=False, error="认证失败"
         )
 
-        cmd = EngineCommand(
-            type=EngineCmdType.LOGIN, response_event=threading.Event()
-        )
-        engine._handle_login(cmd)
-
-        # 异步模式：等待回调完成
-        assert cmd.response_event.wait(timeout=10), "登录回调未在超时内完成"
-
-        # _handle_login 通过回调返回登录结果
-        assert cmd.response_data == (False, "认证失败")
+        # 直接测试 orchestrator 提交 + worker 调用链路
+        config = engine.get_runtime_config()
+        handle = engine._orchestrator.submit(source="manual", config=config)
+        result = handle.future.result(timeout=10)
+        assert result == (False, "认证失败")
 
         mock_worker.submit.assert_called_once()
         # 手动登录不触发自动失败计数
@@ -126,7 +112,7 @@ class TestFullEngineLoginChain:
 class TestNetworkDetectionLogin:
     """网络检测触发自动登录 + 重试。"""
 
-    def test_network_triggers_login(self, integration_stack):
+    async def test_network_triggers_login(self, integration_stack):
         engine, profile_service, task_executor, _, mock_worker = integration_stack
         _ensure_login_config(engine)
 
@@ -153,7 +139,7 @@ class TestNetworkDetectionLogin:
             engine=engine
         )
         try:
-            engine._do_network_check()
+            await engine._do_network_check_async()
 
             assert done_event.wait(timeout=5), "Login Future did not complete in time"
             ok, msg = result_container[0]
@@ -179,14 +165,11 @@ class TestNetworkDetectionLogin:
             success=False, error="认证失败"
         )
 
-        # 第一次登录（手动触发，异步等待回调）
-        cmd = EngineCommand(
-            type=EngineCmdType.LOGIN, response_event=threading.Event()
-        )
-        engine._handle_login(cmd)
-        # 异步模式：等待回调完成
-        assert cmd.response_event.wait(timeout=10), "登录回调未在超时内完成"
-        assert cmd.response_data == (False, "认证失败")
+        # 第一次登录（手动触发，通过 orchestrator 直接提交）
+        config = engine.get_runtime_config()
+        handle1 = engine._orchestrator.submit(source="manual", config=config)
+        result1 = handle1.future.result(timeout=10)
+        assert result1 == (False, "认证失败")
 
         # 模拟重试状态：一次失败后
         engine._retry_policy._attempt = 1
@@ -294,7 +277,6 @@ class TestReloadException:
                 reload_cmd = EngineCommand(
                     type=EngineCmdType.RELOAD,
                     data={},
-                    response_event=threading.Event(),
                 )
                 engine._handle_reload(reload_cmd)
 
@@ -337,7 +319,9 @@ class TestLoginOnceRetry:
             patch("app.workers.playwright_worker.cleanup_orphan_browsers"),
         ):
             from app.schemas import LoginResult
-            from app.services.login_runner import execute_login_with_retries as _execute_login_with_retries
+            from app.services.login_runner import (
+                execute_login_with_retries as _execute_login_with_retries,
+            )
 
             result = _execute_login_with_retries(runtime_config, MagicMock())
 
@@ -359,7 +343,9 @@ class TestLoginOnceRetry:
             patch("app.workers.playwright_worker.cleanup_orphan_browsers"),
         ):
             from app.schemas import LoginResult
-            from app.services.login_runner import execute_login_with_retries as _execute_login_with_retries
+            from app.services.login_runner import (
+                execute_login_with_retries as _execute_login_with_retries,
+            )
 
             result = _execute_login_with_retries(runtime_config, MagicMock())
 
@@ -399,7 +385,6 @@ class TestProfileSwitchDuringLogin:
             switch_cmd = EngineCommand(
                 type=EngineCmdType.APPLY_PROFILE,
                 data={"profile_id": "default"},
-                response_event=threading.Event(),
             )
             engine._handle_apply_profile(switch_cmd)
 
