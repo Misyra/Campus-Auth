@@ -198,7 +198,7 @@ def decrypt_password(ciphertext: str) -> str:
         f = Fernet(key)
         result = f.decrypt(encrypted_data.encode("ascii")).decode("utf-8")
         # 解密成功，清除之前的解密失败标记（按活跃方案粒度，避免误清其他方案）
-        clear_decryption_error()
+        _clear_decryption_error()
         return result
     except ImportError:
         _decryption_failed.set()
@@ -219,7 +219,7 @@ def has_decryption_error() -> bool:
     return _decryption_failed.is_set()
 
 
-def clear_decryption_error() -> None:
+def _clear_decryption_error() -> None:
     """清除解密失败标记（重新输入密码后调用）"""
     _decryption_failed.clear()
 

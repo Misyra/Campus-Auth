@@ -205,35 +205,26 @@ class StepHandler(ABC):
             logger.warning("[frame] 无法定位 frame '{}': {}", frame_selector, e)
             return page
 
-    async def _find_with_deadline(self, ctx, selectors: list[str], timeout_ms: int):
-        """统一的候选选择器查找，deadline 模式分摊超时。
-
-        所有候选共享同一个截止时间，避免 N 个候选 × timeout 的累积问题。
-        """
-        deadline = time.perf_counter() + timeout_ms / 1000
-        for selector in selectors:
-            remaining = deadline - time.perf_counter()
-            if remaining <= 0:
-                return None
-            try:
-                locator = ctx.locator(selector)
-                await locator.first.wait_for(
-                    state="visible", timeout=int(remaining * 1000)
-                )
-                logger.debug("[find] 选择器命中: {}", selector)
-                return locator.first
-            except Exception:
-                logger.debug("[find] 选择器未匹配: {}", selector)
-                continue
-        return None
-
     async def _find_element(self, ctx, selector: str, timeout: int):
         """查找元素（支持多个候选选择器，deadline 模式分摊超时）。"""
         candidates = self._parse_selectors(selector)
-        result = await self._find_with_deadline(ctx, candidates, timeout)
-        if result is None:
-            logger.warning("[find] 所有选择器均未匹配: {}", selector)
-        return result
+        deadline = time.perf_counter() + timeout / 1000
+        for sel in candidates:
+            remaining = deadline - time.perf_counter()
+            if remaining <= 0:
+                break
+            try:
+                locator = ctx.locator(sel)
+                await locator.first.wait_for(
+                    state="visible", timeout=int(remaining * 1000)
+                )
+                logger.debug("[find] 选择器命中: {}", sel)
+                return locator.first
+            except Exception:
+                logger.debug("[find] 选择器未匹配: {}", sel)
+                continue
+        logger.warning("[find] 所有选择器均未匹配: {}", selector)
+        return None
 
 
 class InputHandler(StepHandler):

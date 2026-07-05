@@ -244,9 +244,6 @@ async def is_network_available_socket(
     )
 
 
-def _is_captive_portal_url(url: str) -> bool:
-    """判断是否为 captive portal 检测 URL（返回 204 表示正常，200 表示被劫持）。"""
-    return "generate_204" in url or "connectivitycheck" in url
 
 
 async def is_network_available_url(
@@ -354,7 +351,7 @@ async def is_network_available_http(
             try:
                 resp = await client.get(url, timeout=timeout)
                 elapsed = (time.perf_counter() - start) * 1000
-                if _is_captive_portal_url(url):
+                if "generate_204" in url or "connectivitycheck" in url:
                     ok = resp.status_code == 204
                 else:
                     ok = 200 <= resp.status_code < 300

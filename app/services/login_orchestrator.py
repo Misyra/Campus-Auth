@@ -170,6 +170,9 @@ class LoginOrchestrator:
         self._slot_lock = threading.Condition(threading.Lock())
         self._slot: LoginHandle | None = None
 
+        # 网卡绑定代理 URL（由引擎在监控启动时通过 set_bind_proxy 设置）
+        self._bind_proxy_url: str | None = None
+
     def bind_runtime_config(self, getter: Callable[[], RuntimeConfig]) -> None:
         """延迟绑定运行时配置获取器（用于解决 Engine 循环依赖）。"""
         self._get_runtime_config = getter
@@ -297,7 +300,7 @@ class LoginOrchestrator:
         from app.workers.playwright_worker import CMD_LOGIN
 
         # Build compatible dict for Worker process (Worker is separate process, communicates via dict)
-        bind_proxy = getattr(self, "_bind_proxy_url", None)
+        bind_proxy = self._bind_proxy_url
         worker_config = runtime_config_to_worker_dict(config, bind_proxy=bind_proxy)
         worker_timeout = (
             timeout if timeout is not None else resolve_worker_timeout(config)

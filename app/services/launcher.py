@@ -12,14 +12,11 @@ import threading
 import time
 import webbrowser
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 import psutil
 
 from app.schemas import (
     ApplicationContext,
-    LaunchContext,
-    LaunchSource,
     LoginResult,
     RuntimeMode,
     StartupAction,
@@ -27,18 +24,14 @@ from app.schemas import (
     get_runtime_features,
 )
 from app.utils.platform import CREATE_NO_WINDOW_FLAG, is_windows
+from app.utils.ports import resolve_port
 from app.utils.process import (
     cleanup_pid,
     is_local_port_in_use,
     is_service_running,
-    read_pid_mode,
     write_pid,
 )
 from app.utils.shutdown import force_exit
-
-if TYPE_CHECKING:
-    pass
-
 
 # ==================== 内部辅助函数 ====================
 
@@ -198,7 +191,6 @@ def handle_existing_instance(ctx: ApplicationContext, force: bool = False):
         _terminate_process(pid)
         cleanup_pid()
         # 等待端口释放，避免新进程绑定同一端口时失败
-        from app.utils.ports import resolve_port
         _port = resolve_port()
         for _ in range(20):  # 最多等待约 5 秒
             if not is_local_port_in_use(_port):
@@ -206,8 +198,6 @@ def handle_existing_instance(ctx: ApplicationContext, force: bool = False):
             time.sleep(0.25)
         print("已终止，继续启动...")
         return
-
-    from app.utils.ports import resolve_port
 
     port = resolve_port()
     if ctx.config.runtime_mode == RuntimeMode.FULL:
@@ -259,8 +249,6 @@ def _open_console(
     _web_server_shutdown_event,
 ):
     """托盘回调：启动 Web 服务并打开浏览器。"""
-    from app.utils.ports import resolve_port
-
     port = resolve_port()
     _start_web_server(
         container,
@@ -284,7 +272,6 @@ def _open_console(
 def launch_lightweight(ctx: ApplicationContext, logger):
     """轻量模式：始终启动监控 + 定时任务，可选托盘，支持按需唤醒 WebUI。"""
     from app.container import ServiceContainer
-    from app.utils.ports import resolve_port
 
     container = ServiceContainer(
         Path(__file__).parent.parent.parent.resolve(), mode="lightweight"
@@ -364,7 +351,6 @@ def launch_full(
     """完整模式：Web 服务 + 监控 + 定时任务"""
     from app.application import run
     from app.container import ServiceContainer
-    from app.utils.ports import resolve_port
 
     port = resolve_port()
     container = ServiceContainer(Path(__file__).parent.parent.parent.resolve())

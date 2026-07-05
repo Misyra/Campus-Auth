@@ -118,20 +118,13 @@ def _parse_windows_all_routes(output: str) -> list[tuple[str, str]]:
 def _parse_linux_route_entry(line: str) -> tuple[str, str] | None:
     """解析 /proc/net/route 单行，提取默认路由的 (接口名, 网关IP)。
 
-    与 _parse_linux_gateway 的区别：同时返回接口名，用于按网卡索引网关。
+    复用 _parse_linux_gateway 提取网关 IP，额外返回接口名。
     """
+    ip = _parse_linux_gateway(line)
+    if ip is None:
+        return None
     parts = line.split()
-    if len(parts) < 3:
-        return None
-    iface, dest, gateway = parts[0], parts[1], parts[2]
-    if len(dest) < 8 or len(gateway) < 8:
-        return None
-    if dest != "00000000":
-        return None
-    ip = _hex_to_ipv4(gateway)
-    if ip is None or not _is_valid_ipv4(ip):
-        return None
-    return (iface, ip)
+    return (parts[0], ip)
 
 
 def _parse_darwin_netstat_routes(output: str) -> dict[str, str]:

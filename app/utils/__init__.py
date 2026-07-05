@@ -6,7 +6,7 @@ from .logging import (
     LogConfigCenter,
     get_logger,
 )
-from .time_utils import is_in_pause_period, is_pause_enabled
+from .time_utils import is_pause_enabled
 
 
 def str_to_bool(value: str) -> bool:
@@ -20,7 +20,6 @@ __all__ = [
     "LogConfigCenter",
     "LoginCancelledError",
     "get_logger",
-    "is_in_pause_period",
     "is_pause_enabled",
     "str_to_bool",
     "validate_env_config",

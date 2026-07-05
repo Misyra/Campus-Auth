@@ -170,11 +170,6 @@ class InterfaceManager:
         stats = psutil.net_if_stats().get(name)
         return stats is not None and stats.isup
 
-    @staticmethod
-    def _is_routable_ip(ip: str) -> bool:
-        """判断 IP 是否可路由（非回环、非 APIPA）。"""
-        return is_routable_ip(ip)  # ponytail: 保持接口一致性，内部调用 utils
-
     def is_interface_bindable(self, name: str) -> tuple[bool, str]:
         """判断网卡是否可用于绑定。
 
@@ -197,7 +192,7 @@ class InterfaceManager:
         if not ip:
             return False, f"网卡 {name} 无 IPv4 地址"
 
-        if not self._is_routable_ip(ip):
+        if not is_routable_ip(ip):
             return False, f"网卡 {name} 的 IP {ip} 不可路由"
 
         return True, ""

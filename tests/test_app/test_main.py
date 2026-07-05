@@ -107,30 +107,30 @@ class TestGetProcessName:
     @patch("app.utils.process.psutil.Process")
     def test_valid_process(self, mock_process_cls):
         """进程存在时返回进程名。"""
-        from app.utils.process import get_process_name
+        from app.utils.process import _get_process_name
 
         mock_process_cls.return_value.name.return_value = "python.exe"
-        assert get_process_name(1234) == "python.exe"
+        assert _get_process_name(1234) == "python.exe"
 
     @patch("app.utils.process.psutil.Process")
     def test_no_such_process(self, mock_process_cls):
         """进程不存在时返回 None。"""
         import psutil
 
-        from app.utils.process import get_process_name
+        from app.utils.process import _get_process_name
 
         mock_process_cls.side_effect = psutil.NoSuchProcess(9999)
-        assert get_process_name(9999) is None
+        assert _get_process_name(9999) is None
 
     @patch("app.utils.process.psutil.Process")
     def test_access_denied(self, mock_process_cls):
         """权限不足时返回 None。"""
         import psutil
 
-        from app.utils.process import get_process_name
+        from app.utils.process import _get_process_name
 
         mock_process_cls.side_effect = psutil.AccessDenied(1234)
-        assert get_process_name(1234) is None
+        assert _get_process_name(1234) is None
 
 
 # ══════════════════════════════════════════════════════════════════════
