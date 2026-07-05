@@ -14,10 +14,10 @@ from app.network.decision import (
     check_network_status,
     check_pause,
 )
+from app.network.parsers import parse_ping_targets
 from app.network.probes import set_block_proxy
 from app.schemas import RuntimeConfig
 from app.utils import get_logger
-from app.network.parsers import parse_ping_targets
 
 if TYPE_CHECKING:
     from app.services.profile_service import ProfileService
@@ -52,11 +52,11 @@ class NetworkMonitorCore:
 
     def __init__(
         self,
-        config: RuntimeConfig,
+        get_config: Callable[[], RuntimeConfig],
         logger=None,
         login_history: Any = None,
     ) -> None:
-        self.config = config
+        self._get_config = get_config
         self._log_callback_logger = logger
         self._login_history = login_history
 
@@ -71,7 +71,6 @@ class NetworkMonitorCore:
         # 上次网络连通性检测结果（用于 UI 状态显示）
         self.network_state: NetworkState = NetworkState.UNKNOWN
 
-        self._test_sites_cache: list[tuple[str, int]] | None = None
         self.logger = get_logger("monitor_core", source="backend")
 
         # 状态详情
@@ -84,6 +83,9 @@ class NetworkMonitorCore:
 
         # 一次性告警去重：所有网络检测均未启用时仅首次告警 WARNING
         self._detection_disabled_warned: bool = False
+
+        # bind_interface_name 指纹：变化时需重建 SOCKS5 Forwarder
+        self._last_bind_interface: str = ""
 
     def log_message(self, message: str, level: str = "INFO", exc_info: bool = False) -> None:
         if exc_info:
@@ -146,7 +148,7 @@ class NetworkMonitorCore:
 
     def _get_monitor_interval(self) -> int:
         """获取当前配置的检测间隔（秒）。"""
-        return self.config.monitor.check_interval_seconds
+        return self._get_config().monitor.check_interval_seconds
 
     def init_monitoring(self) -> None:
         """初始化监控状态（不启动循环，由引擎驱动检测）。"""
@@ -154,7 +156,6 @@ class NetworkMonitorCore:
             self.log_message("监控已在运行中", "WARNING")
             return
 
-        self._test_sites_cache = None
         self._update_state(
             monitoring=True,
             start_time=time.time(),
@@ -165,14 +166,15 @@ class NetworkMonitorCore:
         )
 
         interval = self._get_monitor_interval()
-        auth_url = self.config.credentials.auth_url or "未设置"
-        username = self.config.credentials.username or "未设置"
-        isp = self.config.credentials.isp or "无"
-        block_proxy = self.config.app_settings.block_proxy
+        config = self._get_config()
+        auth_url = config.credentials.auth_url or "未设置"
+        username = config.credentials.username or "未设置"
+        isp = config.credentials.isp or "无"
+        block_proxy = config.app_settings.block_proxy
         set_block_proxy(block_proxy if block_proxy is not None else True)
         test_sites_info = self._get_test_sites()
 
-        monitor_cfg = self.config.monitor
+        monitor_cfg = config.monitor
         modes = []
         if monitor_cfg.enable_tcp_check:
             modes.append(f"TCP({len(test_sites_info)})")
@@ -208,7 +210,7 @@ class NetworkMonitorCore:
             if self.network_state == NetworkState.UNKNOWN:
                 self.status_detail = "正在检测网络"
 
-        monitor_cfg = self.config.monitor
+        monitor_cfg = self._get_config().monitor
         targets_parts = []
         if monitor_cfg.enable_tcp_check:
             targets_parts.append(f"TCP: {', '.join(f'{h}:{p}' for h, p in test_sites)}")
@@ -220,10 +222,11 @@ class NetworkMonitorCore:
         self.log_message(f"网络检测 #{check_num}: {targets_str}", "DEBUG")
 
         # 1. 暂停时段检查
-        is_paused, _ = check_pause(self.config.pause)
+        config = self._get_config()
+        is_paused, _ = check_pause(config.pause)
         if is_paused:
-            start_hour = self.config.pause.start_hour
-            end_hour = self.config.pause.end_hour
+            start_hour = config.pause.start_hour
+            end_hour = config.pause.end_hour
             self._update_state(
                 status_detail=f"暂停时段（{start_hour}:00-{end_hour}:00），跳过检测"
             )
@@ -249,7 +252,7 @@ class NetworkMonitorCore:
         self._check_bind_ip_change()
 
         # 3. 网络状态检测
-        net_ok, net_reason, net_method = check_network_status(self.config.monitor)
+        net_ok, net_reason, net_method = check_network_status(self._get_config().monitor)
         if net_ok:
             self._update_state(
                 login_attempt_count=0,
@@ -304,12 +307,14 @@ class NetworkMonitorCore:
 
     def _start_bind_proxy(self) -> None:
         """根据 bind_interface_name 启动 SOCKS5 Forwarder。"""
+        config = self._get_config()
+        bind_name = config.monitor.bind_interface_name
+        self._last_bind_interface = bind_name
         self._bind_proxy_url: str | None = None
         self._interface_mgr = None
         self._socks5_server = None
         self._last_bind_ip: str | None = None
 
-        bind_name = self.config.monitor.bind_interface_name
         if not bind_name:
             return
 
@@ -350,9 +355,14 @@ class NetworkMonitorCore:
             self._socks5_server = None
             self._bind_proxy_url = None
 
+    def _needs_bind_proxy_rebuild(self) -> bool:
+        """bind_interface_name 变化时需重建 SOCKS5 Forwarder。"""
+        current = self._get_config().monitor.bind_interface_name
+        return current != self._last_bind_interface
+
     def _check_bind_ip_change(self) -> None:
         """检测绑定网卡的 IP 变化，自动更新代理绑定。"""
-        bind_name = self.config.monitor.bind_interface_name
+        bind_name = self._get_config().monitor.bind_interface_name
         if not bind_name or not hasattr(self, "_interface_mgr") or not self._interface_mgr:
             return
 
@@ -372,15 +382,12 @@ class NetworkMonitorCore:
             close_bound_client(old_ip)
 
     def _get_test_sites(self) -> list[tuple[str, int]]:
-        """获取测试站点列表（带缓存，返回副本避免调用方污染缓存）"""
-        if self._test_sites_cache is not None:
-            return list(self._test_sites_cache)
-        targets = self.config.monitor.ping_targets
+        """获取测试站点列表（每次重算，targets 量小无需缓存）。"""
+        targets = self._get_config().monitor.ping_targets
         result = parse_ping_targets(targets)
         if not result:
             result = parse_ping_targets(self.DEFAULT_PING_TARGETS)
-        self._test_sites_cache = result
-        return list(self._test_sites_cache)
+        return result
 
     def _check_profile_switch(self) -> None:
         """检测网关 IP 并自动切换方案。

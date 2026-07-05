@@ -20,7 +20,7 @@ def _make_monitor_core(engine) -> NetworkMonitorCore:
     """直接创建 NetworkMonitorCore，绕过引擎异步队列。"""
     config = engine.get_runtime_config()
     core = NetworkMonitorCore(
-        config=config,
+        get_config=lambda: config,
         logger=engine._logger,
         login_history=engine._login_history,
     )
