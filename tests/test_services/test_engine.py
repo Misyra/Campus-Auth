@@ -1458,6 +1458,73 @@ class TestNetwork:
 
 
 # =====================================================================
+# _swap_runtime_config
+# =====================================================================
+
+
+class TestSwapRuntimeConfig:
+    def test_swap_replaces_reference(self, engine_factory):
+        """_swap_runtime_config 应原子替换 _runtime_config 引用。"""
+        svc = engine_factory(raw=True)
+        original = svc._runtime_config
+        new_config = original.model_copy(
+            update={"logging": original.logging.model_copy(update={"level": "DEBUG"})}
+        )
+        svc._swap_runtime_config(new_config)
+        assert svc._runtime_config is new_config
+        assert svc._runtime_config.logging.level == "DEBUG"
+
+    def test_swap_under_lock(self, engine_factory):
+        """_swap_runtime_config 必须持 _reload_lock 执行。"""
+        import threading
+        svc = engine_factory(raw=True)
+        lock = svc._reload_lock
+        held = threading.Event()
+        swap_done = threading.Event()
+
+        def hold_lock():
+            with lock:
+                held.set()
+                swap_done.wait(timeout=2)
+
+        def try_swap():
+            held.wait(timeout=2)
+            new = svc._runtime_config.model_copy(update={})
+            svc._swap_runtime_config(new)
+
+        t1 = threading.Thread(target=hold_lock)
+        t2 = threading.Thread(target=try_swap)
+        t1.start()
+        t2.start()
+        t2.join(timeout=0.3)
+        assert t2.is_alive(), "swap 应在锁被持有时阻塞"
+        swap_done.set()
+        t1.join(timeout=2)
+        t2.join(timeout=2)
+        assert not t2.is_alive()
+
+
+# =====================================================================
+# update_log_level
+# =====================================================================
+
+
+class TestUpdateLogLevel:
+    def test_update_log_level_swaps_config(self, engine_factory):
+        """update_log_level 应通过 _swap 更新 logging.level。"""
+        svc = engine_factory(raw=True)
+        assert svc._runtime_config.logging.level == "INFO"
+        svc.update_log_level("DEBUG")
+        assert svc._runtime_config.logging.level == "DEBUG"
+
+    def test_update_log_level_invalid_raises(self, engine_factory):
+        """无效级别应抛 ValueError。"""
+        svc = engine_factory(raw=True)
+        with pytest.raises(ValueError):
+            svc.update_log_level("BOGUS")
+
+
+# =====================================================================
 # toggle_pure_mode
 # =====================================================================
 

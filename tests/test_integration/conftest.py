@@ -93,18 +93,19 @@ def integration_stack(tmp_path, mock_worker):
         orchestrator=None,
     )
 
-    orchestrator = LoginOrchestrator(
-        worker_getter=lambda: mock_worker,
-        login_history=login_history,
-        profile_service=profile_service,
-    )
-
     task_executor = TaskExecutor(
         registry=task_registry,
         history_store=task_history_store,
         worker_getter=lambda: mock_worker,
-        login_orchestrator=orchestrator,
     )
+
+    orchestrator = LoginOrchestrator(
+        worker_getter=lambda: mock_worker,
+        executor=task_executor.login_executor,
+        login_history=login_history,
+        profile_service=profile_service,
+    )
+    task_executor.bind_login_orchestrator(orchestrator)
     # 构造器注入后绑定
     engine._orchestrator = orchestrator
     engine._task_executor = task_executor

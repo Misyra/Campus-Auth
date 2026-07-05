@@ -853,17 +853,48 @@ class ScheduleEngine:
     def get_config(self) -> RuntimeConfig:
         return self._runtime_config
 
+    def _swap_runtime_config(self, new: RuntimeConfig, *, pure_mode: bool | None = None) -> None:
+        """原子替换运行时配置（线程安全）。
+
+        所有 _runtime_config 写入必须经此方法，在 _reload_lock 保护下
+        原子替换 frozen 引用。禁止直接赋值 self._runtime_config = ...
+        """
+        with self._reload_lock:
+            self._runtime_config = new
+            if pure_mode is not None:
+                self._pure_mode = pure_mode
+
+    def update_log_level(self, level: str) -> None:
+        """更新运行时日志级别（线程安全，供 API 层调用）。
+
+        替代 api/config.py 直接裸改 _runtime_config 的旧行为。
+        不入队命令队列——frozen 引用替换已是原子操作，无需串行化。
+        """
+        from app.constants import VALID_LOG_LEVELS
+
+        if level not in VALID_LOG_LEVELS:
+            raise ValueError(f"无效的日志级别: {level}")
+        new_config = self._runtime_config.model_copy(
+            update={"logging": self._runtime_config.logging.model_copy(update={"level": level})}
+        )
+        self._swap_runtime_config(new_config)
+
     def _reload_config_internal(self) -> bool:
-        """从 settings.json 重新加载 UI 和运行时配置。返回 True 表示成功。"""
+        """从 settings.json 重新加载 UI 和运行时配置。返回 True 表示成功。
+
+        磁盘 IO 在锁外执行（B5：缩小锁粒度），仅 frozen 引用替换持锁。
+        """
         try:
-            with self._reload_lock:
-                data = self._profile_service.load()
-                self._runtime_config = self._profile_service.build_runtime_config(data)
-                self._pure_mode = data.global_config.browser.pure_mode
-            return True
+            # 无锁加载+构建（磁盘 IO 不持锁，避免阻塞 pure_mode getter）
+            data = self._profile_service.load()
+            new_config = self._profile_service.build_runtime_config(data)
+            pure_mode = data.global_config.browser.pure_mode
         except Exception:
             logger.warning("配置重载失败", exc_info=True)
             return False
+        # 持锁原子替换
+        self._swap_runtime_config(new_config, pure_mode=pure_mode)
+        return True
 
     def reload_config(self) -> tuple[bool, str]:
         """重新加载配置并重启监控（如果正在运行）。
@@ -1048,25 +1079,29 @@ class ScheduleEngine:
         return self._status_manager.list_logs(limit=limit)
 
     def toggle_pure_mode(self) -> bool:
-        """切换纯净模式，返回新值。"""
+        """切换纯净模式，返回新值。
+
+        行为变更（Review 标注）：profile_service.update 原在 _reload_lock 内，
+        现移出锁外。toggle_pure_mode 极少并发调用（仅 API 手动触发），
+        profile_service 内部有锁，风险可接受。
+        """
         with self._reload_lock:
             new_value = not self._pure_mode
-            self._pure_mode = new_value
-            self._profile_service.update(
-                lambda d: setattr(
-                    d, "global_config",
-                    d.global_config.model_copy(update={
-                        "browser": d.global_config.browser.model_copy(update={"pure_mode": new_value})
-                    }),
-                )
+            base_config = self._runtime_config
+        # 磁盘持久化（profile_service 内部有自己的锁，无需 _reload_lock 保护）
+        self._profile_service.update(
+            lambda d: setattr(
+                d, "global_config",
+                d.global_config.model_copy(update={
+                    "browser": d.global_config.browser.model_copy(update={"pure_mode": new_value})
+                }),
             )
-            self._runtime_config = self._runtime_config.model_copy(
-                update={
-                    "browser": self._runtime_config.browser.model_copy(
-                        update={"pure_mode": new_value}
-                    )
-                }
-            )
+        )
+        # 原子替换运行时配置（通过 _swap_runtime_config 同步 _pure_mode）
+        new_config = base_config.model_copy(
+            update={"browser": base_config.browser.model_copy(update={"pure_mode": new_value})}
+        )
+        self._swap_runtime_config(new_config, pure_mode=new_value)
         return new_value
 
     def get_runtime_config(self) -> RuntimeConfig:

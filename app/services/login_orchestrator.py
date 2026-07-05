@@ -13,9 +13,9 @@ from __future__ import annotations
 import threading
 import time
 from collections.abc import Callable
-from concurrent.futures import CancelledError, Future, ThreadPoolExecutor
+from concurrent.futures import CancelledError, Future
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Literal
 
 from app.schemas import RuntimeConfig
 from app.utils.cancel_token import CompositeCancelEvent
@@ -152,39 +152,19 @@ class LoginOrchestrator:
         login_history: LoginHistoryService | None = None,
         profile_service: ProfileService | None = None,
         get_runtime_config: Callable[[], RuntimeConfig] | None = None,
-        pool: ThreadPoolExecutor | None = None,
         executor=None,
     ) -> None:
+        if executor is None:
+            raise TypeError("executor 必传，不再支持自建 fallback pool")
         self._worker_getter = worker_getter
         self._login_history = login_history
         self._profile_service = profile_service
         self._get_runtime_config = get_runtime_config
+        self._executor = executor
 
         # 去重槽（替代 task_executor._login_future + _login_cancel_event）
         self._slot_lock = threading.Condition(threading.Lock())
         self._slot: LoginHandle | None = None
-
-        # 优先使用外部 executor（BoundedExecutor），否则 fallback 到自建池
-        self._executor = executor
-        self._pool: ThreadPoolExecutor | None = pool
-        if self._executor is None and self._pool is None:
-            self._pool = ThreadPoolExecutor(
-                max_workers=1,
-                thread_name_prefix="login-exec",
-            )
-
-    def set_executor(self, executor: Any) -> None:
-        """绑定外部 BoundedExecutor，关闭自建 fallback pool。
-
-        在 container 初始化时调用，将 LoginOrchestrator 的执行器
-        替换为 TaskExecutor 内部的 login_executor（BoundedExecutor）。
-        """
-        if executor is None:
-            raise ValueError("executor 不能为 None")
-        if self._pool is not None:
-            self._pool.shutdown(wait=False)
-            self._pool = None
-        self._executor = executor
 
     def bind_runtime_config(self, getter: Callable[[], RuntimeConfig]) -> None:
         """延迟绑定运行时配置获取器（用于解决 Engine 循环依赖）。"""
@@ -296,9 +276,7 @@ class LoginOrchestrator:
                 self._slot.cancel()
 
     def shutdown(self, wait: bool = True) -> None:
-        """关闭编排器。仅关闭自建池（外部 executor 由调用方管理）。"""
-        if self._pool is not None:
-            self._pool.shutdown(wait=wait)
+        """关闭编排器。executor 由调用方管理，此处不关闭。"""
         logger.info("登录调度器已关闭")
 
     # ── 内部 ──
@@ -357,12 +335,9 @@ class LoginOrchestrator:
                 logger.exception("登录执行异常: {}", exc)
                 return False, f"登录执行异常: {exc}"
 
-        # 提交到登录线程池
+        # 提交到登录执行器（由调用方注入，不再有 fallback pool）
         try:
-            if self._executor is not None:
-                future = self._executor.submit(_run)
-            else:
-                future = self._pool.submit(_run)
+            future = self._executor.submit(_run)
         except RuntimeError as exc:
             # BoundedExecutor 队列满时抛出 RuntimeError，转为 rejected handle
             logger.warning("登录提交被拒绝: {} (source={})", exc, source)

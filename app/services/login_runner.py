@@ -38,17 +38,21 @@ def execute_login_with_retries(runtime_config: RuntimeConfig, logger) -> LoginRe
         LoginResult.SUCCESS — 登录成功
         LoginResult.TEMPORARY_FAILURE — 重试耗尽仍失败
     """
+    from concurrent.futures import ThreadPoolExecutor
+
     from app.constants import AUTH_DATA_DIR
     from app.services.login_history_service import LoginHistoryService
     from app.services.login_orchestrator import LoginOrchestrator
     from app.services.profile_service import create_profile_service
     from app.workers.playwright_worker import cleanup_orphan_browsers, get_worker
 
-    # 构造一次性 Orchestrator（login_once 在容器创建前运行）
     profile_service = create_profile_service()
     history = LoginHistoryService(AUTH_DATA_DIR)
+    # login_once 是单次登录后退出，用一次性 executor 即可
+    one_shot_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="login-once")
     orchestrator = LoginOrchestrator(
         worker_getter=get_worker,
+        executor=one_shot_executor,
         login_history=history,
         profile_service=profile_service,
     )
@@ -63,6 +67,7 @@ def execute_login_with_retries(runtime_config: RuntimeConfig, logger) -> LoginRe
         return LoginResult.TEMPORARY_FAILURE
     finally:
         orchestrator.shutdown(wait=False)
+        one_shot_executor.shutdown(wait=False)
 
 
 def run_login_then_exit(ctx: ApplicationContext, logger) -> LoginResult:
