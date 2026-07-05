@@ -18,6 +18,7 @@ NOT-TO-DO: 不要拆分此文件。Worker 是浏览器自动化核心，生命�
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import threading
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -190,11 +191,13 @@ class PlaywrightWorker:
         except asyncio.QueueFull:
             logger.warning("Worker 命令队列已满，强制停止事件循环")
             if loop is not None and loop.is_running():
-                loop.call_soon_threadsafe(loop.stop)
+                with contextlib.suppress(RuntimeError):
+                    loop.call_soon_threadsafe(loop.stop)
 
         # 唤醒事件循环（可能阻塞在 selector.select()）
         if loop is not None and loop.is_running():
-            loop.call_soon_threadsafe(lambda: None)
+            with contextlib.suppress(RuntimeError):
+                loop.call_soon_threadsafe(lambda: None)
 
         # 等待消费者线程正常退出
         if self._consumer_thread:
@@ -279,7 +282,8 @@ class PlaywrightWorker:
 
         # 唤醒事件循环（可能阻塞在 selector.select()）
         if loop is not None and loop.is_running():
-            loop.call_soon_threadsafe(lambda: None)
+            with contextlib.suppress(RuntimeError):
+                loop.call_soon_threadsafe(lambda: None)
 
         if not wait:
             return WorkerResponse(success=True)
