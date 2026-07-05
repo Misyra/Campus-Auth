@@ -46,12 +46,16 @@ def _save_runtime_mode(request: Request, runtime_mode: RuntimeMode) -> None:
     """保存自启动运行模式到配置。"""
     ps = request.app.state.services.profile_service
     ps.update(
-        lambda d: setattr(
-            d.global_config,
-            "app_settings",
-            d.global_config.app_settings.model_copy(
-                update={"runtime_mode": runtime_mode}
-            ),
+        lambda d: d.model_copy(
+            update={
+                "global_config": d.global_config.model_copy(
+                    update={
+                        "app_settings": d.global_config.app_settings.model_copy(
+                            update={"runtime_mode": runtime_mode}
+                        )
+                    }
+                )
+            }
         )
     )
 

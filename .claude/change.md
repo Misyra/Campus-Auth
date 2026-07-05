@@ -2,6 +2,16 @@
 
 ## 2026-07-05
 
+### fix(engine): 修复 frozen setattr 崩溃 + pure_mode getter 动态覆盖
+
+- `app/services/engine.py`：
+  - `toggle_pure_mode`：`setattr(d, "global_config", ...)` → `d.model_copy(update={...})`，修复 frozen 模型 ValidationError
+  - `_handle_start` pure_mode getter：闭包捕获副本改为动态覆盖 `base_getter` + `model_copy`，reload 后 config 变化自动生效
+- `app/api/autostart.py`：
+  - `_save_runtime_mode`：`setattr(d.global_config, "app_settings", ...)` → `d.model_copy(update={...})`，修复 frozen 模型 ValidationError
+- 测试：
+  - `tests/test_services/test_engine.py`：`TestTogglePureMode` 新增 `test_toggle_pure_mode_persists_to_disk`，用真实 frozen ProfilesData 验证 lambda 不崩溃
+
 ### refactor(monitor): NetworkMonitorCore 改 getter 注入，reload 零停机
 
 - `app/services/monitor_service.py`：

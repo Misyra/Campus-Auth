@@ -630,10 +630,17 @@ class ScheduleEngine:
             config = config.model_copy(update={"browser": config.browser.model_copy(update={"pure_mode": True})})
         # pure_mode 影响 browser 配置，需临时覆盖 getter
         if pure_mode:
-            _pure_config = config
+            # 动态覆盖：getter 每次取最新 runtime_config 并叠加 pure_mode=True
+            # 这样 reload 后 config 变化能自动生效，pure_mode 覆盖仍保持
+            base_getter = self.get_runtime_config
 
             def get_config() -> RuntimeConfig:
-                return _pure_config
+                base = base_getter()
+                if base.browser.pure_mode:
+                    return base
+                return base.model_copy(
+                    update={"browser": base.browser.model_copy(update={"pure_mode": True})}
+                )
         else:
             get_config = self.get_runtime_config
 
@@ -1077,11 +1084,16 @@ class ScheduleEngine:
             base_config = self._runtime_config
         # 磁盘持久化（profile_service 内部有自己的锁，无需 _reload_lock 保护）
         self._profile_service.update(
-            lambda d: setattr(
-                d, "global_config",
-                d.global_config.model_copy(update={
-                    "browser": d.global_config.browser.model_copy(update={"pure_mode": new_value})
-                }),
+            lambda d: d.model_copy(
+                update={
+                    "global_config": d.global_config.model_copy(
+                        update={
+                            "browser": d.global_config.browser.model_copy(
+                                update={"pure_mode": new_value}
+                            )
+                        }
+                    )
+                }
             )
         )
         # 原子替换运行时配置（通过 _swap_runtime_config 同步 _pure_mode）
