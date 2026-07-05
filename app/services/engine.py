@@ -623,11 +623,7 @@ class ScheduleEngine:
                 cmd.response_event.set()
             return StartResult.INVALID_CONFIG
 
-        config = self._runtime_config
         pure_mode = cmd.data.get("pure_mode", self.pure_mode)
-        if pure_mode:
-            # frozen model: create new browser copy with pure_mode=True
-            config = config.model_copy(update={"browser": config.browser.model_copy(update={"pure_mode": True})})
         # pure_mode 影响 browser 配置，需临时覆盖 getter
         if pure_mode:
             # 动态覆盖：getter 每次取最新 runtime_config 并叠加 pure_mode=True
