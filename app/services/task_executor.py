@@ -105,7 +105,7 @@ class TaskExecutor:
         registry: Any,
         history_store: Any,
         worker_getter: Callable,
-        login_orchestrator: Any,
+        login_orchestrator: Any = None,
         task_manager: Any = None,
         get_runtime_config: Callable[[], RuntimeConfig] | None = None,
     ) -> None:
@@ -120,9 +120,9 @@ class TaskExecutor:
         self._task_pool: BoundedExecutor | None = None
         self._task_pool_lock = threading.Lock()
 
-        # 登录专用执行器（max_workers=1, queue_size=1 — 信号量天然保证单并发）
+        # 登录专用执行器（max_workers=1, queue_size=2 — 保证单并发，预留 manual 抢占 auto 的槽位）
         self._login_executor = BoundedExecutor(
-            max_workers=1, queue_size=1, thread_name_prefix="login-exec"
+            max_workers=1, queue_size=2, thread_name_prefix="login-exec"
         )
 
         # 定时任务去重
@@ -152,6 +152,10 @@ class TaskExecutor:
     def bind_runtime_config(self, getter: Callable[[], RuntimeConfig]) -> None:
         """延迟绑定运行时配置获取器（用于解决 Engine 循环依赖）。"""
         self._get_runtime_config = getter
+
+    def bind_login_orchestrator(self, orchestrator: Any) -> None:
+        """延迟绑定登录编排器（用于解决与 LoginOrchestrator 的循环依赖）。"""
+        self._login_orchestrator = orchestrator
 
     @property
     def task_manager(self):

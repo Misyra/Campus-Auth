@@ -2,6 +2,29 @@
 
 ## 2026-07-05
 
+### fix(engine): 修复 _reload_config_internal 裸写和 toggle_pure_mode TOCTOU
+
+- `app/services/engine.py`：
+  - `_swap_runtime_config` 新增可选 `pure_mode` 参数，支持在原子替换配置的同时更新 `_pure_mode`
+  - `_reload_config_internal` 改为调用 `_swap_runtime_config(new_config, pure_mode=pure_mode)`，消除裸写 `self._runtime_config = new_config`
+  - `toggle_pure_mode` 在同一把锁内读取 `self._runtime_config`（保存为 `base_config`），消除 TOCTOU 竞态
+
+### refactor(engine): 收敛 _runtime_config 写路径到 _swap_runtime_config
+
+- `app/services/engine.py`：新增 `_swap_runtime_config`（单一写入口，`_reload_lock` 下原子替换）和 `update_log_level` 公共方法；重写 `_reload_config_internal`（磁盘 IO 移出锁外，B5）；`toggle_pure_mode` 改用 `_swap` 替换运行时配置
+- `app/api/config.py`：`set_log_level` 路由改调 `engine.update_log_level()`，不再裸改私有属性
+- `tests/test_services/test_engine.py`：新增 `TestSwapRuntimeConfig`（2 测试）、`TestUpdateLogLevel`（2 测试）
+- `tests/test_api/test_api_config_routes.py`：调整 `set_log_level` 测试验证 `update_log_level` 被调用
+
+### refactor(orchestrator): 移除 LoginOrchestrator 自建 fallback pool 死代码
+
+- `app/services/login_orchestrator.py`：executor 改为必传（body 校验），删除 pool 参数与 set_executor 方法，shutdown 不再关闭外部 executor
+- `app/services/task_executor.py`：login_orchestrator 改可选 + 新增 bind_login_orchestrator 延迟绑定，login_executor queue_size 从 1 调为 2
+- `app/container.py`：调整创建顺序 TaskExecutor → LoginOrchestrator → bind，删除 set_executor 调用
+- `app/services/login_runner.py`：login_once 路径显式创建一次性 ThreadPoolExecutor
+- `tests/test_services/test_login_orchestrator.py`：删除 TestSetExecutor，新增 TestExecutorRequired（5 测试）+ _make_mock_executor 辅助，10 处调用点适配
+- `tests/test_integration/conftest.py`：integration_stack fixture 调整创建顺序
+
 ### refactor: 简化启动逻辑，配置驱动运行模式
 
 **核心变更**：自启动脚本不再硬编码运行模式，改为由配置文件统一驱动。CLI 参数覆盖配置，不加参数时读取配置。
