@@ -198,7 +198,7 @@
       <div class="toggle-group">
         <div class="toggle-with-help">
           <label class="toggle toggle-help-inline">
-            <input type="checkbox" v-model="pureMode" @change="togglePureMode()" />
+            <input type="checkbox" :checked="pureMode" @click.prevent="togglePureMode()" />
             <span class="toggle-slider"></span>
             <span class="toggle-label">纯净模式</span>
             <span class="field-help" tabindex="0" role="note" data-tip="使用 Chromium 原始设置启动浏览器，不注入任何自定义参数（UA、请求头、启动参数等）。适用于认证系统检测浏览器指纹的场景，可降低被识别为自动化工具的风险。">?</span>

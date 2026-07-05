@@ -237,13 +237,13 @@ export const editorTaskMethods = {
     // 防止快速点击导致竞态
     if (this._pureModeLoading) return;
     this._pureModeLoading = true;
-    // v-model 已同步更新 pureMode，此处调用 API 持久化到后端
     try {
       const { data } = await this.$api.post('/api/pure-mode');
-      // 以后端返回值为准，确保前后端状态一致
-      this.pureMode = data.enabled;
-      this.frontendLogger.info('tasks', `纯净模式已${data.enabled ? '开启' : '关闭'}`);
-      this.toastOnly(true, `纯净模式已${data.enabled ? '开启' : '关闭'}`);
+      // ApiResponse.data 包含 { enabled: bool }
+      const enabled = data.data?.enabled ?? false;
+      this.pureMode = enabled;
+      this.frontendLogger.info('tasks', `纯净模式已${enabled ? '开启' : '关闭'}`);
+      this.toastOnly(true, `纯净模式已${enabled ? '开启' : '关闭'}`);
     } catch (error) {
       // API 失败，回滚 UI 状态
       this.pureMode = !this.pureMode;
