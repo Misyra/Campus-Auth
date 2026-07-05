@@ -265,6 +265,7 @@ export const configMethods = {
           enabled: false,
           method: '当前后端不支持',
           location: '',
+          runtime_mode: 'full',
         };
       }
     } finally {
@@ -299,9 +300,9 @@ export const configMethods = {
   },
   async enableAutostart() { return this._toggleAutostart(true); },
   async disableAutostart() { return this._toggleAutostart(false); },
-  async setAutostartMode(lightweight) {
+  async setAutostartMode(runtimeMode) {
     try {
-      const data = await this.$apiService.autostart.setMode(lightweight);
+      const data = await this.$apiService.autostart.setMode(runtimeMode);
       if (data.success) {
         this.frontendLogger.info('autostart', data.message);
         this.toastOnly(true, data.message);

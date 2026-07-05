@@ -14,17 +14,12 @@ from app.utils.platform import get_platform, is_linux, is_macos, is_windows
 logger = get_logger("autostart", source="backend")
 
 
-def _autostart_cli_args(lightweight: bool = True) -> str:
+def _autostart_cli_args() -> str:
     """生成自启动命令行参数。
 
-    Args:
-        lightweight: True 时使用轻量模式（仅监控），False 时使用完整模式（含 Web）
+    自启动脚本只负责启动程序，运行模式和启动动作由配置决定。
     """
-    args = ["--startup-action", "monitor"]
-    if lightweight:
-        args.extend(["--runtime-mode", "lightweight"])
-    args.extend(["--no-browser", "--source", "autostart"])
-    return " ".join(args)
+    return "--no-browser --source autostart"
 
 
 class AutoStartService:
@@ -147,14 +142,14 @@ class AutoStartService:
             "location": "",
         }
 
-    def enable(self, lightweight: bool = True) -> tuple[bool, str]:
-        logger.debug("启用开机自启动: platform={}, lightweight={}", self._platform, lightweight)
+    def enable(self) -> tuple[bool, str]:
+        logger.debug("启用开机自启动: platform={}", self._platform)
         if is_macos():
-            return self._enable_macos(lightweight)
+            return self._enable_macos()
         if is_linux():
-            return self._enable_linux(lightweight)
+            return self._enable_linux()
         if is_windows():
-            return self._enable_windows(lightweight)
+            return self._enable_windows()
         logger.warning("不支持开机自启动: 平台={}", self._platform)
         return False, "当前操作系统不支持自动配置开机自启动，请手动将程序添加到启动项"
 
@@ -169,7 +164,7 @@ class AutoStartService:
         logger.warning("不支持开机自启动: 平台={}", self._platform)
         return False, "当前操作系统不支持自动配置开机自启动，请手动将程序添加到启动项"
 
-    def _enable_macos(self, lightweight: bool = True) -> tuple[bool, str]:
+    def _enable_macos(self) -> tuple[bool, str]:
         plist_path = self._mac_plist_path()
         logger.debug("macOS plist 路径: {}", plist_path)
         plist_path.parent.mkdir(parents=True, exist_ok=True)
@@ -178,7 +173,7 @@ class AutoStartService:
         log_dir.mkdir(parents=True, exist_ok=True)
 
         escaped_cmd = xml.sax.saxutils.escape(
-            f"{self._start_command()} {_autostart_cli_args(lightweight)}"
+            f"{self._start_command()} {_autostart_cli_args()}"
         )
         escaped_log_out = xml.sax.saxutils.escape(str(log_dir / "autostart.out.log"))
         escaped_log_err = xml.sax.saxutils.escape(str(log_dir / "autostart.err.log"))
@@ -252,14 +247,14 @@ class AutoStartService:
             logger.debug("macOS plist 不存在: {}", plist_path)
         return True, "已关闭 macOS 开机自启动"
 
-    def _enable_linux(self, lightweight: bool = True) -> tuple[bool, str]:
+    def _enable_linux(self) -> tuple[bool, str]:
         service_path = self._linux_service_path()
         logger.debug("Linux service 路径: {}", service_path)
         service_path.parent.mkdir(parents=True, exist_ok=True)
 
         # 用单引号包裹命令，确保路径含空格时 systemd 正确解析
         # 如果命令本身含单引号，用 '\'' 转义
-        cmd = f"{self._start_command()} {_autostart_cli_args(lightweight)}".replace("'", "'\\''")
+        cmd = f"{self._start_command()} {_autostart_cli_args()}".replace("'", "'\\''")
         content = f"""[Unit]
 Description=Campus-Auth Auto Network Web Console
 After=network.target
@@ -311,14 +306,14 @@ WantedBy=default.target
             "",
             run_command,
         ]
-        return '\n'.join(vbs_lines)
+        return "\n".join(vbs_lines)
 
     @staticmethod
     def _has_cjk_chars(path: str) -> bool:
         """检查路径是否包含中日韩(CJK)统一表意文字。"""
         return bool(re.search(r"[一-鿿㐀-䶿豈-﫿]", path))
 
-    def _enable_windows(self, lightweight: bool = True) -> tuple[bool, str]:
+    def _enable_windows(self) -> tuple[bool, str]:
         project_root_str = str(self.project_root)
         if self._has_cjk_chars(project_root_str):
             logger.warning("项目路径包含中日韩字符: {}", project_root_str)
@@ -345,7 +340,7 @@ WantedBy=default.target
         # VBS 字符串中双引号用 "" 转义
         start_cmd_escaped = self._start_command().replace('"', '""')
         run_command = (
-            f'targetCmd = "{start_cmd_escaped} {_autostart_cli_args(lightweight)}"\n'
+            f'targetCmd = "{start_cmd_escaped} {_autostart_cli_args()}"\n'
             f"WshShell.Run targetCmd, 0, False"
         )
 

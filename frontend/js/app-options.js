@@ -201,8 +201,8 @@ export const appOptions = {
     },
     autostartModeOptions() {
       return [
-        { value: true, label: '轻量模式（推荐）' },
-        { value: false, label: '完整模式' },
+        { value: 'lightweight', label: '轻量模式（推荐）' },
+        { value: 'full', label: '完整模式' },
       ];
     },
     startupActionHint() {

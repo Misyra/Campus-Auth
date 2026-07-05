@@ -1,5 +1,38 @@
 # 修改日志
 
+## 2026-07-05
+
+### refactor: 简化启动逻辑，配置驱动运行模式
+
+**核心变更**：自启动脚本不再硬编码运行模式，改为由配置文件统一驱动。CLI 参数覆盖配置，不加参数时读取配置。
+
+- `app/schemas.py`：
+  - `AppSettings.autostart_lightweight: bool` → `runtime_mode: RuntimeMode`（直接存储模式值）
+  - `AppConfig.from_runtime_config()` 新增 `runtime_mode` 从配置读取
+  - `AutoStartStatusResponse.lightweight: bool` → `runtime_mode: str`
+  - `AutostartEnableRequest` → `AutostartModeRequest`（字段 `lightweight` → `runtime_mode`）
+- `app/services/autostart.py`：
+  - `_autostart_cli_args()` 移除 `lightweight` 参数，只传 `--no-browser --source autostart`
+  - `enable()` / `_enable_macos()` / `_enable_linux()` / `_enable_windows()` 移除 `lightweight` 参数
+- `app/api/autostart.py`：
+  - `_read_autostart_lightweight` → `_read_runtime_mode`（从配置读取）
+  - `_save_autostart_lightweight` → `_save_runtime_mode`（写入配置）
+  - `enable_autostart` 不再需要请求体
+  - `set_autostart_mode` 仅保存配置，不重新生成脚本
+- `app/api/config.py`：变更检测标签 `autostart_lightweight` → `runtime_mode`
+- `main.py`：`--runtime-mode` 帮助文本更新
+- `resources/tools/start/start.go`：启动时加 `--runtime-mode full`，确保手动启动始终全量模式
+- `frontend/js/constants.js`：`autostart_lightweight: true` → `runtime_mode: "full"`
+- `frontend/js/app-options.js`：`autostartModeOptions` 值从 `true/false` 改为 `"lightweight"/"full"`
+- `frontend/js/api-service.js`：`setMode` 参数从 `lightweight` 改为 `runtime_mode`
+- `frontend/js/methods/config.js`：`setAutostartMode` 参数从 `lightweight` 改为 `runtimeMode`
+- `frontend/js/data/status.js`：`autostart.lightweight` → `autostart.runtime_mode`
+- `frontend/partials/pages/settings/settings-system.html`：模式选择器绑定从 `autostart.lightweight` 改为 `config.app_settings.runtime_mode`
+- 测试文件：同步更新所有 `autostart_lightweight` / `lightweight` 相关断言和参数
+- `app/api/autostart.py`：`_read_runtime_mode` 异常回退默认值从 `FULL` 改为 `LIGHTWEIGHT`（与旧代码一致，避免端口冲突）
+- `frontend/js/methods/config.js`：`fetchAutostart` 404 回退对象补充 `runtime_mode: 'full'` 字段
+- `docs/changelog.md`：移除未同步版本号的 v4.2.0 条目
+
 ## 2026-07-04
 
 ### refactor: 删除自定义变量功能
