@@ -67,7 +67,9 @@ def download_task_recorder():
 @router.get("/api/docs/task-writing-guide")
 def download_task_writing_guide():
     """下载任务编写指南文档"""
-    return _serve_doc("docs/guides/task-writing-guide.md", "text/markdown", "task-writing-guide.md")
+    return _serve_doc(
+        "docs/guides/task-writing-guide.md", "text/markdown", "task-writing-guide.md"
+    )
 
 
 @router.get("/api/docs/task-manual")
@@ -176,7 +178,9 @@ async def delete_background(filename: str) -> ApiResponse:
     try:
         filepath.unlink()
     except PermissionError as exc:
-        raise HTTPException(status_code=409, detail=f"文件被占用，无法删除: {exc}") from exc
+        raise HTTPException(
+            status_code=409, detail=f"文件被占用，无法删除: {exc}"
+        ) from exc
     except OSError as exc:
         raise HTTPException(status_code=500, detail=f"删除文件失败: {exc}") from exc
     return ApiResponse(success=True, message="背景图片已删除")

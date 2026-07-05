@@ -36,9 +36,7 @@ class TestDebugRunAll:
 
     def test_debug_run_all_returns_200(self, api_client):
         test_client, mock_services = api_client
-        mock_services.debug_manager.run_all = AsyncMock(
-            return_value={"running": False}
-        )
+        mock_services.debug_manager.run_all = AsyncMock(return_value={"running": False})
         resp = test_client.post("/api/debug/run-all")
         assert resp.status_code == 200
         assert "running" in resp.json()

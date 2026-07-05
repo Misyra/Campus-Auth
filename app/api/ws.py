@@ -21,9 +21,7 @@ async def websocket_logs_handler(websocket, ws_manager):
             # WebSocket 消息大小预检，按 UTF-8 字节长度计算，防止超大消息导致内存问题
             msg_bytes = len(raw.encode("utf-8"))
             if msg_bytes > 65536:
-                ws_logger.warning(
-                    "WebSocket 消息过大 ({} bytes)，断开连接", msg_bytes
-                )
+                ws_logger.warning("WebSocket 消息过大 ({} bytes)，断开连接", msg_bytes)
                 await ws_manager.disconnect(websocket)
                 return
             try:
@@ -38,7 +36,9 @@ async def websocket_logs_handler(websocket, ws_manager):
                     scope = str(d.get("scope", "?"))[:200]
                     if message_text:
                         level_name = str(d.get("level", "INFO")).upper()
-                        log_func = getattr(_fe_logger, level_name.lower(), _fe_logger.info)
+                        log_func = getattr(
+                            _fe_logger, level_name.lower(), _fe_logger.info
+                        )
                         log_func("[{}] {}", scope, message_text)
                 else:
                     ws_logger.warning("收到未知 WebSocket 消息类型: {}", msg_type)

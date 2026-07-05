@@ -18,12 +18,17 @@ from app.workers.playwright_worker import WorkerResponse
 def _ensure_login_config(engine) -> None:
     """确保引擎运行时配置包含登录所需字段。"""
     old = engine._runtime_config
-    engine._runtime_config = old.model_copy(update={
-        "credentials": LoginCredentials(
-            username="testuser", password="testpass", auth_url="http://10.0.0.1",
-            isp=old.credentials.isp, carrier_custom=old.credentials.carrier_custom,
-        ),
-    })
+    engine._runtime_config = old.model_copy(
+        update={
+            "credentials": LoginCredentials(
+                username="testuser",
+                password="testpass",
+                auth_url="http://10.0.0.1",
+                isp=old.credentials.isp,
+                carrier_custom=old.credentials.carrier_custom,
+            ),
+        }
+    )
 
 
 class TestFullMode:
@@ -31,7 +36,9 @@ class TestFullMode:
 
     async def test_full_lifecycle(self, integration_stack):
         """完整模式：启动 → 断网登录 → 定时任务 → 手动登录 → 配置重载 → 关闭。"""
-        engine, profile_service, task_executor, task_registry, mock_worker = integration_stack
+        engine, profile_service, task_executor, task_registry, mock_worker = (
+            integration_stack
+        )
         _ensure_login_config(engine)
 
         login_done = threading.Event()
@@ -50,13 +57,16 @@ class TestFullMode:
 
         # t1: 注册定时任务（时间设为当前，确保 tick 时命中）
         now = datetime.now()
-        task_executor.registry.save_task("test_task", {
-            "name": "测试任务",
-            "type": "shell",
-            "command": "echo hello",
-            "enabled": True,
-            "schedule": {"hour": now.hour, "minute": now.minute},
-        })
+        task_executor.registry.save_task(
+            "test_task",
+            {
+                "name": "测试任务",
+                "type": "shell",
+                "command": "echo hello",
+                "enabled": True,
+                "schedule": {"hour": now.hour, "minute": now.minute},
+            },
+        )
 
         # t2: 断网 → 自动登录成功
         with (

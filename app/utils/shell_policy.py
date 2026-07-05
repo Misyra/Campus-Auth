@@ -93,7 +93,12 @@ class ShellCommandPolicy:
                 with contextlib.suppress(psutil.NoSuchProcess, psutil.AccessDenied):
                     child.kill()
             parent.kill()
-        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess, ProcessLookupError):
+        except (
+            psutil.NoSuchProcess,
+            psutil.AccessDenied,
+            psutil.ZombieProcess,
+            ProcessLookupError,
+        ):
             pass
 
     def run_sync(

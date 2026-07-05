@@ -89,7 +89,9 @@ class TestAsyncRepoFetchJson:
         mock_resp.json.return_value = [{"id": 1}]
         MockClient.return_value = _make_mock_client(mock_resp)
 
-        result = await async_repo_fetch_json("https://example.com/index.json", list, "索引")
+        result = await async_repo_fetch_json(
+            "https://example.com/index.json", list, "索引"
+        )
         assert result == [{"id": 1}]
 
     @pytest.mark.asyncio
@@ -99,7 +101,9 @@ class TestAsyncRepoFetchJson:
         mock_resp.json.return_value = {"name": "test"}
         MockClient.return_value = _make_mock_client(mock_resp)
 
-        result = await async_repo_fetch_json("https://example.com/task.json", dict, "任务")
+        result = await async_repo_fetch_json(
+            "https://example.com/task.json", dict, "任务"
+        )
         assert result == {"name": "test"}
 
     @pytest.mark.asyncio

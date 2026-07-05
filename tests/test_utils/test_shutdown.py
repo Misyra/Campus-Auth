@@ -107,7 +107,10 @@ class TestForceExit:
         handler = MagicMock(side_effect=lambda: call_order.append("handler"))
         _exit_handlers.append((handler, (), {}))
         try:
-            with patch("app.utils.shutdown.os._exit", side_effect=lambda c: call_order.append("exit")):
+            with patch(
+                "app.utils.shutdown.os._exit",
+                side_effect=lambda c: call_order.append("exit"),
+            ):
                 with patch("app.utils.shutdown.threading.Timer"):
                     force_exit(0)
             assert call_order == ["handler", "exit"]

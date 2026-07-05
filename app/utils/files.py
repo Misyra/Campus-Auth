@@ -37,9 +37,7 @@ def atomic_write(
     if parent:
         os.makedirs(parent, exist_ok=True)
 
-    tmp_fd, tmp_path = tempfile.mkstemp(
-        dir=parent or ".", prefix=prefix, suffix=suffix
-    )
+    tmp_fd, tmp_path = tempfile.mkstemp(dir=parent or ".", prefix=prefix, suffix=suffix)
     try:
         try:
             f = os.fdopen(tmp_fd, "w", encoding=encoding, errors=errors)

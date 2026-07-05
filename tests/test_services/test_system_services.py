@@ -252,6 +252,7 @@ class TestDirSizeMb:
 class TestUninstallCheckAutostart:
     def setup_method(self):
         import app.services.uninstall as _um
+
         _um._autostart_service = None
 
     @patch("app.services.autostart.AutoStartService")

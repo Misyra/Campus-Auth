@@ -185,7 +185,12 @@ class TestDrainQueue:
         mgr.set_dashboard_sink(sink)
         mgr.enqueue_status({"test": 1})
         mgr.enqueue_status({"test": 2})
-        with patch.object(mgr, "broadcast", new_callable=AsyncMock, side_effect=RuntimeError("ws error")) as mock_broadcast:
+        with patch.object(
+            mgr,
+            "broadcast",
+            new_callable=AsyncMock,
+            side_effect=RuntimeError("ws error"),
+        ) as mock_broadcast:
             # 不应抛异常
             await mgr._drain_queue()
             assert mock_broadcast.call_count == 2
@@ -255,5 +260,3 @@ class TestWsDrainLoop:
         await task
         assert task.done()
         assert not task.cancelled()
-
-

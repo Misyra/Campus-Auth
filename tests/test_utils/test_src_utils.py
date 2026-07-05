@@ -341,7 +341,10 @@ class TestEnsurePlaywrightReady:
         pb._BOOTSTRAP_DONE = True
         assert ensure_playwright_ready() is True
 
-    @patch("app.workers.playwright_bootstrap._get_browser_channel", return_value="playwright")
+    @patch(
+        "app.workers.playwright_bootstrap._get_browser_channel",
+        return_value="playwright",
+    )
     @patch("app.workers.playwright_bootstrap._has_chromium", return_value=False)
     @patch("app.workers.playwright_bootstrap._is_enabled", return_value=True)
     def test_no_playwright_package(self, mock_enabled, mock_chromium, mock_channel):
@@ -1157,27 +1160,31 @@ class TestIsNormalCloseError:
 
     def test_target_closed(self):
         """'target closed' 被识别为正常关闭。"""
-        assert PlaywrightWorker._is_normal_close_error(
-            RuntimeError("Target closed")
-        ) is True
+        assert (
+            PlaywrightWorker._is_normal_close_error(RuntimeError("Target closed"))
+            is True
+        )
 
     def test_connection_closed(self):
         """'connection closed' 被识别为正常关闭。"""
-        assert PlaywrightWorker._is_normal_close_error(
-            RuntimeError("Connection closed")
-        ) is True
+        assert (
+            PlaywrightWorker._is_normal_close_error(RuntimeError("Connection closed"))
+            is True
+        )
 
     def test_other_error(self):
         """其他错误不被视为正常关闭。"""
-        assert PlaywrightWorker._is_normal_close_error(
-            RuntimeError("Some other error")
-        ) is False
+        assert (
+            PlaywrightWorker._is_normal_close_error(RuntimeError("Some other error"))
+            is False
+        )
 
     def test_case_insensitive(self):
         """匹配不区分大小写。"""
-        assert PlaywrightWorker._is_normal_close_error(
-            RuntimeError("TARGET CLOSED")
-        ) is True
+        assert (
+            PlaywrightWorker._is_normal_close_error(RuntimeError("TARGET CLOSED"))
+            is True
+        )
 
 
 # ── PlaywrightWorker._handle_low_resource_request ──
@@ -1323,7 +1330,9 @@ class TestCloseResource:
         mock_resource = MagicMock()
         mock_resource.is_closed.return_value = False
         mock_resource.close = AsyncMock()
-        await worker._close_resource(mock_resource, "page", graceful=True, has_check="is_closed")
+        await worker._close_resource(
+            mock_resource, "page", graceful=True, has_check="is_closed"
+        )
         mock_resource.close.assert_awaited_once()
 
     @pytest.mark.asyncio
@@ -1333,7 +1342,9 @@ class TestCloseResource:
         mock_resource = MagicMock()
         mock_resource.is_closed.return_value = True
         mock_resource.close = AsyncMock()
-        await worker._close_resource(mock_resource, "page", graceful=True, has_check="is_closed")
+        await worker._close_resource(
+            mock_resource, "page", graceful=True, has_check="is_closed"
+        )
         mock_resource.close.assert_not_awaited()
 
     @pytest.mark.asyncio
@@ -1410,7 +1421,9 @@ class TestDispatch:
         worker = PlaywrightWorker()
         event = threading.Event()
         cmd = WorkerCommand(type=CMD_LOGIN, response_event=event)
-        with patch.object(worker, "_handle_login", new=AsyncMock(side_effect=RuntimeError("boom"))):
+        with patch.object(
+            worker, "_handle_login", new=AsyncMock(side_effect=RuntimeError("boom"))
+        ):
             await worker._dispatch(cmd)
         assert cmd.response_data.success is False
         assert "boom" in cmd.response_data.error
@@ -1432,14 +1445,18 @@ class TestSubmitQueueFull:
         worker._stop_event.clear()
         fake_loop = MagicMock()
         fake_loop.is_running.return_value = True
+
         # 模拟 call_soon_threadsafe 内部 put_nowait 抛 QueueFull
         def fake_call_soon(fn, *args):
             with contextlib.suppress(asyncio.QueueFull):
                 fn(*args)
+
         fake_loop.call_soon_threadsafe.side_effect = fake_call_soon
         worker._loop = fake_loop
 
-        with patch.object(worker._cmd_queue, "put_nowait", side_effect=asyncio.QueueFull):
+        with patch.object(
+            worker._cmd_queue, "put_nowait", side_effect=asyncio.QueueFull
+        ):
             result = worker.submit("test_cmd", wait=True, timeout=0.1)
         # QueueFull 被吞 → response_event 未 set → wait 超时返回错误
         assert result.success is False
@@ -1454,14 +1471,18 @@ class TestSubmitQueueFull:
         worker._stop_event.clear()
         fake_loop = MagicMock()
         fake_loop.is_running.return_value = True
+
         # 模拟真实行为：call_soon_threadsafe 不传播回调中的 QueueFull
         def fake_call_soon(fn, *args):
             with contextlib.suppress(asyncio.QueueFull):
                 fn(*args)
+
         fake_loop.call_soon_threadsafe.side_effect = fake_call_soon
         worker._loop = fake_loop
 
-        with patch.object(worker._cmd_queue, "put_nowait", side_effect=asyncio.QueueFull):
+        with patch.object(
+            worker._cmd_queue, "put_nowait", side_effect=asyncio.QueueFull
+        ):
             result = worker.submit("test_cmd", wait=False)
         # call_soon_threadsafe 吞掉 QueueFull → submit 无法同步获知，返回 success=True
         assert result.success is True
@@ -1476,7 +1497,9 @@ class TestSubmitQueueFull:
         worker._stop_event.clear()
         worker._loop = None
 
-        with patch.object(worker._cmd_queue, "put_nowait", side_effect=asyncio.QueueFull):
+        with patch.object(
+            worker._cmd_queue, "put_nowait", side_effect=asyncio.QueueFull
+        ):
             result = worker.submit("test_cmd", wait=False)
         assert result.success is False
         assert "队列已满" in result.error

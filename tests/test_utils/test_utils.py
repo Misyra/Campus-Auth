@@ -58,7 +58,11 @@ from app.utils.platform import (
 
 # ── time_utils ──
 from app.schemas import PauseSettings
-from app.utils.time_utils import _parse_pause_range, is_in_pause_period, is_pause_enabled
+from app.utils.time_utils import (
+    _parse_pause_range,
+    is_in_pause_period,
+    is_pause_enabled,
+)
 
 # ── version ──
 from app.version import get_project_version
@@ -456,12 +460,16 @@ class TestIsPauseEnabled:
         assert is_pause_enabled(pause) is False
 
     def test_same_hour_and_minute_means_all_day(self):
-        pause = PauseSettings(enabled=True, start_hour=5, end_hour=5, start_minute=0, end_minute=0)
+        pause = PauseSettings(
+            enabled=True, start_hour=5, end_hour=5, start_minute=0, end_minute=0
+        )
         assert is_pause_enabled(pause) is True
 
     @patch("app.utils.time_utils.is_in_pause_period", return_value=True)
     def test_same_hour_different_minute_delegates(self, mock_check):
-        pause = PauseSettings(enabled=True, start_hour=5, start_minute=0, end_hour=5, end_minute=30)
+        pause = PauseSettings(
+            enabled=True, start_hour=5, start_minute=0, end_hour=5, end_minute=30
+        )
         assert is_pause_enabled(pause) is True
         mock_check.assert_called_once()
         # 验证传入的 start/end 时间对象正确
@@ -501,7 +509,9 @@ class TestIsPauseEnabled:
 
     @patch("app.utils.time_utils.is_in_pause_period", return_value=True)
     def test_minute_precision_delegates(self, mock_check):
-        pause = PauseSettings(enabled=True, start_hour=8, start_minute=15, end_hour=9, end_minute=0)
+        pause = PauseSettings(
+            enabled=True, start_hour=8, start_minute=15, end_hour=9, end_minute=0
+        )
         assert is_pause_enabled(pause) is True
         call_args = mock_check.call_args
         ranges = call_args[0][1]
@@ -509,12 +519,13 @@ class TestIsPauseEnabled:
 
     @patch("app.utils.time_utils.is_in_pause_period", return_value=True)
     def test_minute_precision_cross_midnight_delegates(self, mock_check):
-        pause = PauseSettings(enabled=True, start_hour=23, start_minute=30, end_hour=6, end_minute=30)
+        pause = PauseSettings(
+            enabled=True, start_hour=23, start_minute=30, end_hour=6, end_minute=30
+        )
         assert is_pause_enabled(pause) is True
         call_args = mock_check.call_args
         ranges = call_args[0][1]
         assert ranges == [(datetime.time(23, 30), datetime.time(6, 30))]
-
 
 
 # =====================================================================
@@ -657,8 +668,6 @@ class TestLogConfigCenter:
         assert config["level"] == "INFO"
 
 
-
-
 # =====================================================================
 # CREATE_NO_WINDOW_FLAG 常量
 # =====================================================================
@@ -747,7 +756,6 @@ class TestDefaultConstants:
         assert len(parts) >= 2
         for part in parts:
             assert part.startswith("http")
-
 
 
 # ── has_decryption_error / clear_decryption_error ──

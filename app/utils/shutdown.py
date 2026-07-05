@@ -18,9 +18,7 @@ from typing import Any
 _exit_handlers: list[tuple[Callable[..., Any], tuple[Any, ...], dict[str, Any]]] = []
 
 
-def register_exit_handler(
-    func: Callable[..., Any], *args: Any, **kwargs: Any
-) -> None:
+def register_exit_handler(func: Callable[..., Any], *args: Any, **kwargs: Any) -> None:
     """注册退出钩子，在 force_exit 时按注册顺序执行。
 
     用于需要在 os._exit 前执行的清理逻辑（如关闭线程池、断开连接）。

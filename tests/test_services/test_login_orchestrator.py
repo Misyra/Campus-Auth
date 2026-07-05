@@ -418,7 +418,8 @@ class TestSubmitLockScope:
             dispatch_barrier.wait()
             time.sleep(0.15)
             return LoginHandle(
-                future=slow_future, source=source,
+                future=slow_future,
+                source=source,
                 cancel_event=cancel_event or threading.Event(),
             )
 

@@ -25,6 +25,7 @@ class TestInitMonitoringLogMasking:
         class _CaptureLogger:
             def info(self, fmt, *args):
                 captured_logs.append(args[0] if args else fmt)
+
             warning = info
             error = info
             debug = info
@@ -85,9 +86,7 @@ class TestInitMonitoringLogMasking:
             auth_url="http://10.10.10.1:801/eportal/portal/login",
             username="ab",
         )
-        assert "ab" not in log_output, (
-            f"短用户名也应被脱敏，实际输出: {log_output}"
-        )
+        assert "ab" not in log_output, f"短用户名也应被脱敏，实际输出: {log_output}"
         assert "***" in log_output
 
     def test_isp_not_masked(self):
@@ -96,6 +95,4 @@ class TestInitMonitoringLogMasking:
             auth_url="http://10.10.10.1:801/eportal/portal/login",
             username="202301010001",
         )
-        assert "移动" in log_output, (
-            f"运营商信息应保持明文，实际输出: {log_output}"
-        )
+        assert "移动" in log_output, f"运营商信息应保持明文，实际输出: {log_output}"

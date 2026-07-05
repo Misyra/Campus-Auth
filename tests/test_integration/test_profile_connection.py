@@ -20,9 +20,16 @@ class TestProfileConnection:
 
         # 创建第二个 profile 并设为活动方案
         profile_service.update(
-            lambda d: d.profiles.update({"profile-b": Profile(
-                name="方案B", username="user-b", password="pass-b", auth_url="http://10.0.0.2"
-            )})
+            lambda d: d.profiles.update(
+                {
+                    "profile-b": Profile(
+                        name="方案B",
+                        username="user-b",
+                        password="pass-b",
+                        auth_url="http://10.0.0.2",
+                    )
+                }
+            )
         )
         profile_service.set_active_profile("profile-b")
 
@@ -37,13 +44,21 @@ class TestProfileConnection:
         engine, profile_service, task_executor, _, mock_worker = integration_stack
 
         profile_service.update(
-            lambda d: d.profiles.update({"profile-b": Profile(
-                name="方案B", username="user-b", password="pass-b", auth_url="http://10.0.0.2"
-            )})
+            lambda d: d.profiles.update(
+                {
+                    "profile-b": Profile(
+                        name="方案B",
+                        username="user-b",
+                        password="pass-b",
+                        auth_url="http://10.0.0.2",
+                    )
+                }
+            )
         )
 
         # 直接设置 monitor_core，绕过异步队列
         from app.services.monitor_service import NetworkMonitorCore
+
         config = engine.get_runtime_config()
         core = NetworkMonitorCore(
             get_config=lambda: config,
@@ -74,15 +89,23 @@ class TestProfileConnection:
 
         # 确保 default profile 有完整凭证
         profile_service.update(
-            lambda d: d.profiles.update({"default": Profile(
-                name="默认方案", username="testuser", auth_url="http://10.0.0.1"
-            )})
+            lambda d: d.profiles.update(
+                {
+                    "default": Profile(
+                        name="默认方案", username="testuser", auth_url="http://10.0.0.1"
+                    )
+                }
+            )
         )
 
         profile_service.update(
-            lambda d: d.profiles.update({"profile-b": Profile(
-                name="方案B", username="user-b", auth_url="http://10.0.0.2"
-            )})
+            lambda d: d.profiles.update(
+                {
+                    "profile-b": Profile(
+                        name="方案B", username="user-b", auth_url="http://10.0.0.2"
+                    )
+                }
+            )
         )
         profile_service.set_active_profile("profile-b")
         engine.apply_profile("profile-b")

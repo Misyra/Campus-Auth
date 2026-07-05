@@ -98,9 +98,7 @@ class TestValidateEnvConfig:
         assert ok is False
 
     def test_none_values(self):
-        ok, msg = validate_env_config(
-            RuntimeConfig()
-        )
+        ok, msg = validate_env_config(RuntimeConfig())
         assert ok is False
 
 
@@ -247,6 +245,7 @@ class TestProfilesData:
 
     def test_config_is_global_config(self):
         from app.schemas import GlobalConfig
+
         data = ProfilesData()
         assert isinstance(data.global_config, GlobalConfig)
 
@@ -392,9 +391,7 @@ class TestDecryptPasswordField:
         """ENC: 前缀密码解密。"""
         from unittest.mock import patch
 
-        with patch(
-            "app.utils.crypto.decrypt_password", return_value="secret"
-        ):
+        with patch("app.utils.crypto.decrypt_password", return_value="secret"):
             result, has_error = decrypt_password_field("ENC:encrypted")
             assert result == "secret"
             assert has_error is False
@@ -403,9 +400,7 @@ class TestDecryptPasswordField:
         """掩码密码使用回退。"""
         from unittest.mock import patch
 
-        with patch(
-            "app.utils.crypto.decrypt_password", return_value="fallback"
-        ):
+        with patch("app.utils.crypto.decrypt_password", return_value="fallback"):
             result, has_error = decrypt_password_field(
                 "••••••••", "ENC:fallback_encrypted"
             )

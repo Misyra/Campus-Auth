@@ -28,7 +28,9 @@ def resolve_port() -> int:
             port = int(raw)
             if 1 <= port <= 65535:
                 return port
-            _startup_logger.warning("端口 {} 超出范围 1-65535，使用默认 {}", port, _DEFAULT_PORT)
+            _startup_logger.warning(
+                "端口 {} 超出范围 1-65535，使用默认 {}", port, _DEFAULT_PORT
+            )
         except ValueError:
             _startup_logger.warning("端口解析失败，使用默认 {}", _DEFAULT_PORT)
 

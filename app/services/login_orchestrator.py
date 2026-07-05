@@ -30,7 +30,9 @@ logger = get_logger("login_orchestrator", source="backend")
 LoginSource = Literal["auto", "manual", "login_once", "browser"]
 
 
-def runtime_config_to_worker_dict(config: RuntimeConfig, bind_proxy: str | None = None) -> dict:
+def runtime_config_to_worker_dict(
+    config: RuntimeConfig, bind_proxy: str | None = None
+) -> dict:
     """将 RuntimeConfig 转换为 Worker 进程期望的 dict 格式。
 
     Worker 是独立进程，通过 dict 通信。
@@ -125,7 +127,9 @@ class LoginHandle:
 # ── 哨兵 ──
 
 # submit() 锁外 dispatch 时的占位哨兵，防止并发重复提交
-_DISPATCHING = LoginHandle(future=None, source="auto", cancel_event=CompositeCancelEvent())
+_DISPATCHING = LoginHandle(
+    future=None, source="auto", cancel_event=CompositeCancelEvent()
+)
 
 
 # ── 编排器 ──
@@ -282,7 +286,10 @@ class LoginOrchestrator:
     # ── 内部 ──
 
     def _dispatch(
-        self, config: RuntimeConfig, source: LoginSource, cancel_event: threading.Event,
+        self,
+        config: RuntimeConfig,
+        source: LoginSource,
+        cancel_event: threading.Event,
         timeout: int | None = None,
     ) -> LoginHandle:
         """提交到 Worker，注册历史/状态回调。"""
@@ -292,7 +299,9 @@ class LoginOrchestrator:
         # Build compatible dict for Worker process (Worker is separate process, communicates via dict)
         bind_proxy = getattr(self, "_bind_proxy_url", None)
         worker_config = runtime_config_to_worker_dict(config, bind_proxy=bind_proxy)
-        worker_timeout = timeout if timeout is not None else resolve_worker_timeout(config)  # F09 单一来源
+        worker_timeout = (
+            timeout if timeout is not None else resolve_worker_timeout(config)
+        )  # F09 单一来源
 
         def _run() -> tuple[bool, str]:
             start = time.perf_counter()
@@ -342,7 +351,9 @@ class LoginOrchestrator:
             # BoundedExecutor 队列满时抛出 RuntimeError，转为 rejected handle
             logger.warning("登录提交被拒绝: {} (source={})", exc, source)
             return LoginHandle(
-                future=None, source=source, cancel_event=cancel_event,
+                future=None,
+                source=source,
+                cancel_event=cancel_event,
                 rejected_reason=f"登录队列已满，请稍后重试",
             )
         handle = LoginHandle(future=future, source=source, cancel_event=cancel_event)
@@ -360,9 +371,7 @@ class LoginOrchestrator:
         future.add_done_callback(_on_done)
         return handle
 
-    def _record_history(
-        self, success: bool, duration_ms: int, error: str = ""
-    ) -> None:
+    def _record_history(self, success: bool, duration_ms: int, error: str = "") -> None:
         """记录登录历史（使用 add() 直接传入名称）。"""
         if self._login_history is None:
             return

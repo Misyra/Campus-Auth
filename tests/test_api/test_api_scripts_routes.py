@@ -81,7 +81,10 @@ class TestSaveScript:
     def test_save_script_success(self, api_client):
         """保存脚本成功。"""
         test_client, mock_services = api_client
-        mock_services.task_manager.save_task_with_validation.return_value = (True, "保存成功")
+        mock_services.task_manager.save_task_with_validation.return_value = (
+            True,
+            "保存成功",
+        )
         resp = test_client.put(
             "/api/scripts/new_script",
             json={"name": "新脚本", "content": "echo test", "type": "script"},
@@ -92,7 +95,10 @@ class TestSaveScript:
     def test_save_script_failure(self, api_client):
         """保存脚本失败。"""
         test_client, mock_services = api_client
-        mock_services.task_manager.save_task_with_validation.return_value = (False, "保存失败")
+        mock_services.task_manager.save_task_with_validation.return_value = (
+            False,
+            "保存失败",
+        )
         resp = test_client.put(
             "/api/scripts/bad_script",
             json={"name": "坏脚本"},
@@ -110,7 +116,10 @@ class TestDeleteScript:
     def test_delete_existing_script(self, api_client):
         """删除存在的脚本。"""
         test_client, mock_services = api_client
-        mock_services.task_manager.delete_task_with_validation.return_value = (True, "删除成功")
+        mock_services.task_manager.delete_task_with_validation.return_value = (
+            True,
+            "删除成功",
+        )
         resp = test_client.delete("/api/scripts/script1")
         assert resp.status_code == 200
         assert resp.json()["success"] is True
@@ -118,7 +127,10 @@ class TestDeleteScript:
     def test_delete_nonexistent_script(self, api_client):
         """删除不存在的脚本。"""
         test_client, mock_services = api_client
-        mock_services.task_manager.delete_task_with_validation.return_value = (False, "脚本不存在")
+        mock_services.task_manager.delete_task_with_validation.return_value = (
+            False,
+            "脚本不存在",
+        )
         resp = test_client.delete("/api/scripts/nonexistent")
         assert resp.status_code == 200
         assert resp.json()["success"] is False
@@ -211,7 +223,10 @@ class TestScriptThreadPool:
         captured_executor = {}
 
         mock_task_mgr = MagicMock()
-        mock_task_mgr.get_task_detail.return_value = {"type": "script", "binary_path": ""}
+        mock_task_mgr.get_task_detail.return_value = {
+            "type": "script",
+            "binary_path": "",
+        }
         mock_task_mgr.get_script_path.return_value = MagicMock(
             exists=MagicMock(return_value=True)
         )
@@ -227,7 +242,11 @@ class TestScriptThreadPool:
 
         with (
             patch("app.api.scripts.ScriptRunner") as mock_runner_cls,
-            patch.object(asyncio.BaseEventLoop, "run_in_executor", side_effect=mock_run_in_executor),
+            patch.object(
+                asyncio.BaseEventLoop,
+                "run_in_executor",
+                side_effect=mock_run_in_executor,
+            ),
         ):
             mock_runner = MagicMock()
             mock_runner_cls.return_value = mock_runner

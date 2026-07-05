@@ -199,14 +199,18 @@ class TestStopJoinsOnQueueFull:
 
         fake_loop = MagicMock()
         fake_loop.is_running.return_value = True
+
         # call_soon_threadsafe 同步执行 fn，put_nowait 抛 QueueFull
         def fake_call_soon(fn, *args):
             with contextlib.suppress(asyncio.QueueFull):
                 fn(*args)
+
         fake_loop.call_soon_threadsafe.side_effect = fake_call_soon
         worker._loop = fake_loop
 
-        with patch.object(worker._cmd_queue, "put_nowait", side_effect=asyncio.QueueFull):
+        with patch.object(
+            worker._cmd_queue, "put_nowait", side_effect=asyncio.QueueFull
+        ):
             worker.stop(timeout=1)
 
         fake_thread.join.assert_called()
@@ -223,14 +227,18 @@ class TestStopJoinsOnQueueFull:
 
         fake_loop = MagicMock()
         fake_loop.is_running.return_value = True
+
         # call_soon_threadsafe 同步执行 fn，put_nowait 抛 QueueFull
         def fake_call_soon(fn, *args):
             with contextlib.suppress(asyncio.QueueFull):
                 fn(*args)
+
         fake_loop.call_soon_threadsafe.side_effect = fake_call_soon
         worker._loop = fake_loop
 
-        with patch.object(worker._cmd_queue, "put_nowait", side_effect=asyncio.QueueFull):
+        with patch.object(
+            worker._cmd_queue, "put_nowait", side_effect=asyncio.QueueFull
+        ):
             worker.stop(timeout=2)
 
         fake_thread.join.assert_called()
@@ -250,7 +258,9 @@ class TestStopJoinsOnQueueFull:
         worker._loop = fake_loop
 
         # loop 未运行 → stop() 用 put_nowait（不走 call_soon_threadsafe）
-        with patch.object(worker._cmd_queue, "put_nowait", side_effect=asyncio.QueueFull):
+        with patch.object(
+            worker._cmd_queue, "put_nowait", side_effect=asyncio.QueueFull
+        ):
             worker.stop(timeout=1)
 
         fake_thread.join.assert_called()
@@ -267,7 +277,9 @@ class TestStopJoinsOnQueueFull:
         worker._loop = None
 
         # loop 为 None → stop() 用 put_nowait（不走 call_soon_threadsafe）
-        with patch.object(worker._cmd_queue, "put_nowait", side_effect=asyncio.QueueFull):
+        with patch.object(
+            worker._cmd_queue, "put_nowait", side_effect=asyncio.QueueFull
+        ):
             worker.stop(timeout=1)
 
         fake_thread.join.assert_called()
@@ -288,7 +300,9 @@ class TestStopJoinsOnQueueFull:
         fake_loop.call_soon_threadsafe.side_effect = lambda fn, *args: fn(*args)
         worker._loop = fake_loop
 
-        with patch.object(worker._cmd_queue, "put_nowait", side_effect=asyncio.QueueFull):
+        with patch.object(
+            worker._cmd_queue, "put_nowait", side_effect=asyncio.QueueFull
+        ):
             worker.stop(timeout=1)
 
         # lambda 包装器捕获 QueueFull → 调用 loop.call_soon_threadsafe(loop.stop)

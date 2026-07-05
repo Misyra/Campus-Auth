@@ -136,9 +136,9 @@ class TestMonitoredPolicy:
     def test_login_failure_exceeds_max_returns_none(self):
         """达到最大重试次数 → 返回 None。"""
         policy = MonitoredPolicy(max_retries=3)
-        assert policy.on_login_done(success=False) == 5.0   # attempt=1
+        assert policy.on_login_done(success=False) == 5.0  # attempt=1
         assert policy.on_login_done(success=False) == 10.0  # attempt=2
-        result = policy.on_login_done(success=False)         # attempt=3 >= max_retries
+        result = policy.on_login_done(success=False)  # attempt=3 >= max_retries
         assert result is None
 
     def test_login_success_after_failures_resets(self):

@@ -54,9 +54,7 @@ def _cleanup_screenshots() -> None:
                     f.unlink()
                     removed_temp += 1
             if removed_temp:
-                startup_logger.debug(
-                    "清理 temp 截图: 删除 {} 个过期文件", removed_temp
-                )
+                startup_logger.debug("清理 temp 截图: 删除 {} 个过期文件", removed_temp)
     except Exception as exc:
         startup_logger.warning("清理 temp 截图失败: {}", exc)
 
@@ -73,9 +71,7 @@ def _cleanup_screenshots() -> None:
                     shutil.rmtree(d, ignore_errors=True)
                     removed_dirs += 1
             if removed_dirs:
-                startup_logger.debug(
-                    "清理旧截图: 删除 {} 个日期目录", removed_dirs
-                )
+                startup_logger.debug("清理旧截图: 删除 {} 个日期目录", removed_dirs)
     except Exception as exc:
         startup_logger.warning("清理旧截图失败: {}", exc)
 
@@ -184,6 +180,7 @@ def _create_lifespan(existing_container, boot_engine=False):
                 except Exception as e:
                     startup_logger.exception("回退关闭异常: {}", e)
                 from app.utils.shutdown import force_exit
+
                 force_exit(0)
 
         shutdown_waiter = asyncio.create_task(_wait_shutdown())
@@ -367,6 +364,7 @@ def create_app(existing_container=None, boot_engine=False):
     @_app.websocket("/ws/logs")
     async def websocket_logs(websocket: WebSocket):
         from app.api.ws import websocket_logs_handler
+
         services = _app.state.services
         await websocket_logs_handler(websocket, services.ws_manager)
 
@@ -400,7 +398,9 @@ def run(
     import uvicorn
 
     # 使用调用方传入的日志配置，或从 settings.json 读取
-    if logging_settings is None and (access_log_enabled is None or log_retention is None):
+    if logging_settings is None and (
+        access_log_enabled is None or log_retention is None
+    ):
         try:
             if existing_container is not None:
                 profile_service = existing_container.profile_service
@@ -414,12 +414,19 @@ def run(
 
     # 填充未传入的参数
     if access_log_enabled is None:
-        access_log_enabled = bool(logging_settings.access_log) if logging_settings else False
+        access_log_enabled = (
+            bool(logging_settings.access_log) if logging_settings else False
+        )
     if log_retention is None:
-        log_retention = max(1, logging_settings.log_retention_days) if logging_settings else 7
+        log_retention = (
+            max(1, logging_settings.log_retention_days) if logging_settings else 7
+        )
 
     log_center = LogConfigCenter.get_instance()
-    log_center.initialize({"level": logging_settings.level if logging_settings else "INFO"}, source="backend")
+    log_center.initialize(
+        {"level": logging_settings.level if logging_settings else "INFO"},
+        source="backend",
+    )
 
     # 压制第三方库的 DEBUG 日志
     import logging

@@ -200,7 +200,9 @@ class TaskRegistry:
             # BUG-052 修复：schedule 无效时记录警告
             logger.warning(
                 "任务 {} 已启用但 schedule 无效 (hour={}, minute={})",
-                task_id, hour, minute,
+                task_id,
+                hour,
+                minute,
             )
 
     def _remove_from_index(self, task_id: str, config: dict[str, Any]) -> None:

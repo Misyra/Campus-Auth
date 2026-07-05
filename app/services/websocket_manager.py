@@ -59,7 +59,9 @@ class WebSocketManager:
 
         # 并发发送给所有连接，总体超时 5 秒
         # 显式创建任务，便于超时时检查状态和取消
-        tasks = [asyncio.create_task(self._send_safe(ws, message)) for ws in connections]
+        tasks = [
+            asyncio.create_task(self._send_safe(ws, message)) for ws in connections
+        ]
         try:
             results = await asyncio.wait_for(
                 asyncio.gather(*tasks, return_exceptions=True),

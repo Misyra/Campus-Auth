@@ -24,6 +24,7 @@ logger = get_logger("crypto", source="backend")
 class _DecryptionError(Exception):
     """密码解密失败异常（密钥变更或数据损坏）"""
 
+
 _KEY_DIR = AUTH_DATA_DIR
 _KEY_FILE = _KEY_DIR / ".enc_key"
 _ENC_PREFIX = "ENC:"
@@ -71,7 +72,9 @@ def _get_or_create_key() -> bytes:
                     _cached_raw_key = key
                     return key
                 else:
-                    logger.warning("密钥文件长度异常: 期望 32 字节，实际 {} 字节", len(key))
+                    logger.warning(
+                        "密钥文件长度异常: 期望 32 字节，实际 {} 字节", len(key)
+                    )
                     _backup_key_file()
             except Exception as exc:
                 logger.warning("读取加密密钥失败: {}", exc)

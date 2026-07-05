@@ -26,10 +26,22 @@ def _setup_task_mocks(mock_services):
         "name": "默认任务",
         "steps": [{"id": "s1", "type": "click", "selector": "#btn"}],
     }
-    mock_services.task_manager.save_task_with_validation.return_value = (True, "保存成功")
-    mock_services.task_manager.delete_task_with_validation.return_value = (True, "删除成功")
-    mock_services.task_manager.set_active_task_with_validation.return_value = (True, "切换成功")
-    mock_services.task_manager.save_order_with_validation.return_value = (True, "排序成功")
+    mock_services.task_manager.save_task_with_validation.return_value = (
+        True,
+        "保存成功",
+    )
+    mock_services.task_manager.delete_task_with_validation.return_value = (
+        True,
+        "删除成功",
+    )
+    mock_services.task_manager.set_active_task_with_validation.return_value = (
+        True,
+        "切换成功",
+    )
+    mock_services.task_manager.save_order_with_validation.return_value = (
+        True,
+        "排序成功",
+    )
 
 
 class TestListTasks:

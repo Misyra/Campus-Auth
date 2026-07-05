@@ -60,9 +60,7 @@ def _make_executor(
         registry=registry,
         history_store=history_store,
         worker_getter=kwargs.get("worker_getter", MagicMock()),
-        get_runtime_config=kwargs.get(
-            "get_runtime_config", lambda: RuntimeConfig()
-        ),
+        get_runtime_config=kwargs.get("get_runtime_config", lambda: RuntimeConfig()),
         login_orchestrator=kwargs.get("login_orchestrator", MagicMock()),
     )
     return executor
@@ -201,9 +199,7 @@ class TestTaskRegistrationAndExecution:
         """get_due_tasks 在正确时间返回到期任务。"""
         registry = TaskRegistry(tmp_path)
 
-        config = _make_task_config(
-            schedule={"hour": 14, "minute": 30}, enabled=True
-        )
+        config = _make_task_config(schedule={"hour": 14, "minute": 30}, enabled=True)
         registry.save_task("noon_task", config)
 
         due = registry.get_due_tasks(14, 30)
@@ -216,9 +212,7 @@ class TestTaskRegistrationAndExecution:
         """修改任务时间后调度索引同步更新。"""
         registry = TaskRegistry(tmp_path)
 
-        config = _make_task_config(
-            schedule={"hour": 10, "minute": 0}, enabled=True
-        )
+        config = _make_task_config(schedule={"hour": 10, "minute": 0}, enabled=True)
         registry.save_task("move_task", config)
         assert "move_task" in registry.get_due_tasks(10, 0)
 
@@ -373,7 +367,9 @@ class TestTaskExecutionWithVariableResolution:
         mock_handle.rejected_reason = None
         mock_orchestrator.submit.return_value = mock_handle
 
-        executor = _make_executor(registry=registry, login_orchestrator=mock_orchestrator)
+        executor = _make_executor(
+            registry=registry, login_orchestrator=mock_orchestrator
+        )
 
         success, message = executor._execute_browser("test_task", 30)
 

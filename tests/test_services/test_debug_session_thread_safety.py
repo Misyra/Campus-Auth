@@ -68,5 +68,5 @@ class TestNextDebugGenThreadSafety:
         sorted_values = sorted(results)
         for i in range(1, len(sorted_values)):
             assert sorted_values[i] == sorted_values[i - 1] + 1, (
-                f"值不连续: {sorted_values[i-1]} -> {sorted_values[i]}"
+                f"值不连续: {sorted_values[i - 1]} -> {sorted_values[i]}"
             )
