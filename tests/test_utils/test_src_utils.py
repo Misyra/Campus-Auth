@@ -1251,27 +1251,33 @@ class TestHandleLowResourceRequest:
         await worker._handle_low_resource_request(mock_route)
 
 
-# ── PlaywrightWorker._wake_async ──
+# ── PlaywrightWorker._cmd_queue 类型 ──
 
 
-class TestWakeAsync:
-    """唤醒事件循环。"""
+class TestCmdQueueType:
+    """_cmd_queue 应为 asyncio.Queue。"""
 
-    @pytest.mark.asyncio
-    async def test_sets_wake_event(self):
-        """设置 _wake_event。"""
+    def test_cmd_queue_is_asyncio_queue(self):
+        """_cmd_queue 应为 asyncio.Queue 实例。"""
+        import asyncio
+
         worker = PlaywrightWorker()
-        event = MagicMock()
-        worker._wake_event = event
-        await worker._wake_async()
-        event.set.assert_called_once()
+        assert isinstance(worker._cmd_queue, asyncio.Queue)
 
-    @pytest.mark.asyncio
-    async def test_no_wake_event(self):
-        """无 _wake_event 时不报错。"""
+    def test_cmd_queue_maxsize_50(self):
+        """队列容量 50。"""
         worker = PlaywrightWorker()
-        worker._wake_event = None
-        await worker._wake_async()  # 不应抛异常
+        assert worker._cmd_queue.maxsize == 50
+
+    def test_no_wake_event_attribute(self):
+        """_wake_event 字段应已移除。"""
+        worker = PlaywrightWorker()
+        assert not hasattr(worker, "_wake_event")
+
+    def test_no_wake_async_method(self):
+        """_wake_async 方法应已移除。"""
+        worker = PlaywrightWorker()
+        assert not hasattr(worker, "_wake_async")
 
 
 # ── PlaywrightWorker 属性访问 ──
@@ -1416,13 +1422,34 @@ class TestSubmitQueueFull:
     """submit 队列满时的行为。"""
 
     def test_queue_full_returns_error(self):
-        """队列满时返回错误。"""
+        """队列满时返回错误（put_nowait 直接调用，异常立即捕获）。"""
+        import asyncio
+
         worker = PlaywrightWorker()
         worker._consumer_thread = MagicMock()
         worker._consumer_thread.is_alive.return_value = True
         worker._stop_event.clear()
+        worker._loop = MagicMock()
+        worker._loop.is_running.return_value = True
 
-        with patch.object(worker._cmd_queue, "put", side_effect=__import__("queue").Full):
+        # put_nowait 直接在调用线程执行，QueueFull 被 try/except 捕获
+        with patch.object(worker._cmd_queue, "put_nowait", side_effect=asyncio.QueueFull):
+            result = worker.submit("test_cmd", wait=False)
+        assert result.success is False
+        assert "队列已满" in result.error
+
+    def test_queue_full_when_loop_none(self):
+        """loop 为 None 时队列满仍返回错误。"""
+        import asyncio
+
+        worker = PlaywrightWorker()
+        worker._consumer_thread = MagicMock()
+        worker._consumer_thread.is_alive.return_value = True
+        worker._stop_event.clear()
+        worker._loop = None
+
+        # loop 为 None → submit() 直接用 put_nowait
+        with patch.object(worker._cmd_queue, "put_nowait", side_effect=asyncio.QueueFull):
             result = worker.submit("test_cmd", wait=False)
         assert result.success is False
         assert "队列已满" in result.error
@@ -1447,7 +1474,7 @@ class TestSubmitTimeout:
             nonlocal cmd
             cmd = cmd_obj
 
-        with patch.object(worker._cmd_queue, "put"):
+        with patch.object(worker._cmd_queue, "put_nowait"):
             with patch.object(worker, "_loop", None):
                 result = worker.submit("test_cmd", wait=True, timeout=0.01)
 
@@ -1468,13 +1495,13 @@ class TestSubmitResponseData:
         worker._consumer_thread.is_alive.return_value = True
         worker._stop_event.clear()
 
-        # 模拟 put 后直接设置 response_data
-        def fake_put(cmd, timeout=None):
+        # 模拟 put_nowait 后直接设置 response_data
+        def fake_put_nowait(cmd):
             cmd.response_data = WorkerResponse(success=True, data="result")
             if cmd.response_event:
                 cmd.response_event.set()
 
-        with patch.object(worker._cmd_queue, "put", side_effect=fake_put):
+        with patch.object(worker._cmd_queue, "put_nowait", side_effect=fake_put_nowait):
             with patch.object(worker, "_loop", None):
                 result = worker.submit("test_cmd", wait=True)
 
@@ -1488,12 +1515,12 @@ class TestSubmitResponseData:
         worker._consumer_thread.is_alive.return_value = True
         worker._stop_event.clear()
 
-        def fake_put(cmd, timeout=None):
+        def fake_put_nowait(cmd):
             cmd.response_data = "plain_value"
             if cmd.response_event:
                 cmd.response_event.set()
 
-        with patch.object(worker._cmd_queue, "put", side_effect=fake_put):
+        with patch.object(worker._cmd_queue, "put_nowait", side_effect=fake_put_nowait):
             with patch.object(worker, "_loop", None):
                 result = worker.submit("test_cmd", wait=True)
 

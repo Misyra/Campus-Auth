@@ -4,12 +4,12 @@
   PlaywrightWorker 采用与 MonitorService 相同的 Actor 模型:
     - 外部调用者通过 submit() 提交 WorkerCommand 到内部队列
     - 常驻守护线程运行独立 asyncio 事件循环
-    - _async_run() 协程轮询队列并派发命令
+    - _async_run() 协程从队列取命令并派发
     - 所有 Playwright 操作限制在 Worker 线程内执行，避免跨线程竞争
 
 命令派发流程:
-  submit() → queue.put(cmd) → run_coroutine_threadsafe(_wake_async())
-  → _async_run() 被唤醒 → get_nowait() 取出命令 → _dispatch() → handler
+  submit() → asyncio.Queue.put_nowait(cmd) → await get() 唤醒
+  → _async_run() 取出命令 → _dispatch() → handler
 
 NOT-TO-DO: 不要拆分此文件。Worker 是浏览器自动化核心，生命周期紧密
 （启动、命令分发、清理），拆分收益不大反而增加复杂度。
@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import queue
 import threading
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -31,7 +30,6 @@ if TYPE_CHECKING:
 from app.constants import (
     BROWSER_DATA_DIR,
     WORKER_JOIN_TIMEOUT,
-    WORKER_QUEUE_PUT_TIMEOUT,
     WORKER_READY_TIMEOUT,
     WORKER_SUBMIT_TIMEOUT,
 )
@@ -96,7 +94,7 @@ class PlaywrightWorker:
     """
 
     def __init__(self) -> None:
-        self._cmd_queue: queue.Queue[WorkerCommand] = queue.Queue(maxsize=50)
+        self._cmd_queue: asyncio.Queue[WorkerCommand] = asyncio.Queue(maxsize=50)
         self._stop_event = threading.Event()
         self._shutdown_permanent = (
             threading.Event()
@@ -117,8 +115,6 @@ class PlaywrightWorker:
         )
         self._last_browser_settings: dict | None = None  # 缓存最近一次浏览器设置
 
-        # _wake_event 用于立即唤醒 _async_run 协程处理新命令
-        self._wake_event: asyncio.Event | None = None
 
     # ── 只读属性（供同线程调用者访问，如 BrowserContextManager）──
 
@@ -189,19 +185,19 @@ class PlaywrightWorker:
         self._shutdown_permanent.set()
 
         # 放入 SHUTDOWN 命令确保事件循环能正常退出
+        loop = self._loop
         try:
             self._cmd_queue.put_nowait(WorkerCommand(type=CMD_SHUTDOWN))
-        except queue.Full:
+        except asyncio.QueueFull:
             logger.warning("Worker 命令队列已满，强制停止事件循环")
-            if self._loop is not None and self._loop.is_running():
-                self._loop.call_soon_threadsafe(self._loop.stop)
+            if loop is not None and loop.is_running():
+                with contextlib.suppress(RuntimeError):
+                    loop.call_soon_threadsafe(loop.stop)
 
-        # 通过 run_coroutine_threadsafe 唤醒 Worker 的事件循环
-        # 这是唯一允许的跨线程 asyncio 调用
-        loop = self._loop
-        if loop is not None:
+        # 唤醒事件循环（可能阻塞在 selector.select()）
+        if loop is not None and loop.is_running():
             with contextlib.suppress(RuntimeError):
-                asyncio.run_coroutine_threadsafe(self._wake_async(), loop)
+                loop.call_soon_threadsafe(lambda: None)
 
         # 等待消费者线程正常退出
         if self._consumer_thread:
@@ -218,7 +214,7 @@ class PlaywrightWorker:
         while True:
             try:
                 pending = self._cmd_queue.get_nowait()
-            except queue.Empty:
+            except asyncio.QueueEmpty:
                 break
             if pending.response_event is not None:
                 pending.response_data = WorkerResponse(
@@ -239,8 +235,8 @@ class PlaywrightWorker:
     ) -> WorkerResponse:
         """提交命令到 Worker 队列。
 
-        创建 WorkerCommand 放入内部队列，通过 run_coroutine_threadsafe
-        唤醒 Worker 的事件循环。若 wait=True 则阻塞等待命令执行完成。
+        创建 WorkerCommand 放入内部 asyncio.Queue。
+        若 wait=True 则阻塞等待命令执行完成。
 
         参数:
             cmd_type: 命令类型（CMD_* 常量）
@@ -278,17 +274,16 @@ class PlaywrightWorker:
             data=data or {},
             response_event=threading.Event() if wait else None,
         )
+        loop = self._loop
         try:
-            self._cmd_queue.put(cmd, timeout=WORKER_QUEUE_PUT_TIMEOUT)
-        except queue.Full:
+            self._cmd_queue.put_nowait(cmd)
+        except asyncio.QueueFull:
             return WorkerResponse(success=False, error="命令队列已满，提交超时")
 
-        # 通过 run_coroutine_threadsafe 唤醒 Worker 的事件循环，
-        # 使 _async_run 立即处理新放入的命令
-        loop = self._loop
-        if loop is not None:
+        # 唤醒事件循环（可能阻塞在 selector.select()）
+        if loop is not None and loop.is_running():
             with contextlib.suppress(RuntimeError):
-                asyncio.run_coroutine_threadsafe(self._wake_async(), loop)
+                loop.call_soon_threadsafe(lambda: None)
 
         if not wait:
             return WorkerResponse(success=True)
@@ -336,39 +331,22 @@ class PlaywrightWorker:
             logger.info("Worker 事件循环已关闭")
 
     async def _async_run(self) -> None:
-        """异步主循环 — 从队列获取命令并派发。
+        """异步主循环 — 从 asyncio.Queue 获取命令并派发。
 
-        使用 asyncio.Event 实现高效唤醒:
-        - 空闲时 await wake_event.wait() 等待信号
-        - submit() 通过 run_coroutine_threadsafe 设置 wake_event
-        - 同时使用 0.5s 超时兜底，防止漏掉信号
-        - 收到 CMD_SHUTDOWN 后退出循环，触发事件循环停止
+        使用 asyncio.Queue.get() 原生阻塞，零延迟、零轮询。
+        外部 submit()/stop() 通过 put_nowait(cmd) 直接入队，asyncio.Queue.get() 自动唤醒。
+        收到 CMD_SHUTDOWN 后退出循环，触发事件循环停止。
         """
-        wake_event = asyncio.Event()
-        self._wake_event = wake_event
-
         try:
             while not self._stop_event.is_set():
-                wake_event.clear()
+                cmd = await self._cmd_queue.get()
+                await self._dispatch(cmd)
+                self._cmd_queue.task_done()
 
-                # 排干队列中所有待处理命令
-                while True:
-                    try:
-                        cmd = self._cmd_queue.get_nowait()
-                    except queue.Empty:
-                        break
-
-                    await self._dispatch(cmd)
-                    self._cmd_queue.task_done()
-
-                    # SHUTDOWN 命令：退出主循环
-                    if cmd.type == CMD_SHUTDOWN:
-                        logger.debug("Worker 收到关闭命令，退出主循环")
-                        return
-
-                # 等待唤醒信号或超时
-                with contextlib.suppress(TimeoutError):
-                    await asyncio.wait_for(wake_event.wait(), timeout=0.5)
+                # SHUTDOWN 命令：退出主循环
+                if cmd.type == CMD_SHUTDOWN:
+                    logger.debug("Worker 收到关闭命令，退出主循环")
+                    return
         finally:
             # 停止事件循环，使 _worker_entry() 中的 run_forever() 返回
             if self._loop and not self._loop.is_closed():
@@ -1053,15 +1031,6 @@ class PlaywrightWorker:
         await self._cleanup_browser(graceful=False)
 
     # ── 辅助方法 ──
-
-    async def _wake_async(self) -> None:
-        """唤醒事件循环。
-
-        通过 run_coroutine_threadsafe 在 Worker 的事件循环上调度此协程，
-        设置 _wake_event 使 _async_run 立即处理队列中的命令。
-        """
-        if self._wake_event is not None:
-            self._wake_event.set()
 
     def _get_extra_http_headers(self, browser_settings: dict) -> dict[str, str]:
         """解析自定义 HTTP 请求头。
