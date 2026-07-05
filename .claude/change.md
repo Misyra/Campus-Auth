@@ -2,6 +2,15 @@
 
 ## 2026-07-05
 
+### refactor(orchestrator): 移除 LoginOrchestrator 自建 fallback pool 死代码
+
+- `app/services/login_orchestrator.py`：executor 改为必传（body 校验），删除 pool 参数与 set_executor 方法，shutdown 不再关闭外部 executor
+- `app/services/task_executor.py`：login_orchestrator 改可选 + 新增 bind_login_orchestrator 延迟绑定，login_executor queue_size 从 1 调为 2
+- `app/container.py`：调整创建顺序 TaskExecutor → LoginOrchestrator → bind，删除 set_executor 调用
+- `app/services/login_runner.py`：login_once 路径显式创建一次性 ThreadPoolExecutor
+- `tests/test_services/test_login_orchestrator.py`：删除 TestSetExecutor，新增 TestExecutorRequired（5 测试）+ _make_mock_executor 辅助，10 处调用点适配
+- `tests/test_integration/conftest.py`：integration_stack fixture 调整创建顺序
+
 ### refactor: 简化启动逻辑，配置驱动运行模式
 
 **核心变更**：自启动脚本不再硬编码运行模式，改为由配置文件统一驱动。CLI 参数覆盖配置，不加参数时读取配置。
