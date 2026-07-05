@@ -853,7 +853,7 @@ class ScheduleEngine:
     def get_config(self) -> RuntimeConfig:
         return self._runtime_config
 
-    def _swap_runtime_config(self, new: RuntimeConfig) -> None:
+    def _swap_runtime_config(self, new: RuntimeConfig, *, pure_mode: bool | None = None) -> None:
         """原子替换运行时配置（线程安全）。
 
         所有 _runtime_config 写入必须经此方法，在 _reload_lock 保护下
@@ -861,6 +861,8 @@ class ScheduleEngine:
         """
         with self._reload_lock:
             self._runtime_config = new
+            if pure_mode is not None:
+                self._pure_mode = pure_mode
 
     def update_log_level(self, level: str) -> None:
         """更新运行时日志级别（线程安全，供 API 层调用）。
@@ -891,9 +893,7 @@ class ScheduleEngine:
             logger.warning("配置重载失败", exc_info=True)
             return False
         # 持锁原子替换
-        with self._reload_lock:
-            self._runtime_config = new_config
-            self._pure_mode = pure_mode
+        self._swap_runtime_config(new_config, pure_mode=pure_mode)
         return True
 
     def reload_config(self) -> tuple[bool, str]:
@@ -1088,6 +1088,7 @@ class ScheduleEngine:
         with self._reload_lock:
             new_value = not self._pure_mode
             self._pure_mode = new_value
+            base_config = self._runtime_config
         # 磁盘持久化（profile_service 内部有自己的锁，无需 _reload_lock 保护）
         self._profile_service.update(
             lambda d: setattr(
@@ -1098,8 +1099,8 @@ class ScheduleEngine:
             )
         )
         # 原子替换运行时配置
-        new_config = self._runtime_config.model_copy(
-            update={"browser": self._runtime_config.browser.model_copy(update={"pure_mode": new_value})}
+        new_config = base_config.model_copy(
+            update={"browser": base_config.browser.model_copy(update={"pure_mode": new_value})}
         )
         self._swap_runtime_config(new_config)
         return new_value

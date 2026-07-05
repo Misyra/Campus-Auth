@@ -2,6 +2,13 @@
 
 ## 2026-07-05
 
+### fix(engine): 修复 _reload_config_internal 裸写和 toggle_pure_mode TOCTOU
+
+- `app/services/engine.py`：
+  - `_swap_runtime_config` 新增可选 `pure_mode` 参数，支持在原子替换配置的同时更新 `_pure_mode`
+  - `_reload_config_internal` 改为调用 `_swap_runtime_config(new_config, pure_mode=pure_mode)`，消除裸写 `self._runtime_config = new_config`
+  - `toggle_pure_mode` 在同一把锁内读取 `self._runtime_config`（保存为 `base_config`），消除 TOCTOU 竞态
+
 ### refactor(engine): 收敛 _runtime_config 写路径到 _swap_runtime_config
 
 - `app/services/engine.py`：新增 `_swap_runtime_config`（单一写入口，`_reload_lock` 下原子替换）和 `update_log_level` 公共方法；重写 `_reload_config_internal`（磁盘 IO 移出锁外，B5）；`toggle_pure_mode` 改用 `_swap` 替换运行时配置
