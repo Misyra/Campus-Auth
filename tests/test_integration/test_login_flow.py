@@ -70,14 +70,12 @@ def _make_raw_engine() -> ScheduleEngine:
     # LoginBridge — 登录委托
     from app.services.engine import LoginBridge
 
-    _wakeup_placeholder = threading.Event()
     svc._login_bridge = LoginBridge(
         get_orchestrator=lambda: svc._orchestrator,
         get_runtime_config=lambda: svc._runtime_config,
         retry_policy=svc._retry_policy,
         status_update_callback=svc._update_status_snapshot,
         logger=svc._logger,
-        wakeup_event=_wakeup_placeholder,
         get_monitor_check_interval=lambda: svc._monitor_check_interval,
     )
     svc._retry_time_lock = threading.Lock()
