@@ -112,27 +112,21 @@ class TestSetLogLevel:
     """测试 PUT /api/config/log-level 端点。"""
 
     @patch("app.utils.logging.LogConfigCenter")
-    def test_set_log_level_syncs_runtime_config(self, mock_log_center_cls, api_client):
-        """设置日志级别后应同步更新 engine._runtime_config。"""
+    def test_set_log_level_calls_update_log_level(self, mock_log_center_cls, api_client):
+        """设置日志级别后应调用 engine.update_log_level()。"""
         test_client, mock_services = api_client
 
-        # 模拟 LogConfigCenter
+        # 模拟 LogConfigCenter：set_level 后 get_config 返回新级别
         mock_center = MagicMock()
-        mock_center.get_config.return_value = {"level": "INFO"}
+        mock_center.get_config.return_value = {"level": "DEBUG"}
         mock_log_center_cls.get_instance.return_value = mock_center
-
-        # 模拟 engine._runtime_config 为 frozen RuntimeConfig
-        mock_engine = MagicMock()
-        initial_config = RuntimeConfig(logging=LoggingSettings(level="INFO"))
-        mock_engine._runtime_config = initial_config
-        mock_services.engine = mock_engine
 
         resp = test_client.put("/api/config/log-level", json={"level": "DEBUG"})
         assert resp.status_code == 200
         assert resp.json()["success"] is True
 
-        # 验证 engine._runtime_config 被重新赋值（frozen 模型只能整体替换）
-        assert mock_engine._runtime_config is not initial_config
+        # 验证 engine.update_log_level 被调用（替代裸改 _runtime_config）
+        mock_services.engine.update_log_level.assert_called_once_with("DEBUG")
 
     @patch("app.utils.logging.LogConfigCenter")
     def test_set_log_level_invalid_level_rejected(self, mock_log_center_cls, api_client):
