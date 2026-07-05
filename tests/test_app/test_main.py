@@ -1082,7 +1082,7 @@ class TestBuildAppConfigExceptionLogging:
         mock_logger = MagicMock()
         with (
             patch(
-                "app.services.profile_service.ProfileService",
+                "app.services.profile_service.get_profile_service",
                 side_effect=RuntimeError("test error"),
             ),
             patch(

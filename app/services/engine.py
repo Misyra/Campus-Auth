@@ -628,10 +628,18 @@ class ScheduleEngine:
         if pure_mode:
             # frozen model: create new browser copy with pure_mode=True
             config = config.model_copy(update={"browser": config.browser.model_copy(update={"pure_mode": True})})
+        # pure_mode 影响 browser 配置，需临时覆盖 getter
+        if pure_mode:
+            _pure_config = config
+
+            def get_config() -> RuntimeConfig:
+                return _pure_config
+        else:
+            get_config = self.get_runtime_config
 
         try:
             core = NetworkMonitorCore(
-                config=config,
+                get_config=get_config,
                 logger=self._logger,
                 login_history=self._login_history,
             )
@@ -702,10 +710,12 @@ class ScheduleEngine:
         return ok, msg
 
     def _handle_reload(self, cmd: EngineCommand) -> None:
-        """重载配置并重启监控（仅在引擎线程中调用）。"""
-        was_monitoring = self._is_monitoring
+        """重载配置（仅在引擎线程中调用）。
 
-        # 先加载新配置（不修改当前运行状态）
+        B2 优化：不再 stop+start 重建 core。_swap_runtime_config 后
+        NetworkMonitorCore 通过 getter 自动看到新配置。
+        仅当 bind_interface_name 变化时才重建 SOCKS5 Forwarder。
+        """
         if not self._reload_config_internal():
             logger.warning("配置重载失败，继续使用当前配置")
             cmd.response_data = (False, "配置重载失败")
@@ -713,36 +723,24 @@ class ScheduleEngine:
                 cmd.response_event.set()
             return
 
-        # 仅当重载成功且之前处于监控状态时，才执行 stop/start
-        if was_monitoring:
-            self._handle_stop()
-            result = self._handle_start(EngineCommand(type=EngineCmdType.START))
-            if result == StartResult.INVALID_CONFIG:
-                self._logger.warning("配置重载后监控重启失败：配置无效")
-                cmd.response_data = (False, "配置重载成功但监控重启失败：配置无效")
-                if cmd.response_event:
-                    cmd.response_event.set()
-                return
-            elif result == StartResult.START_FAILED:
-                self._logger.warning("配置重载后监控重启失败")
-                cmd.response_data = (False, "配置重载成功但监控重启失败")
-                if cmd.response_event:
-                    cmd.response_event.set()
-                return
+        # 若监控运行中且 bind_interface_name 变化，重建 core 的 bind proxy
+        core = self._monitor_core
+        if core is not None and core.monitoring and core._needs_bind_proxy_rebuild():
+            self._logger.info("网卡绑定配置变化，重建 SOCKS5 Forwarder")
+            core.stop_monitoring()
+            core.init_monitoring()  # 重新 _start_bind_proxy
+
         logger.info("配置已重载")
         cmd.response_data = (True, "配置重载成功")
         if cmd.response_event:
             cmd.response_event.set()
 
     def _handle_apply_profile(self, cmd: EngineCommand) -> None:
-        """切换方案并重启监控（仅在引擎线程中调用）。
+        """切换方案（仅在引擎线程中调用）。
 
-        内部自动设置活跃方案，调用方无需先调 set_active_profile。
+        B2 优化：不再 stop+start 重建 core。
         """
         profile_id = cmd.data.get("profile_id", "")
-        was_monitoring = self._is_monitoring
-
-        # 内部设置活跃方案，不再依赖调用方
         ok, msg = self._profile_service.set_active_profile(profile_id)
         if not ok:
             cmd.response_data = (False, msg)
@@ -750,7 +748,6 @@ class ScheduleEngine:
                 cmd.response_event.set()
             return
 
-        # 加载新配置
         if not self._reload_config_internal():
             logger.warning("配置重载失败，继续使用当前配置")
             cmd.response_data = (False, "方案切换失败")
@@ -758,28 +755,18 @@ class ScheduleEngine:
                 cmd.response_event.set()
             return
 
-        # 直接用 profile_id 记录日志，避免重复 load
         new_url = self._runtime_config.credentials.auth_url
         new_user = self._runtime_config.credentials.username
         self._logger.info("切换方案: {}", profile_id)
         logger.debug("方案详情: 认证={}, 用户={}", new_url, new_user[:3] + "***" if new_user else "")
 
-        if was_monitoring:
-            self._handle_stop()
-            result = self._handle_start(EngineCommand(type=EngineCmdType.START))
-            if result == StartResult.INVALID_CONFIG:
-                self._logger.warning("方案切换后监控重启失败：配置无效")
-                cmd.response_data = (False, "方案切换成功但监控重启失败：配置无效")
-                if cmd.response_event:
-                    cmd.response_event.set()
-                return
-            elif result == StartResult.START_FAILED:
-                self._logger.warning("方案切换后监控重启失败")
-                cmd.response_data = (False, "方案切换成功但监控重启失败")
-                if cmd.response_event:
-                    cmd.response_event.set()
-                return
-            self._logger.debug("监控正在按新方案重启")
+        # 若监控运行中且 bind_interface_name 变化，重建 core 的 bind proxy
+        core = self._monitor_core
+        if core is not None and core.monitoring and core._needs_bind_proxy_rebuild():
+            self._logger.info("方案切换导致网卡绑定变化，重建 SOCKS5 Forwarder")
+            core.stop_monitoring()
+            core.init_monitoring()
+
         cmd.response_data = (True, "方案切换成功")
         if cmd.response_event:
             cmd.response_event.set()

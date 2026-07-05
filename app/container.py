@@ -10,7 +10,7 @@ from pathlib import Path
 from app.services.autostart import AutoStartService
 from app.services.engine import ScheduleEngine
 from app.services.login_history_service import LoginHistoryService
-from app.services.profile_service import ProfileService
+from app.services.profile_service import get_profile_service
 from app.services.task_executor import TaskExecutor
 from app.services.task_registry import TaskHistoryStore, TaskRegistry
 from app.services.websocket_manager import WebSocketManager
@@ -29,7 +29,7 @@ class ServiceContainer:
 
         # 基础服务
         self.ws_manager = WebSocketManager()
-        self.profile_service = ProfileService(project_root)
+        self.profile_service = get_profile_service(project_root)
         from app.constants import AUTH_DATA_DIR
 
         self.login_history_service = LoginHistoryService(AUTH_DATA_DIR)

@@ -334,7 +334,7 @@ class TestHandleStart:
 
     @patch("app.services.engine.NetworkMonitorCore")
     def test_handle_start_pure_mode(self, mock_core_cls, engine_factory):
-        """纯净模式标志传递给 config。"""
+        """纯净模式标志通过 getter 传递。"""
         svc = engine_factory(raw=True)
         svc._profile_service = MagicMock()
         svc._runtime_config = RuntimeConfig(
@@ -347,8 +347,8 @@ class TestHandleStart:
         mock_core_cls.return_value = mock_core
         cmd = EngineCommand(type=EngineCmdType.START, data={})
         svc._handle_start(cmd)
-        call_config = mock_core_cls.call_args[1]["config"]
-        assert call_config.browser.pure_mode is True
+        get_config = mock_core_cls.call_args[1]["get_config"]
+        assert get_config().browser.pure_mode is True
 
 
 # =====================================================================
@@ -510,18 +510,20 @@ class TestHandleReload:
         svc._handle_start.assert_not_called()
 
     def test_handle_reload_monitoring(self, engine_factory):
+        """B2: 重载成功且监控运行中，bind 未变时不 stop+start。"""
         svc = engine_factory(raw=True)
         mock_core = MagicMock()
         mock_core.monitoring = True
+        mock_core._needs_bind_proxy_rebuild.return_value = False
         svc._monitor_core = mock_core
-        svc._reload_config_internal = MagicMock()
+        svc._reload_config_internal = MagicMock(return_value=True)
         svc._handle_stop = MagicMock()
         svc._handle_start = MagicMock()
         cmd = EngineCommand(type=EngineCmdType.RELOAD)
         svc._handle_reload(cmd)
-        svc._handle_stop.assert_called_once()
         svc._reload_config_internal.assert_called_once()
-        svc._handle_start.assert_called_once()
+        svc._handle_stop.assert_not_called()
+        svc._handle_start.assert_not_called()
 
     def test_reload_failure_keeps_monitoring(self, engine_factory):
         """重载失败时不应调用 _handle_stop，监控应继续运行。"""
@@ -538,20 +540,19 @@ class TestHandleReload:
         svc._handle_stop.assert_not_called()
         svc._handle_start.assert_not_called()
 
-    def test_reload_success_restarts_monitoring(self, engine_factory):
-        """重载成功且之前在监控时，应调用 stop + start。"""
+    def test_reload_bind_change_rebuilds_proxy(self, engine_factory):
+        """B2: bind_interface_name 变化时重建 SOCKS5 Forwarder。"""
         svc = engine_factory(raw=True)
         mock_core = MagicMock()
         mock_core.monitoring = True
+        mock_core._needs_bind_proxy_rebuild.return_value = True
         svc._monitor_core = mock_core
         svc._reload_config_internal = MagicMock(return_value=True)
-        svc._handle_stop = MagicMock()
-        svc._handle_start = MagicMock()
         cmd = EngineCommand(type=EngineCmdType.RELOAD)
         svc._handle_reload(cmd)
         svc._reload_config_internal.assert_called_once()
-        svc._handle_stop.assert_called_once()
-        svc._handle_start.assert_called_once()
+        mock_core.stop_monitoring.assert_called_once()
+        mock_core.init_monitoring.assert_called_once()
 
 
 # =====================================================================
@@ -573,9 +574,11 @@ class TestHandleApplyProfile:
         svc._reload_config_internal.assert_called_once()
 
     def test_handle_apply_profile_monitoring(self, engine_factory):
+        """B2: 切换方案时 bind 未变不 stop+start。"""
         svc = engine_factory(raw=True)
         mock_core = MagicMock()
         mock_core.monitoring = True
+        mock_core._needs_bind_proxy_rebuild.return_value = False
         svc._monitor_core = mock_core
         svc._runtime_config = RuntimeConfig(
             credentials=LoginCredentials(auth_url="http://test.com", username="u"),
@@ -587,9 +590,28 @@ class TestHandleApplyProfile:
             type=EngineCmdType.APPLY_PROFILE, data={"profile_id": "p1"}
         )
         svc._handle_apply_profile(cmd)
-        svc._handle_stop.assert_called_once()
+        svc._handle_stop.assert_not_called()
         svc._reload_config_internal.assert_called_once()
-        svc._handle_start.assert_called_once()
+        svc._handle_start.assert_not_called()
+
+    def test_apply_profile_bind_change_rebuilds(self, engine_factory):
+        """B2: 方案切换导致 bind 变化时重建 SOCKS5 Forwarder。"""
+        svc = engine_factory(raw=True)
+        mock_core = MagicMock()
+        mock_core.monitoring = True
+        mock_core._needs_bind_proxy_rebuild.return_value = True
+        svc._monitor_core = mock_core
+        svc._runtime_config = RuntimeConfig(
+            credentials=LoginCredentials(auth_url="http://test.com", username="u"),
+        )
+        svc._reload_config_internal = MagicMock()
+        cmd = EngineCommand(
+            type=EngineCmdType.APPLY_PROFILE, data={"profile_id": "p1"}
+        )
+        svc._handle_apply_profile(cmd)
+        svc._reload_config_internal.assert_called_once()
+        mock_core.stop_monitoring.assert_called_once()
+        mock_core.init_monitoring.assert_called_once()
 
 
 # =====================================================================

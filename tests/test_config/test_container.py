@@ -34,7 +34,7 @@ def mock_classes():
     """返回所有被 patch 的服务类 mock。"""
     with (
         patch("app.container.WebSocketManager") as mock_ws_cls,
-        patch("app.container.ProfileService") as mock_profile_cls,
+        patch("app.container.get_profile_service") as mock_profile_cls,
         patch("app.container.LoginHistoryService") as mock_lh_cls,
         patch("app.container.ScheduleEngine") as mock_engine_cls,
         patch("app.container.TaskManager") as mock_task_cls,

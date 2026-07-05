@@ -32,6 +32,9 @@ class ProfileService:
         self._config_dir = project_root / "config"
         self._settings_path = self._config_dir / "settings.json"
         self._lock = threading.Lock()
+        # 内存缓存 + mtime 失效
+        self._cache: ProfilesData | None = None
+        self._cache_mtime: float | None = None
 
     def _ensure_dirs(self) -> None:
         """确保 config/ 目录存在"""
@@ -40,19 +43,29 @@ class ProfileService:
     def _load_unsafe(self) -> ProfilesData:
         """加载配置（不加锁，由调用者持有锁）。
 
-        不缓存配置：
-        1. settings.json 很小（<10KB），每次读盘开销可忽略
-        2. 多实例场景下缓存一致性成本高于收益
+        使用 mtime 失效的内存缓存：
+        - 首次 load 或 mtime 变化时读盘
+        - 后续 load 返回缓存引用
+        - update/save 写盘后刷新缓存
         """
         self._ensure_dirs()
 
         if not self._settings_path.exists():
+            self._cache = None
+            self._cache_mtime = None
             return ProfilesData()
+
+        # mtime 检查
+        current_mtime = self._settings_path.stat().st_mtime
+        if self._cache is not None and self._cache_mtime == current_mtime:
+            return self._cache
 
         try:
             raw = self._settings_path.read_text(encoding="utf-8")
-            data = json.loads(raw)
-            return ProfilesData.model_validate(data)
+            data = ProfilesData.model_validate(json.loads(raw))
+            self._cache = data
+            self._cache_mtime = current_mtime
+            return data
         except Exception:
             profile_logger.warning("加载配置文件失败", exc_info=True)
             corrupt_name = f"settings.corrupt.{int(time.time())}.json"
@@ -62,13 +75,18 @@ class ProfileService:
                 profile_logger.info("备份损坏文件成功: {}", corrupt_path)
             except (FileNotFoundError, OSError):
                 pass
+            self._cache = None
+            self._cache_mtime = None
             return ProfilesData()
 
     def _save_unsafe(self, data: ProfilesData) -> None:
-        """原子写入配置（不加锁，由调用者持有锁）"""
+        """原子写入配置并刷新缓存（不加锁，由调用者持有锁）"""
         self._ensure_dirs()
         settings_content = data.model_dump_json(indent=2)
         atomic_write(self._settings_path, settings_content)
+        # 刷新缓存（保存后 mtime 已变，直接更新缓存避免下次 load 读盘）
+        self._cache = data
+        self._cache_mtime = self._settings_path.stat().st_mtime
 
     def load(self) -> ProfilesData:
         """加载配置，不存在则返回空结构"""
@@ -80,16 +98,22 @@ class ProfileService:
         with self._lock:
             self._save_unsafe(data)
 
-    def update(self, func: Callable[[ProfilesData], None]) -> None:
-        """原子化读-改-写操作。
+    def update(self, func: Callable[[ProfilesData], ProfilesData | None]) -> None:
+        """原子化读-改-写操作（不可变版本）。
 
         持锁执行 load → func(data) → save，确保并发安全。
-        func 在锁内调用，应快速返回，不要做 I/O 或网络操作。
+        func 接收当前 ProfilesData，返回新的 ProfilesData（frozen 不可变）。
+        func 应快速返回，不要做 I/O 或网络操作。
+
+        兼容旧签名：若 func 返回 None（原地修改风格），回退到旧逻辑
+        （仅用于过渡期，新代码应返回新对象）。
         """
         with self._lock:
             data = self._load_unsafe()
-            func(data)
-            self._save_unsafe(data)
+            new_data = func(data)
+            if new_data is None:
+                new_data = data
+            self._save_unsafe(new_data)
 
     def get_active_profile(self) -> Profile:
         """获取当前活动方案的设置（返回值由 load() 深拷贝保护，无需再次拷贝）"""
@@ -117,14 +141,12 @@ class ProfileService:
                 return False, f"方案 '{profile_id}' 不存在"
 
             profile_name = data.profiles[profile_id].name
-            data.active_profile = profile_id
-            self._save_unsafe(data)
+            new_data = data.model_copy(update={"active_profile": profile_id})
+            self._save_unsafe(new_data)
         profile_logger.info("切换活动方案 {} 成功", profile_id)
         return True, f"已切换到方案: {profile_name}"
 
-    def save_profile(
-        self, profile_id: str, settings: Profile
-    ) -> tuple[bool, str]:
+    def save_profile(self, profile_id: str, settings: Profile) -> tuple[bool, str]:
         """创建或更新一个方案"""
         if not profile_id or not profile_id.strip():
             return False, "方案 ID 不能为空"
@@ -139,21 +161,23 @@ class ProfileService:
 
             # 处理密码字段：None 表示不修改，保留原值
             if settings.password is None:
-                settings.password = existing.password if existing else ""
+                new_password = existing.password if existing else ""
             else:
-                settings.password = save_password_field(
+                new_password = save_password_field(
                     settings.password,
                     existing.password if existing else "",
                 )
+            new_settings = settings.model_copy(update={"password": new_password})
 
-            data.profiles[profile_id] = settings
+            new_profiles = {**data.profiles, profile_id: new_settings}
+            update: dict = {"profiles": new_profiles}
+            if len(new_profiles) == 1:
+                update["active_profile"] = profile_id
+            new_data = data.model_copy(update=update)
 
-            if len(data.profiles) == 1:
-                data.active_profile = profile_id
-
-            self._save_unsafe(data)
-        profile_logger.info("保存方案 {} 成功 ({})", profile_id, settings.name)
-        return True, f"方案 '{settings.name}' 保存成功"
+            self._save_unsafe(new_data)
+        profile_logger.info("保存方案 {} 成功 ({})", profile_id, new_settings.name)
+        return True, f"方案 '{new_settings.name}' 保存成功"
 
     def delete_profile(self, profile_id: str) -> tuple[bool, str]:
         """删除一个方案"""
@@ -168,12 +192,13 @@ class ProfileService:
             if len(data.profiles) <= 1:
                 return False, "至少需要保留一个方案"
 
-            del data.profiles[profile_id]
-
+            new_profiles = {k: v for k, v in data.profiles.items() if k != profile_id}
+            update: dict = {"profiles": new_profiles}
             if data.active_profile == profile_id:
-                data.active_profile = next(iter(data.profiles))
+                update["active_profile"] = next(iter(new_profiles))
 
-            self._save_unsafe(data)
+            new_data = data.model_copy(update=update)
+            self._save_unsafe(new_data)
         profile_logger.info("删除方案 {} 成功", profile_id)
         return True, "方案删除成功"
 
@@ -249,7 +274,9 @@ class ProfileService:
         if profile.password:
             decrypted, err = decrypt_password_field(profile.password)
             if err:
-                profile_logger.warning("密码解密失败: profile_id={}", data.active_profile)
+                profile_logger.warning(
+                    "密码解密失败: profile_id={}", data.active_profile
+                )
             profile = profile.model_copy(update={"password": decrypted or ""})
         return profile
 
@@ -257,26 +284,46 @@ class ProfileService:
         """设置自动切换开关"""
         with self._lock:
             data = self._load_unsafe()
-            data.auto_switch = enabled
-            self._save_unsafe(data)
+            new_data = data.model_copy(update={"auto_switch": enabled})
+            self._save_unsafe(new_data)
         profile_logger.info("自动切换: {}", "开启" if enabled else "关闭")
 
 
-def create_profile_service(project_root: Path | None = None) -> ProfileService:
-    """ProfileService 工厂函数 — 统一各入口点的创建方式。
+# 进程级单例
+_singleton_instance: ProfileService | None = None
+_singleton_lock = threading.Lock()
 
-    每次调用返回新实例（非单例）。project_root 默认使用项目根目录
-    （即 profile_service.py 向上三级: app/services/profile_service.py → 项目根）。
 
-    Args:
-        project_root: 项目根目录。None 时自动推导。
+def get_profile_service(project_root: Path | None = None) -> ProfileService:
+    """获取 ProfileService 单例（进程级）。
 
-    Returns:
-        新创建的 ProfileService 实例。
+    所有调用点共享同一实例，确保锁和缓存一致。
+    project_root 仅首次调用生效（后续忽略）。
     """
-    if project_root is None:
-        project_root = Path(__file__).parent.parent.parent.resolve()
-    return ProfileService(project_root)
+    global _singleton_instance
+    if _singleton_instance is not None:
+        return _singleton_instance
+    with _singleton_lock:
+        if _singleton_instance is None:
+            if project_root is None:
+                project_root = Path(__file__).parent.parent.parent.resolve()
+            _singleton_instance = ProfileService(project_root)
+    return _singleton_instance
+
+
+def create_profile_service(project_root: Path | None = None) -> ProfileService:
+    """兼容别名 — 委托 get_profile_service 单例。
+
+    保留旧函数名避免破坏现有调用点，行为已改为返回单例。
+    """
+    return get_profile_service(project_root)
+
+
+def reset_profile_service_singleton() -> None:
+    """重置单例（仅供测试使用）。"""
+    global _singleton_instance
+    with _singleton_lock:
+        _singleton_instance = None
 
 
 @dataclass
@@ -287,14 +334,12 @@ class SaveResult:
     message: str
 
 
-def _rollback_config(data: ProfilesData, backup_data: ProfilesData) -> None:
-    """回滚配置到备份状态。
+def _rollback_config(data: ProfilesData, backup_data: ProfilesData) -> ProfilesData:
+    """回滚配置到备份状态（不可变版本）。
 
-    使用逐字段赋值而非 __dict__.update，确保 Pydantic 内部状态
-    （如 model_fields_set）保持一致。
+    直接返回 backup_data 的副本（frozen 对象可安全共享，无需 deepcopy）。
     """
-    for field_name in ProfilesData.model_fields:
-        setattr(data, field_name, getattr(backup_data, field_name))
+    return backup_data.model_copy(deep=True)
 
 
 def save_global_and_profile(
@@ -305,16 +350,14 @@ def save_global_and_profile(
     """原子保存全局配置 + 方案凭据。"""
     backup_data = copy.deepcopy(profile_service.load())
 
-    def _apply(data: ProfilesData):
+    def _apply(data: ProfilesData) -> ProfilesData:
         # 1. 更新全局配置
-        logging = payload.logging
-
-        data.global_config = GlobalConfig(
+        new_global = GlobalConfig(
             browser=payload.browser,
             monitor=payload.monitor,
             retry=payload.retry,
             pause=payload.pause,
-            logging=logging,
+            logging=payload.logging,
             app_settings=payload.app_settings,
         )
 
@@ -342,16 +385,25 @@ def save_global_and_profile(
                 existing.password or "",
             )
 
-        # 使用 model_validate 确保验证（model_copy 不触发验证）
-        data.profiles[profile_id] = Profile.model_validate({
-            **existing.model_dump(),
-            "username": payload.username or "",
-            "password": new_password,
-            "auth_url": payload.auth_url or "",
-            "carrier": carrier,
-            "carrier_custom": carrier_custom,
-            "active_task": payload.active_task or "",
-        })
+        new_profile = Profile.model_validate(
+            {
+                **existing.model_dump(),
+                "username": payload.username or "",
+                "password": new_password,
+                "auth_url": payload.auth_url or "",
+                "carrier": carrier,
+                "carrier_custom": carrier_custom,
+                "active_task": payload.active_task or "",
+            }
+        )
+
+        new_profiles = {**data.profiles, profile_id: new_profile}
+        return data.model_copy(
+            update={
+                "global_config": new_global,
+                "profiles": new_profiles,
+            }
+        )
 
     try:
         profile_service.update(_apply)
@@ -374,8 +426,6 @@ def save_global_and_profile(
             return SaveResult(success=False, message=f"配置重载失败，已回滚: {msg}")
         except Exception as rollback_exc:
             profile_logger.exception("回滚异常: {}", rollback_exc)
-            return SaveResult(
-                success=False, message=f"配置重载失败且回滚异常: {msg}"
-            )
+            return SaveResult(success=False, message=f"配置重载失败且回滚异常: {msg}")
 
     return SaveResult(success=True, message="配置保存成功")
