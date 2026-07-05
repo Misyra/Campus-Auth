@@ -144,7 +144,7 @@ class TestTcpProbeSourceIp:
 class TestPhysicalCheckFallback:
     """物理网络检查回退逻辑验证。"""
 
-    def test_specific_interface_up(self, monkeypatch):
+    async def test_specific_interface_up(self, monkeypatch):
         """指定网卡 up 且连通时应返回 True。"""
         from app.network import probes as probes_mod
 
@@ -152,13 +152,15 @@ class TestPhysicalCheckFallback:
         monkeypatch.setattr(
             "app.network.probes.psutil.net_if_stats", lambda: fake_stats
         )
-        monkeypatch.setattr(
-            probes_mod, "_check_interface_connectivity", lambda name: name == "Ethernet"
-        )
 
-        assert probes_mod.is_local_network_connected(interface_name="Ethernet") is True
+        async def _fake_connectivity(name: str) -> bool:
+            return name == "Ethernet"
 
-    def test_specific_interface_down_fallback(self, monkeypatch):
+        monkeypatch.setattr(probes_mod, "_check_interface_connectivity", _fake_connectivity)
+
+        assert await probes_mod.is_local_network_connected(interface_name="Ethernet") is True
+
+    async def test_specific_interface_down_fallback(self, monkeypatch):
         """指定网卡 down 时应返回 False（候选列表为空）。"""
         from app.network import probes as probes_mod
 
@@ -169,14 +171,16 @@ class TestPhysicalCheckFallback:
         monkeypatch.setattr(
             "app.network.probes.psutil.net_if_stats", lambda: fake_stats
         )
-        monkeypatch.setattr(
-            probes_mod, "_check_interface_connectivity", lambda name: name == "Wi-Fi"
-        )
+
+        async def _fake_connectivity(name: str) -> bool:
+            return name == "Wi-Fi"
+
+        monkeypatch.setattr(probes_mod, "_check_interface_connectivity", _fake_connectivity)
 
         # 指定网卡 down 时，候选列表只包含指定网卡（即使 down）
-        assert probes_mod.is_local_network_connected(interface_name="Ethernet") is False
+        assert await probes_mod.is_local_network_connected(interface_name="Ethernet") is False
 
-    def test_specific_interface_missing_fallback(self, monkeypatch):
+    async def test_specific_interface_missing_fallback(self, monkeypatch):
         """指定网卡不存在时应返回 False（候选列表为空）。"""
         from app.network import probes as probes_mod
 
@@ -186,14 +190,16 @@ class TestPhysicalCheckFallback:
         monkeypatch.setattr(
             "app.network.probes.psutil.net_if_stats", lambda: fake_stats
         )
-        monkeypatch.setattr(
-            probes_mod, "_check_interface_connectivity", lambda name: name == "Wi-Fi"
-        )
+
+        async def _fake_connectivity(name: str) -> bool:
+            return name == "Wi-Fi"
+
+        monkeypatch.setattr(probes_mod, "_check_interface_connectivity", _fake_connectivity)
 
         # 指定网卡不存在时，候选列表为空
-        assert probes_mod.is_local_network_connected(interface_name="Ethernet") is False
+        assert await probes_mod.is_local_network_connected(interface_name="Ethernet") is False
 
-    def test_no_interface_name_uses_candidate_filter(self, monkeypatch):
+    async def test_no_interface_name_uses_candidate_filter(self, monkeypatch):
         """不指定网卡名时使用候选过滤 + TCP Connect。"""
         from app.network import probes as probes_mod
 
@@ -203,11 +209,13 @@ class TestPhysicalCheckFallback:
         monkeypatch.setattr(
             "app.network.probes.psutil.net_if_stats", lambda: fake_stats
         )
-        monkeypatch.setattr(
-            probes_mod, "_check_interface_connectivity", lambda name: name == "Wi-Fi"
-        )
 
-        assert probes_mod.is_local_network_connected() is True
+        async def _fake_connectivity(name: str) -> bool:
+            return name == "Wi-Fi"
+
+        monkeypatch.setattr(probes_mod, "_check_interface_connectivity", _fake_connectivity)
+
+        assert await probes_mod.is_local_network_connected() is True
 
 
 class TestNoExecutorRemnants:

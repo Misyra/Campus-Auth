@@ -48,10 +48,13 @@ class TestLoginConnection:
             ),
             patch(
                 "app.network.decision.check_login_prerequisites",
-                return_value=(True, ""),
+                new=AsyncMock(return_value=(True, "")),
             ),
         ):
-            result = engine._do_async_login()
+            import asyncio
+            loop = asyncio.new_event_loop()
+            result = loop.run_until_complete(engine._do_async_login())
+            loop.close()
 
         assert result is True
 
@@ -110,13 +113,16 @@ class TestLoginConnection:
         )
 
         # 通过引擎的 _do_async_login 连续提交登录（走 done callback 路径）
+        import asyncio
         for i in range(3):
             future = Future()
             handle = MagicMock()
             handle.rejected_reason = None
             handle.future = future
             with patch.object(engine._orchestrator, "submit", return_value=handle):
-                result = engine._do_async_login()
+                loop = asyncio.new_event_loop()
+                result = loop.run_until_complete(engine._do_async_login())
+                loop.close()
             assert result is True
             future.set_result((False, "网络超时"))
             time.sleep(0.2)

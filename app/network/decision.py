@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import socket
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from urllib.parse import urlparse
@@ -135,23 +134,15 @@ async def check_network_status(monitor: MonitorSettings) -> tuple[bool, str, str
     return (False, "network_down", "none")
 
 
-def check_login_prerequisites(
+async def check_login_prerequisites(
     monitor: MonitorSettings, auth_url: str
 ) -> tuple[bool, str]:
-    """登录前置检查：物理网络 + 认证地址可达性。
-
-    在确定网络异常、准备登录之前调用，避免无效的浏览器启动。
-
-    Returns:
-        (True, "")                        — 前置条件满足，可以登录
-        (False, "local_disconnected")     — 物理网络未连接
-        (False, "auth_url_unreachable")   — 认证地址不可达
-    """
+    """登录前置检查（async）：物理网络 + 认证地址可达性。"""
     source_ip = _resolve_source_ip(monitor)
     interface_name = monitor.bind_interface_name
 
     # 物理网络连接检查
-    if monitor.enable_local_check and not is_local_network_connected(
+    if monitor.enable_local_check and not await is_local_network_connected(
         interface_name=interface_name
     ):
         logger.debug("物理网络未连接，跳过登录")
@@ -160,7 +151,7 @@ def check_login_prerequisites(
     # 认证地址可达性检查
     if monitor.check_auth_url:
         extra_targets = monitor.auth_url_targets if monitor.auth_url_targets else None
-        if not _is_auth_url_reachable(
+        if not await _is_auth_url_reachable(
             auth_url, extra_targets=extra_targets, source_ip=source_ip
         ):
             logger.debug("认证地址不可达，跳过登录")
@@ -247,38 +238,38 @@ async def is_network_available(
     return True
 
 
-def _is_auth_url_reachable(
+async def _is_auth_url_reachable(
     auth_url: str,
     extra_targets: Sequence[str] | None = None,
     source_ip: str | None = None,
 ) -> bool:
-    """检查认证地址及附加目标的 TCP 可达性。
-
-    有自定义目标时只检测自定义目标，否则检测认证地址本身。
-    任一目标可达即返回 True。
-    """
+    """检查认证地址及附加目标的 TCP 可达性（async）。"""
     if not auth_url and not extra_targets:
         return True
 
-    def _check_host_port(host: str, port: int, label: str) -> bool:
+    local_addr = (source_ip, 0) if source_ip else None
+
+    async def _check_host_port(host: str, port: int, label: str) -> bool:
         try:
-            sa = (source_ip, 0) if source_ip else None
-            with socket.create_connection((host, port), timeout=3, source_address=sa):
-                logger.debug("认证可达性检测通过: {}", label)
-                return True
-        except Exception as exc:
+            _, writer = await asyncio.wait_for(
+                asyncio.open_connection(host, port, local_addr=local_addr),
+                timeout=3,
+            )
+            writer.close()
+            await writer.wait_closed()
+            logger.debug("认证可达性检测通过: {}", label)
+            return True
+        except (OSError, TimeoutError) as exc:
             logger.debug("认证可达性检测失败: {} -- {}", label, exc)
             return False
 
-    # 有 extra_targets 时只检测自定义目标，不回退到 auth_url。
-    # 这是故意设计：用户配置 extra_targets 意味着用自定义目标替代认证地址做可达性判断。
     if extra_targets:
         from app.network.parsers import parse_host_port
 
         targets = parse_host_port(list(extra_targets))
         if targets:
             for host, port in targets:
-                if _check_host_port(host, port, f"{host}:{port}"):
+                if await _check_host_port(host, port, f"{host}:{port}"):
                     return True
         logger.debug("自定义检测目标均不可达")
         return False
@@ -291,10 +282,10 @@ def _is_auth_url_reachable(
                 logger.debug("认证地址 hostname 解析失败，视为不可达: {}", auth_url)
                 return False
             port = parsed.port or (443 if parsed.scheme == "https" else 80)
-            if _check_host_port(host, port, auth_url):
+            if await _check_host_port(host, port, auth_url):
                 return True
         except Exception as exc:
-            logger.debug("认证地址解析失败 {}: {}", auth_url, exc)
+            logger.debug("认证地址可达性检测异常: {} -- {}", auth_url, exc)
+            return False
 
-    logger.debug("认证地址不可达: {}", auth_url)
     return False

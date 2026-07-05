@@ -208,7 +208,7 @@ class LoginBridge:
         self._on_login_success = on_login_success or (lambda: None)
         self._on_retry_exhausted = on_retry_exhausted or (lambda: None)
 
-    def submit_login(
+    async def submit_login(
         self,
         is_manual: bool = False,
         config_snapshot: RuntimeConfig | None = None,
@@ -245,7 +245,7 @@ class LoginBridge:
             if m.enable_local_check or m.check_auth_url:
                 from app.network.decision import check_login_prerequisites
 
-                ok, reason = check_login_prerequisites(m, config.credentials.auth_url)
+                ok, reason = await check_login_prerequisites(m, config.credentials.auth_url)
                 if not ok:
                     self._logger.warning("登录前置检查未通过: {}", reason)
                     if on_complete is not None:
@@ -507,7 +507,7 @@ class ScheduleEngine:
                         else:
                             retry_fired = False
                     if retry_fired:
-                        self._do_async_login()
+                        await self._do_async_login()
 
                 # 网络检测
                 if self._is_monitoring and now >= self._next_network_check:
@@ -550,7 +550,7 @@ class ScheduleEngine:
             elif cmd.type == EngineCmdType.STOP:
                 self._handle_stop(cmd)
             elif cmd.type == EngineCmdType.LOGIN:
-                self._handle_login(cmd)
+                await self._handle_login(cmd)
             elif cmd.type == EngineCmdType.SHUTDOWN:
                 self._handle_shutdown(cmd)
             elif cmd.type == EngineCmdType.RELOAD:
@@ -605,7 +605,7 @@ class ScheduleEngine:
                         self._monitor_check_interval,
                     )
                 else:
-                    self._do_async_login()
+                    await self._do_async_login()
             else:
                 self._retry_policy.on_network_check(False)
 
@@ -615,11 +615,11 @@ class ScheduleEngine:
             logger.exception("网络检测异常: {}", e)
             self._next_network_check = time.time() + self._monitor_check_interval
 
-    def _do_async_login(
+    async def _do_async_login(
         self, is_manual: bool = False, config_snapshot: RuntimeConfig | None = None
     ) -> bool:
         """【委托】提交登录到 LoginBridge。"""
-        return self._login_bridge.submit_login(
+        return await self._login_bridge.submit_login(
             is_manual=is_manual, config_snapshot=config_snapshot
         )
 
@@ -706,7 +706,7 @@ class ScheduleEngine:
         """处理关闭命令。"""
         self._handle_stop()
 
-    def _handle_login(self, cmd: EngineCommand) -> None:
+    async def _handle_login(self, cmd: EngineCommand) -> None:
         """执行一次性登录（手动触发，异步等待完成）。
 
         委托 LoginBridge.submit_login，通过 on_complete 回调统一处理
@@ -725,7 +725,7 @@ class ScheduleEngine:
                         cmd.response_future.set_result, cmd.response_data
                     )
 
-        self._login_bridge.submit_login(
+        await self._login_bridge.submit_login(
             is_manual=True,
             config_snapshot=self._runtime_config,
             on_complete=_on_complete,

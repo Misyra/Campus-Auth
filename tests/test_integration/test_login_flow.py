@@ -134,7 +134,9 @@ class TestFullLoginSequence:
         svc._orchestrator.submit.return_value = handle
 
         cmd = EngineCommand(type=EngineCmdType.LOGIN)
-        svc._handle_login(cmd)
+        loop = asyncio.new_event_loop()
+        loop.run_until_complete(svc._handle_login(cmd))
+        loop.close()
         # 异步模式：模拟登录完成，触发回调
         mock_future.set_result((True, "登录成功"))
         time.sleep(0.1)  # 等待回调执行
@@ -160,7 +162,9 @@ class TestFullLoginSequence:
         svc._orchestrator.submit.return_value = handle
 
         cmd = EngineCommand(type=EngineCmdType.LOGIN)
-        svc._handle_login(cmd)
+        loop = asyncio.new_event_loop()
+        loop.run_until_complete(svc._handle_login(cmd))
+        loop.close()
 
         assert cmd.response_data == (False, "登录任务已在执行中，请稍后再试")
 
@@ -176,7 +180,9 @@ class TestFullLoginSequence:
         svc._orchestrator.submit.return_value = handle
 
         cmd = EngineCommand(type=EngineCmdType.LOGIN)
-        svc._handle_login(cmd)
+        loop = asyncio.new_event_loop()
+        loop.run_until_complete(svc._handle_login(cmd))
+        loop.close()
 
         success, message = cmd.response_data
         assert success is False
@@ -199,7 +205,9 @@ class TestFullLoginSequence:
         handle.future = future
         svc._orchestrator.submit.return_value = handle
 
-        result = svc._do_async_login()
+        loop = asyncio.new_event_loop()
+        result = loop.run_until_complete(svc._do_async_login())
+        loop.close()
 
         assert result is True
 
@@ -253,7 +261,7 @@ class TestLoginWithNetworkDetection:
         )
         mock_core.consume_profile_switch_flag.return_value = False
         svc._monitor_core = mock_core
-        svc._do_async_login = MagicMock()
+        svc._do_async_login = AsyncMock()
 
         await svc._do_network_check_async()
 
@@ -372,7 +380,7 @@ class TestLoginWithNetworkDetection:
         mock_core.consume_profile_switch_flag.return_value = False
         svc._monitor_core = mock_core
         svc._runtime_config = RuntimeConfig()
-        svc._do_async_login = MagicMock()
+        svc._do_async_login = AsyncMock()
 
         await svc._do_network_check_async()
         svc._do_async_login.assert_called_once()
@@ -481,7 +489,9 @@ class TestLoginConcurrencyProtection:
         handle.future = None  # 去重命中，复用旧 handle
         svc._orchestrator.submit.return_value = handle
 
-        result = svc._do_async_login()
+        loop = asyncio.new_event_loop()
+        result = loop.run_until_complete(svc._do_async_login())
+        loop.close()
 
         assert result is False
 
@@ -505,7 +515,9 @@ class TestLoginConcurrencyProtection:
         handle.future = future
         svc._orchestrator.submit.return_value = handle
 
-        result = svc._do_async_login(is_manual=True)
+        loop = asyncio.new_event_loop()
+        result = loop.run_until_complete(svc._do_async_login(is_manual=True))
+        loop.close()
 
         assert result is True
         call_kwargs = svc._orchestrator.submit.call_args[1]
@@ -561,13 +573,15 @@ class TestLoginConcurrencyProtection:
 
         svc._orchestrator.submit.side_effect = [new_handle, dedup_handle]
 
+        loop = asyncio.new_event_loop()
         # 第一次提交成功
-        result1 = svc._do_async_login()
+        result1 = loop.run_until_complete(svc._do_async_login())
         assert result1 is True
 
         # 第二次提交被去重拒绝
-        result2 = svc._do_async_login()
+        result2 = loop.run_until_complete(svc._do_async_login())
         assert result2 is False
+        loop.close()
 
         # 清理：确定性等待回调完成
         future.set_result((True, "登录成功"))
@@ -622,7 +636,9 @@ class TestLoginConcurrencyProtection:
         )
         svc._orchestrator.submit.side_effect = RuntimeError("线程池已关闭")
 
-        result = svc._do_async_login()
+        loop = asyncio.new_event_loop()
+        result = loop.run_until_complete(svc._do_async_login())
+        loop.close()
         assert result is False
 
     def test_future_none_returns_false(self):
@@ -633,7 +649,9 @@ class TestLoginConcurrencyProtection:
         handle.future = None
         svc._orchestrator.submit.return_value = handle
 
-        result = svc._do_async_login()
+        loop = asyncio.new_event_loop()
+        result = loop.run_until_complete(svc._do_async_login())
+        loop.close()
 
         assert result is False
 
@@ -684,7 +702,10 @@ class TestLoginConcurrencyProtection:
 
         def attempt_login():
             barrier.wait(timeout=1)
-            results.append(svc._do_async_login())
+            loop = asyncio.new_event_loop()
+            result = loop.run_until_complete(svc._do_async_login())
+            loop.close()
+            results.append(result)
 
         threads = [threading.Thread(target=attempt_login) for _ in range(5)]
         for t in threads:
