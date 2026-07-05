@@ -217,7 +217,7 @@ class AutoStartStatusResponse(BaseModel):
     runtime_mode: str = "full"
 
 
-class Profile(BaseModel):
+class Profile(BaseModel, frozen=True):
     """认证方案 — 凭证 + 匹配规则。
 
     每个方案独立持有自己的凭证，不存在"留空回退到全局"语义。
@@ -586,7 +586,7 @@ class RuntimeConfig(BaseModel, frozen=True):
     active_task: str = ""
 
 
-class GlobalConfig(BaseModel):
+class GlobalConfig(BaseModel, frozen=True):
     """持久化配置 — 仅全局共享设置，不含凭据和 active_task。"""
 
     browser: BrowserSettings = Field(default_factory=BrowserSettings)
@@ -597,7 +597,7 @@ class GlobalConfig(BaseModel):
     app_settings: AppSettings = Field(default_factory=AppSettings)
 
 
-class ProfilesData(BaseModel):
+class ProfilesData(BaseModel, frozen=True):
     """settings.json 顶层结构（v5）"""
 
     config_version: int = Field(default=5)

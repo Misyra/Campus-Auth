@@ -46,6 +46,7 @@ def _handle_config_error(operation: str, *, log_warning: bool = False):
 @router.get("/api/config/log-levels", response_model=LogLevelResponse)
 def get_log_levels() -> LogLevelResponse:
     from app.utils.logging import LogConfigCenter
+
     config = LogConfigCenter.get_instance()
     return LogLevelResponse(level=config.get_config().get("level", "INFO"))
 
@@ -53,6 +54,7 @@ def get_log_levels() -> LogLevelResponse:
 @router.put("/api/config/log-level", response_model=ApiResponse)
 def set_log_level(payload: LogLevelRequest, request: Request) -> ApiResponse:
     from app.utils.logging import VALID_LOG_LEVELS, LogConfigCenter
+
     requested = payload.level.strip().upper()
     if requested not in VALID_LOG_LEVELS:
         # 无效级别直接拒绝，避免 set_level 静默降级后仍返回 success=True（BUG-081）
@@ -62,7 +64,17 @@ def set_log_level(payload: LogLevelRequest, request: Request) -> ApiResponse:
     actual = config.get_config().get("level", "INFO")
     profile_service = request.app.state.services.profile_service
     profile_service.update(
-        lambda d: setattr(d.global_config, "logging", d.global_config.logging.model_copy(update={"level": actual}))
+        lambda d: d.model_copy(
+            update={
+                "global_config": d.global_config.model_copy(
+                    update={
+                        "logging": d.global_config.logging.model_copy(
+                            update={"level": actual}
+                        ),
+                    }
+                ),
+            }
+        )
     )
     # 同步更新引擎运行时配置（经公共方法，不再裸改私有属性）
     engine = request.app.state.services.engine
@@ -166,7 +178,6 @@ def _log_config_changes(old_dict: dict, new_payload: ConfigSaveRequest) -> None:
         "retry.retry_interval": "重试间隔",
         "logging.log_retention_days": "日志保留天数",
         "logging.level": "后端日志级别",
-
         "app_settings.app_port": "网页端口",
         "app_settings.proxy": "网络代理",
         "app_settings.shell_path": "Shell路径",
@@ -286,4 +297,8 @@ def patch_config(
 
         _log_config_changes(old_cfg.model_dump(), full_request)
         api_logger.info("配置增量保存成功 (fields={})", list(patch_data.keys()))
-        return ApiResponse(success=True, message="配置保存成功", data={"patched": list(patch_data.keys())})
+        return ApiResponse(
+            success=True,
+            message="配置保存成功",
+            data={"patched": list(patch_data.keys())},
+        )

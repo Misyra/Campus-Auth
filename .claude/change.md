@@ -2,6 +2,20 @@
 
 ## 2026-07-05
 
+### refactor(schemas): 持久化层 frozen 化，统一不可变风格
+
+- `app/schemas.py`：`GlobalConfig`、`ProfilesData`、`Profile` 加 `frozen=True`
+- `app/services/profile_service.py`：
+  - `update` 签名改为 `Callable[[ProfilesData], ProfilesData | None]`，支持返回新对象
+  - `set_active_profile` 改用 `model_copy(update={"active_profile": profile_id})`
+  - `save_profile` 改用 `model_copy` 构建新 Profile 和 ProfilesData
+  - `delete_profile` 改用 dict 推导 + `model_copy` 构建新对象
+  - `set_auto_switch` 改用 `model_copy(update={"auto_switch": enabled})`
+  - `_rollback_config` 改为返回 `backup_data.model_copy(deep=True)`
+  - `save_global_and_profile._apply` 改为返回新 `ProfilesData`
+- `app/api/config.py`：`set_log_level` 的 `update` lambda 改为返回新 `ProfilesData`
+- 测试：新增 `TestFrozenModels`（3 测试）；更新 rollback/merge/backend 测试适配不可变模式
+
 ### refactor(profile): ProfileService 加 mtime 内存缓存 + 单例化
 
 - `app/services/profile_service.py`：

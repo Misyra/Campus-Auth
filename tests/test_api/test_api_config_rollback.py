@@ -79,8 +79,8 @@ class TestDictUpdateBreaksPydantic:
         # 当前能工作，但这是实现细节
         assert data.model_dump() == backup_dump
 
-    def test_proper_rollback_via_field_assignment(self):
-        """正确的回滚方式：逐字段赋值，保持 Pydantic 内部状态一致。"""
+    def test_proper_rollback_via_model_copy(self):
+        """正确的回滚方式：使用 model_copy(deep=True)，保持 Pydantic 内部状态一致。"""
         data = ProfilesData(
             profiles={"default": Profile(name="当前方案", username="current")},
         )
@@ -90,17 +90,13 @@ class TestDictUpdateBreaksPydantic:
             profiles={"default": Profile(name="备份方案", username="backup")},
         )
 
-        # 正确的回滚方式
-        for field_name in ProfilesData.model_fields:
-            setattr(data, field_name, getattr(backup, field_name))
+        # 正确的回滚方式（frozen 模型使用 model_copy）
+        result = backup.model_copy(deep=True)
 
         # 字段值正确
-        assert data.profiles["default"].username == "backup"
-        assert data.auto_switch is True
-        assert data.active_profile == "custom"
+        assert result.profiles["default"].username == "backup"
+        assert result.auto_switch is True
+        assert result.active_profile == "custom"
 
         # model_dump 也正确
-        assert data.model_dump() == backup.model_dump()
-
-        # 逐字段赋值后 data 的 fields_set 包含所有字段（因为每个字段都被 setattr 设置过）
-        assert data.model_fields_set == set(ProfilesData.model_fields)
+        assert result.model_dump() == backup.model_dump()
