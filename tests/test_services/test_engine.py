@@ -69,9 +69,10 @@ class TestEngineCmdType:
         assert EngineCmdType.SHUTDOWN == "shutdown"
         assert EngineCmdType.RELOAD == "reload"
         assert EngineCmdType.APPLY_PROFILE == "apply_profile"
+        assert EngineCmdType.NOOP == "noop"
 
     def test_enum_members(self):
-        assert len(EngineCmdType) == 7
+        assert len(EngineCmdType) == 8
 
 
 # =====================================================================
@@ -254,7 +255,7 @@ class TestProcessCommand:
     def test_dispatch_login(self, engine_factory):
         svc = engine_factory(raw=True)
         cmd = EngineCommand(type=EngineCmdType.LOGIN)
-        svc._handle_login = MagicMock()
+        svc._handle_login = AsyncMock()
         loop = asyncio.new_event_loop()
         loop.run_until_complete(self._put_and_process(svc, cmd))
         svc._handle_login.assert_called_once()
@@ -415,7 +416,7 @@ class TestHandleLogin:
         loop = asyncio.new_event_loop()
         future = loop.create_future()
         cmd = EngineCommand(type=EngineCmdType.LOGIN, response_future=future)
-        svc._handle_login(cmd)
+        loop.run_until_complete(svc._handle_login(cmd))
         success, message = cmd.response_data
         assert success is False
         assert "配置不完整" in message
@@ -432,7 +433,7 @@ class TestHandleLogin:
         loop = asyncio.new_event_loop()
         future = loop.create_future()
         cmd = EngineCommand(type=EngineCmdType.LOGIN, response_future=future)
-        svc._handle_login(cmd)
+        loop.run_until_complete(svc._handle_login(cmd))
         success, message = cmd.response_data
         assert success is False
         assert "配置不完整" in message
@@ -449,7 +450,7 @@ class TestHandleLogin:
         loop = asyncio.new_event_loop()
         future = loop.create_future()
         cmd = EngineCommand(type=EngineCmdType.LOGIN, response_future=future)
-        svc._handle_login(cmd)
+        loop.run_until_complete(svc._handle_login(cmd))
         success, message = cmd.response_data
         assert success is False
         loop.close()
@@ -465,7 +466,7 @@ class TestHandleLogin:
         loop = asyncio.new_event_loop()
         future = loop.create_future()
         cmd = EngineCommand(type=EngineCmdType.LOGIN, response_future=future)
-        svc._handle_login(cmd)
+        loop.run_until_complete(svc._handle_login(cmd))
         success, message = cmd.response_data
         assert success is False
         loop.close()
@@ -511,7 +512,10 @@ class TestHandleLogin:
         response_future.add_done_callback(_on_future_done)
 
         cmd = EngineCommand(type=EngineCmdType.LOGIN, response_future=response_future)
-        svc._handle_login(cmd)
+        # submit_login 是 async，需要在独立 loop 中运行
+        inner_loop = asyncio.new_event_loop()
+        inner_loop.run_until_complete(svc._handle_login(cmd))
+        inner_loop.close()
         # 异步模式：模拟登录完成，触发回调
         mock_future.set_result((True, "登录成功"))
         # 等待 call_soon_threadsafe 调度的结果被 loop 处理
@@ -539,7 +543,7 @@ class TestHandleLogin:
         loop = asyncio.new_event_loop()
         future = loop.create_future()
         cmd = EngineCommand(type=EngineCmdType.LOGIN, response_future=future)
-        svc._handle_login(cmd)
+        loop.run_until_complete(svc._handle_login(cmd))
         assert cmd.response_data == (False, "登录任务已在执行中，请稍后再试")
         loop.close()
 
@@ -558,7 +562,7 @@ class TestHandleLogin:
         loop = asyncio.new_event_loop()
         future = loop.create_future()
         cmd = EngineCommand(type=EngineCmdType.LOGIN, response_future=future)
-        svc._handle_login(cmd)
+        loop.run_until_complete(svc._handle_login(cmd))
         assert cmd.response_data == (False, "提交被拒绝")
         loop.close()
 
@@ -823,7 +827,7 @@ class TestNetworkCheckBackoff:
         await svc._do_network_check_async()
         assert svc._retry_policy._attempt == 0
 
-    def test_on_done_auto_success_clears_failure_count(self, engine_factory):
+    async def test_on_done_auto_success_clears_failure_count(self, engine_factory):
         """自动登录成功应通过 _retry_policy.on_login_done 重置退避。"""
         svc = engine_factory(raw=True)
         svc._runtime_config = RuntimeConfig(
@@ -836,12 +840,12 @@ class TestNetworkCheckBackoff:
         svc._retry_policy._attempt = 3
         future, callback_done, handle = _make_future_with_callback((True, "登录成功"))
         svc._orchestrator.submit.return_value = handle
-        svc._do_async_login()
+        await svc._do_async_login()
         future.set_result((True, "登录成功"))
         callback_done.wait(timeout=2)
         assert svc._retry_policy._attempt == 0
 
-    def test_on_done_auto_failure_increments_count(self, engine_factory):
+    async def test_on_done_auto_failure_increments_count(self, engine_factory):
         """自动登录失败应通过 _retry_policy.on_login_done 递增退避计数。"""
         svc = engine_factory(raw=True)
         svc._runtime_config = RuntimeConfig(
@@ -854,12 +858,12 @@ class TestNetworkCheckBackoff:
         svc._retry_policy._attempt = 0
         future, callback_done, handle = _make_future_with_callback((False, "登录失败"))
         svc._orchestrator.submit.return_value = handle
-        svc._do_async_login()
+        await svc._do_async_login()
         future.set_result((False, "登录失败"))
         callback_done.wait(timeout=2)
         assert svc._retry_policy._attempt == 1
 
-    def test_on_done_auto_failure_triggers_backoff(self, engine_factory):
+    async def test_on_done_auto_failure_triggers_backoff(self, engine_factory):
         """连续失败后 _retry_policy 应返回退避延迟。"""
         svc = engine_factory(raw=True)
         svc._runtime_config = RuntimeConfig(
@@ -872,14 +876,14 @@ class TestNetworkCheckBackoff:
         svc._retry_policy._attempt = 2  # 再失败一次就到 attempt=3，delay=20
         future, callback_done, handle = _make_future_with_callback((False, "登录失败"))
         svc._orchestrator.submit.return_value = handle
-        svc._do_async_login()
+        await svc._do_async_login()
         future.set_result((False, "登录失败"))
         callback_done.wait(timeout=2)
         assert svc._retry_policy._attempt == 3
         # attempt=3 → delay_before(3)=20.0 → 设置到 _next_retry_time
         assert svc._next_retry_time > time.time() + 19
 
-    def test_on_done_manual_login_does_not_affect_failure_count(self, engine_factory):
+    async def test_on_done_manual_login_does_not_affect_failure_count(self, engine_factory):
         """手动登录结果不应影响自动登录的退避计数。"""
         svc = engine_factory(raw=True)
         svc._runtime_config = RuntimeConfig(
@@ -892,13 +896,13 @@ class TestNetworkCheckBackoff:
         svc._retry_policy._attempt = 2
         future, callback_done, handle = _make_future_with_callback((False, "登录失败"))
         svc._orchestrator.submit.return_value = handle
-        svc._do_async_login(is_manual=True)
+        await svc._do_async_login(is_manual=True)
         future.set_result((False, "登录失败"))
         callback_done.wait(timeout=2)
         # 手动登录不应递增
         assert svc._retry_policy._attempt == 2
 
-    def test_on_done_manual_success_does_not_clear_failure_count(self, engine_factory):
+    async def test_on_done_manual_success_does_not_clear_failure_count(self, engine_factory):
         """手动登录成功不应清空自动登录的退避计数。"""
         svc = engine_factory(raw=True)
         svc._runtime_config = RuntimeConfig(
@@ -911,7 +915,7 @@ class TestNetworkCheckBackoff:
         svc._retry_policy._attempt = 2
         future, callback_done, handle = _make_future_with_callback((True, "登录成功"))
         svc._orchestrator.submit.return_value = handle
-        svc._do_async_login(is_manual=True)
+        await svc._do_async_login(is_manual=True)
         future.set_result((True, "登录成功"))
         callback_done.wait(timeout=2)
         assert svc._retry_policy._attempt == 2
@@ -923,7 +927,7 @@ class TestNetworkCheckBackoff:
 
 
 class TestDoAsyncLogin:
-    def test_already_in_progress(self, engine_factory):
+    async def test_already_in_progress(self, engine_factory):
         """去重命中：orchestrator.submit 返回旧 handle（future=None）。"""
         svc = engine_factory(raw=True)
         svc._runtime_config = RuntimeConfig(
@@ -937,9 +941,9 @@ class TestDoAsyncLogin:
         handle.rejected_reason = None
         handle.future = None
         svc._orchestrator.submit.return_value = handle
-        assert svc._do_async_login() is False
+        assert await svc._do_async_login() is False
 
-    def test_future_none(self, engine_factory):
+    async def test_future_none(self, engine_factory):
         """orchestrator 返回 rejected handle 时应返回 False。"""
         svc = engine_factory(raw=True)
         svc._runtime_config = RuntimeConfig(
@@ -953,9 +957,9 @@ class TestDoAsyncLogin:
         handle.rejected_reason = "登录配置不完整"
         handle.future = None
         svc._orchestrator.submit.return_value = handle
-        assert svc._do_async_login() is False
+        assert await svc._do_async_login() is False
 
-    def test_future_success(self, engine_factory):
+    async def test_future_success(self, engine_factory):
         svc = engine_factory(raw=True)
         svc._runtime_config = RuntimeConfig(
             credentials=LoginCredentials(
@@ -969,10 +973,10 @@ class TestDoAsyncLogin:
         handle.rejected_reason = None
         handle.future = future
         svc._orchestrator.submit.return_value = handle
-        result = svc._do_async_login()
+        result = await svc._do_async_login()
         assert result is True
 
-    def test_exception_propagates(self, engine_factory):
+    async def test_exception_propagates(self, engine_factory):
         svc = engine_factory(raw=True)
         svc._runtime_config = RuntimeConfig(
             credentials=LoginCredentials(
@@ -983,9 +987,9 @@ class TestDoAsyncLogin:
         )
         svc._orchestrator.submit.side_effect = RuntimeError("boom")
         with pytest.raises(RuntimeError):
-            svc._do_async_login()
+            await svc._do_async_login()
 
-    def test_exception_does_not_consume_retry(self, engine_factory):
+    async def test_exception_does_not_consume_retry(self, engine_factory):
         """orchestrator.submit 抛异常时不应递增失败计数。"""
         svc = engine_factory(raw=True)
         svc._runtime_config = RuntimeConfig(
@@ -998,10 +1002,10 @@ class TestDoAsyncLogin:
         svc._orchestrator.submit.side_effect = RuntimeError("pool closed")
         svc._retry_policy._attempt = 0
         with pytest.raises(RuntimeError):
-            svc._do_async_login()
+            await svc._do_async_login()
         assert svc._retry_policy._attempt == 0
 
-    def test_success_increments_retry_count(self, engine_factory):
+    async def test_success_increments_retry_count(self, engine_factory):
         """成功提交后退避计数应保持不变。"""
         svc = engine_factory(raw=True)
         svc._runtime_config = RuntimeConfig(
@@ -1017,11 +1021,11 @@ class TestDoAsyncLogin:
         handle.future = future
         svc._orchestrator.submit.return_value = handle
         svc._retry_policy._attempt = 0
-        svc._do_async_login()
+        await svc._do_async_login()
         # 提交成功，退避计数不受提交影响（由回调处理）
         assert svc._retry_policy._attempt == 0
 
-    def test_config_validation_blocks_auto_login(self, engine_factory):
+    async def test_config_validation_blocks_auto_login(self, engine_factory):
         """配置不完整时自动登录应被拦截，不提交任务。"""
         svc = engine_factory(raw=True)
         svc._runtime_config = RuntimeConfig()  # 空配置（无凭证）
@@ -1029,10 +1033,10 @@ class TestDoAsyncLogin:
         handle.rejected_reason = "登录配置不完整"
         handle.future = None
         svc._orchestrator.submit.return_value = handle
-        result = svc._do_async_login()
+        result = await svc._do_async_login()
         assert result is False
 
-    def test_config_validation_resets_retry_on_failure(self, engine_factory):
+    async def test_config_validation_resets_retry_on_failure(self, engine_factory):
         """配置校验失败时 _do_async_login 返回 False。"""
         svc = engine_factory(raw=True)
         svc._runtime_config = RuntimeConfig()
@@ -1040,10 +1044,10 @@ class TestDoAsyncLogin:
         handle.rejected_reason = "登录配置不完整"
         handle.future = None
         svc._orchestrator.submit.return_value = handle
-        result = svc._do_async_login()
+        result = await svc._do_async_login()
         assert result is False
 
-    def test_config_validation_blocks_missing_username(self, engine_factory):
+    async def test_config_validation_blocks_missing_username(self, engine_factory):
         svc = engine_factory(raw=True)
         svc._runtime_config = RuntimeConfig(
             credentials=LoginCredentials(password="p", auth_url="http://x"),
@@ -1052,9 +1056,9 @@ class TestDoAsyncLogin:
         handle.rejected_reason = "登录配置不完整"
         handle.future = None
         svc._orchestrator.submit.return_value = handle
-        assert svc._do_async_login() is False
+        assert await svc._do_async_login() is False
 
-    def test_config_validation_blocks_missing_password(self, engine_factory):
+    async def test_config_validation_blocks_missing_password(self, engine_factory):
         svc = engine_factory(raw=True)
         svc._runtime_config = RuntimeConfig(
             credentials=LoginCredentials(username="u", auth_url="http://x"),
@@ -1063,9 +1067,9 @@ class TestDoAsyncLogin:
         handle.rejected_reason = "登录配置不完整"
         handle.future = None
         svc._orchestrator.submit.return_value = handle
-        assert svc._do_async_login() is False
+        assert await svc._do_async_login() is False
 
-    def test_config_validation_blocks_missing_auth_url(self, engine_factory):
+    async def test_config_validation_blocks_missing_auth_url(self, engine_factory):
         svc = engine_factory(raw=True)
         svc._runtime_config = RuntimeConfig(
             credentials=LoginCredentials(username="u", password="p"),
@@ -1074,9 +1078,9 @@ class TestDoAsyncLogin:
         handle.rejected_reason = "登录配置不完整"
         handle.future = None
         svc._orchestrator.submit.return_value = handle
-        assert svc._do_async_login() is False
+        assert await svc._do_async_login() is False
 
-    def test_config_snapshot_bypasses_runtime_config(self, engine_factory):
+    async def test_config_snapshot_bypasses_runtime_config(self, engine_factory):
         """传入 config_snapshot 时应使用快照而非 _runtime_config。"""
         svc = engine_factory(raw=True)
         svc._runtime_config = RuntimeConfig()  # 运行时配置为空
@@ -1090,7 +1094,7 @@ class TestDoAsyncLogin:
         handle.rejected_reason = None
         handle.future = future
         svc._orchestrator.submit.return_value = handle
-        result = svc._do_async_login(config_snapshot=snapshot)
+        result = await svc._do_async_login(config_snapshot=snapshot)
         assert result is True
 
 
@@ -1965,6 +1969,47 @@ class TestRetryTimeLock:
             assert engine._next_retry_time in results
 
 
+class TestRetryWakeup:
+    """retry 调度后 engine loop 应立即唤醒，不等 timeout。"""
+
+    def test_retry_scheduled_wakes_loop(self, engine_factory):
+        """_bridge_retry_scheduled 设置 _next_retry_time 后应投 noop 命令唤醒 loop。"""
+        svc = engine_factory()
+        mock_loop = MagicMock()
+        mock_loop.is_running.return_value = True
+        svc._engine_loop = mock_loop
+        svc._cmd_queue = asyncio.Queue()
+
+        # 调用 __init__ 中注册的真实 _bridge_retry_scheduled 闭包
+        svc._login_bridge._on_retry_scheduled(5.0)
+
+        # 应通过 call_soon_threadsafe 向 queue 投 noop 命令唤醒 loop
+        mock_loop.call_soon_threadsafe.assert_called_once()
+        assert svc._next_retry_time > time.time()
+
+    def test_retry_scheduled_loop_not_running(self, engine_factory):
+        """loop 未运行时不应抛异常。"""
+        svc = engine_factory()
+        svc._engine_loop = None
+
+        # 调用 __init__ 中注册的真实 _bridge_retry_scheduled 闭包
+        # loop=None 应安全跳过 call_soon_threadsafe
+        svc._login_bridge._on_retry_scheduled(5.0)
+        assert svc._next_retry_time > time.time()
+
+    def test_noop_command_processed(self, engine_factory):
+        """NOOP 命令应被 _process_command_async 正常处理（无操作）。"""
+        svc = engine_factory(raw=True)
+        cmd = EngineCommand(type=EngineCmdType.NOOP)
+        loop = asyncio.new_event_loop()
+        loop.run_until_complete(svc._cmd_queue.put(cmd))
+        got = loop.run_until_complete(svc._cmd_queue.get())
+        loop.run_until_complete(svc._process_command_async(got))
+        # NOOP 不应设置 response_data
+        assert cmd.response_data is None
+        loop.close()
+
+
 class TestEngineLoopAsyncCommands:
     """_engine_loop_async 应通过 asyncio.Queue 处理命令。"""
 
@@ -2078,12 +2123,11 @@ class TestLoginBridgeDuplicateCallback:
             retry_policy=MonitoredPolicy(),
             status_update_callback=lambda: None,
             logger=MagicMock(),
-            wakeup_event=threading.Event(),
             get_monitor_check_interval=lambda: 300,
         )
         return bridge, mock_orchestrator
 
-    def test_submit_login_duplicate_triggers_callback(self):
+    async def test_submit_login_duplicate_triggers_callback(self):
         """去重命中时 on_complete 应被调用，返回 (False, msg)。"""
         bridge, mock_orch = self._make_bridge()
         callbacks = []
@@ -2097,18 +2141,18 @@ class TestLoginBridgeDuplicateCallback:
         handle.rejected_reason = None
         handle.future = future
 
-        result1 = bridge.submit_login(is_manual=True, on_complete=on_complete)
+        result1 = await bridge.submit_login(is_manual=True, on_complete=on_complete)
         assert result1 is True
         assert len(callbacks) == 0  # 第一次成功提交不触发 on_complete
 
         # 第二次提交：同一个 future 已在 _registered_futures，去重命中
-        result2 = bridge.submit_login(is_manual=True, on_complete=on_complete)
+        result2 = await bridge.submit_login(is_manual=True, on_complete=on_complete)
         assert result2 is False
         # 关键断言：on_complete 必须被调用，否则手动登录会挂起
         assert len(callbacks) == 1
         assert callbacks[0] == (False, "登录任务已在执行中，请稍后再试")
 
-    def test_submit_login_duplicate_no_on_complete(self):
+    async def test_submit_login_duplicate_no_on_complete(self):
         """去重命中时 on_complete=None 不应抛异常。"""
         bridge, mock_orch = self._make_bridge()
 
@@ -2117,6 +2161,6 @@ class TestLoginBridgeDuplicateCallback:
         handle.rejected_reason = None
         handle.future = future
 
-        bridge.submit_login(is_manual=True, on_complete=None)
-        result = bridge.submit_login(is_manual=True, on_complete=None)
+        await bridge.submit_login(is_manual=True, on_complete=None)
+        result = await bridge.submit_login(is_manual=True, on_complete=None)
         assert result is False

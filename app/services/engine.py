@@ -48,6 +48,7 @@ class EngineCmdType(StrEnum):
     RELOAD = "reload"
     APPLY_PROFILE = "apply_profile"
     TEST_NETWORK = "test_network"
+    NOOP = "noop"  # 空操作，仅用于唤醒 loop
 
 
 class StartResult(Enum):
@@ -190,7 +191,6 @@ class LoginBridge:
         retry_policy: MonitoredPolicy,
         status_update_callback: Callable[[], None],
         logger,
-        wakeup_event: threading.Event,
         get_monitor_check_interval: Callable[[], int],
         on_retry_scheduled: Callable[[float], None] | None = None,
         on_login_success: Callable[[], None] | None = None,
@@ -201,15 +201,14 @@ class LoginBridge:
         self._retry_policy = retry_policy
         self._status_update_callback = status_update_callback
         self._logger = logger
-        self._wakeup_event = wakeup_event
         self._get_monitor_check_interval = get_monitor_check_interval
         self._registered_futures: set[Future] = set()
         self._futures_lock = threading.Lock()
-        self._on_retry_scheduled = on_retry_scheduled or self._default_retry_scheduled
+        self._on_retry_scheduled = on_retry_scheduled or (lambda delay: None)
         self._on_login_success = on_login_success or (lambda: None)
         self._on_retry_exhausted = on_retry_exhausted or (lambda: None)
 
-    def submit_login(
+    async def submit_login(
         self,
         is_manual: bool = False,
         config_snapshot: RuntimeConfig | None = None,
@@ -246,7 +245,7 @@ class LoginBridge:
             if m.enable_local_check or m.check_auth_url:
                 from app.network.decision import check_login_prerequisites
 
-                ok, reason = check_login_prerequisites(m, config.credentials.auth_url)
+                ok, reason = await check_login_prerequisites(m, config.credentials.auth_url)
                 if not ok:
                     self._logger.warning("登录前置检查未通过: {}", reason)
                     if on_complete is not None:
@@ -336,10 +335,6 @@ class LoginBridge:
         handle.future.add_done_callback(_on_done)
         return True
 
-    def _default_retry_scheduled(self, delay: float) -> None:
-        """重试已调度 — 默认实现：唤醒引擎循环。"""
-        self._wakeup_event.set()
-
     def cancel_login(self) -> tuple[bool, str]:
         """取消当前正在执行的登录。"""
         orchestrator = self._get_orchestrator()
@@ -425,13 +420,17 @@ class ScheduleEngine:
         self._next_retry_time: float = 0  # 下次重试时间（独立于网络检测）
 
         # LoginBridge — 登录委托
-        _wakeup_placeholder = (
-            threading.Event()
-        )  # LoginBridge 兼容占位，引擎 loop 不依赖
-
         def _bridge_retry_scheduled(delay: float) -> None:
             with self._retry_time_lock:
                 self._next_retry_time = time.time() + delay
+            # 投 noop 命令唤醒 engine loop（不等 asyncio.wait_for timeout）
+            loop = self._engine_loop
+            if loop is not None and loop.is_running():
+                with contextlib.suppress(RuntimeError):
+                    loop.call_soon_threadsafe(
+                        self._cmd_queue.put_nowait,
+                        EngineCommand(type=EngineCmdType.NOOP),
+                    )
 
         def _bridge_login_success() -> None:
             with self._retry_time_lock:
@@ -447,7 +446,6 @@ class ScheduleEngine:
             retry_policy=self._retry_policy,
             status_update_callback=self._update_status_snapshot,
             logger=self._logger,
-            wakeup_event=_wakeup_placeholder,
             get_monitor_check_interval=lambda: self._monitor_check_interval,
             on_retry_scheduled=_bridge_retry_scheduled,
             on_login_success=_bridge_login_success,
@@ -507,7 +505,7 @@ class ScheduleEngine:
                         else:
                             retry_fired = False
                     if retry_fired:
-                        self._do_async_login()
+                        await self._do_async_login()
 
                 # 网络检测
                 if self._is_monitoring and now >= self._next_network_check:
@@ -550,7 +548,7 @@ class ScheduleEngine:
             elif cmd.type == EngineCmdType.STOP:
                 self._handle_stop(cmd)
             elif cmd.type == EngineCmdType.LOGIN:
-                self._handle_login(cmd)
+                await self._handle_login(cmd)
             elif cmd.type == EngineCmdType.SHUTDOWN:
                 self._handle_shutdown(cmd)
             elif cmd.type == EngineCmdType.RELOAD:
@@ -559,6 +557,8 @@ class ScheduleEngine:
                 self._handle_apply_profile(cmd)
             elif cmd.type == EngineCmdType.TEST_NETWORK:
                 await self._handle_test_network(cmd)
+            elif cmd.type == EngineCmdType.NOOP:
+                pass  # 空操作，仅唤醒 loop
         except Exception:
             logger.warning("命令执行失败: {}", cmd.type, exc_info=True)
             if cmd.response_future and not cmd.response_future.done():
@@ -603,7 +603,7 @@ class ScheduleEngine:
                         self._monitor_check_interval,
                     )
                 else:
-                    self._do_async_login()
+                    await self._do_async_login()
             else:
                 self._retry_policy.on_network_check(False)
 
@@ -613,11 +613,11 @@ class ScheduleEngine:
             logger.exception("网络检测异常: {}", e)
             self._next_network_check = time.time() + self._monitor_check_interval
 
-    def _do_async_login(
+    async def _do_async_login(
         self, is_manual: bool = False, config_snapshot: RuntimeConfig | None = None
     ) -> bool:
         """【委托】提交登录到 LoginBridge。"""
-        return self._login_bridge.submit_login(
+        return await self._login_bridge.submit_login(
             is_manual=is_manual, config_snapshot=config_snapshot
         )
 
@@ -704,7 +704,7 @@ class ScheduleEngine:
         """处理关闭命令。"""
         self._handle_stop()
 
-    def _handle_login(self, cmd: EngineCommand) -> None:
+    async def _handle_login(self, cmd: EngineCommand) -> None:
         """执行一次性登录（手动触发，异步等待完成）。
 
         委托 LoginBridge.submit_login，通过 on_complete 回调统一处理
@@ -723,7 +723,7 @@ class ScheduleEngine:
                         cmd.response_future.set_result, cmd.response_data
                     )
 
-        self._login_bridge.submit_login(
+        await self._login_bridge.submit_login(
             is_manual=True,
             config_snapshot=self._runtime_config,
             on_complete=_on_complete,
