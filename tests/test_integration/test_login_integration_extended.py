@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import threading
 import time
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.network.decision import NetworkCheckResult
 from app.schemas import LoginCredentials
@@ -23,12 +23,17 @@ from app.workers.playwright_worker import WorkerResponse
 def _ensure_login_config(engine) -> None:
     """确保引擎运行时配置包含登录所需字段。"""
     old = engine._runtime_config
-    engine._runtime_config = old.model_copy(update={
-        "credentials": LoginCredentials(
-            username="testuser", password="testpass", auth_url="http://10.0.0.1",
-            isp=old.credentials.isp, carrier_custom=old.credentials.carrier_custom,
-        ),
-    })
+    engine._runtime_config = old.model_copy(
+        update={
+            "credentials": LoginCredentials(
+                username="testuser",
+                password="testpass",
+                auth_url="http://10.0.0.1",
+                isp=old.credentials.isp,
+                carrier_custom=old.credentials.carrier_custom,
+            ),
+        }
+    )
 
 
 def _capture_login_completion(engine=None, timeout: float = 5.0):
@@ -117,7 +122,19 @@ class TestNetworkDetectionLogin:
         _ensure_login_config(engine)
 
         mock_core = MagicMock()
-        mock_core.check_once.return_value = CheckOnceResult(paused=False, net_ok=False, net_reason="down", need_login=True, check_num=1, interval=300, result=NetworkCheckResult(available=False, method="none", latency_ms=0, detail="down"))
+        mock_core.check_once = AsyncMock(
+            return_value=CheckOnceResult(
+                paused=False,
+                net_ok=False,
+                net_reason="down",
+                need_login=True,
+                check_num=1,
+                interval=300,
+                result=NetworkCheckResult(
+                    available=False, method="none", latency_ms=0, detail="down"
+                ),
+            )
+        )
         mock_core.consume_profile_switch_flag.return_value = False
         mock_core.monitoring = True
         mock_core.snapshot.return_value = {
@@ -128,10 +145,15 @@ class TestNetworkDetectionLogin:
         engine._monitor_core = mock_core
 
         from app.schemas import MonitorSettings, RetrySettings
-        engine._runtime_config = engine._runtime_config.model_copy(update={
-            "retry": RetrySettings(max_retries=3, retry_interval=30),
-            "monitor": MonitorSettings(enable_local_check=False, check_auth_url=False),
-        })
+
+        engine._runtime_config = engine._runtime_config.model_copy(
+            update={
+                "retry": RetrySettings(max_retries=3, retry_interval=30),
+                "monitor": MonitorSettings(
+                    enable_local_check=False, check_auth_url=False
+                ),
+            }
+        )
 
         assert not task_executor.is_login_running()
 
@@ -157,9 +179,14 @@ class TestNetworkDetectionLogin:
         _ensure_login_config(engine)
 
         from app.schemas import MonitorSettings
-        engine._runtime_config = engine._runtime_config.model_copy(update={
-            "monitor": MonitorSettings(enable_local_check=False, check_auth_url=False),
-        })
+
+        engine._runtime_config = engine._runtime_config.model_copy(
+            update={
+                "monitor": MonitorSettings(
+                    enable_local_check=False, check_auth_url=False
+                ),
+            }
+        )
 
         mock_worker.submit.return_value = WorkerResponse(
             success=False, error="认证失败"
@@ -210,6 +237,7 @@ class TestCancelPropagation:
             engine=engine
         )
         try:
+
             def blocking_submit(*args, **kwargs):
                 nonlocal captured_cancel_event
                 captured_cancel_event = kwargs.get("data", {}).get("cancel_event")
@@ -220,7 +248,9 @@ class TestCancelPropagation:
             mock_worker.submit.side_effect = blocking_submit
 
             config = engine.get_runtime_config()
-            handle = task_executor._login_orchestrator.submit(source="auto", config=config)
+            handle = task_executor._login_orchestrator.submit(
+                source="auto", config=config
+            )
             future = handle.future
 
             assert submit_called.wait(timeout=5), "worker.submit was not called in time"
@@ -254,6 +284,7 @@ class TestReloadException:
             engine=engine
         )
         try:
+
             def blocking_submit(*args, **kwargs):
                 submit_called.set()
                 assert submit_release.wait(timeout=5), "submit was not released in time"
@@ -263,7 +294,9 @@ class TestReloadException:
 
             # 启动登录
             config = engine.get_runtime_config()
-            handle = task_executor._login_orchestrator.submit(source="auto", config=config)
+            handle = task_executor._login_orchestrator.submit(
+                source="auto", config=config
+            )
             future = handle.future
 
             assert submit_called.wait(timeout=5), "worker.submit was not called in time"
@@ -310,6 +343,7 @@ class TestLoginOnceRetry:
         mock_worker = MagicMock()
         mock_worker.submit.return_value = WorkerResponse(success=True, data="登录成功")
         from app.schemas import RetrySettings
+
         runtime_config = engine.get_runtime_config().model_copy(
             update={"retry": RetrySettings(max_retries=3, retry_interval=1)}
         )
@@ -334,6 +368,7 @@ class TestLoginOnceRetry:
         mock_worker = MagicMock()
         mock_worker.submit.return_value = WorkerResponse(success=False, error="超时")
         from app.schemas import RetrySettings
+
         runtime_config = engine.get_runtime_config().model_copy(
             update={"retry": RetrySettings(max_retries=2, retry_interval=1)}
         )
@@ -368,6 +403,7 @@ class TestProfileSwitchDuringLogin:
             engine=engine
         )
         try:
+
             def blocking_submit(*args, **kwargs):
                 submit_called.set()
                 assert submit_release.wait(timeout=5), "submit was not released in time"
@@ -376,7 +412,9 @@ class TestProfileSwitchDuringLogin:
             mock_worker.submit.side_effect = blocking_submit
 
             config = engine.get_runtime_config()
-            handle = task_executor._login_orchestrator.submit(source="auto", config=config)
+            handle = task_executor._login_orchestrator.submit(
+                source="auto", config=config
+            )
             future = handle.future
 
             assert submit_called.wait(timeout=5), "worker.submit was not called in time"

@@ -1,14 +1,12 @@
 from __future__ import annotations
 
-import contextlib
+import asyncio
 import socket
 from collections.abc import Iterable, Sequence
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from urllib.parse import urlparse
 
 from app.schemas import MonitorSettings, PauseSettings
-from app.utils.concurrent import cancel_pending
 from app.utils.logging import get_logger
 from app.utils.time_utils import is_pause_enabled
 
@@ -19,13 +17,6 @@ from .probes import (
     is_network_available_socket,
     is_network_available_url,
 )
-
-# 外层决策调度专用线程池（与 probes.py 的 8-worker 内层探测池分离）
-# 避免外层任务占用内层 worker 导致线程池饥饿。
-_decision_executor = ThreadPoolExecutor(
-    max_workers=3, thread_name_prefix="net_decision"
-)
-_decision_shutdown_done = False
 
 
 @dataclass(slots=True)
@@ -81,8 +72,8 @@ def check_pause(pause: PauseSettings) -> tuple[bool, str]:
     return (False, "")
 
 
-def check_network_status(monitor: MonitorSettings) -> tuple[bool, str, str]:
-    """网络状态检测 (TCP / HTTP / 网址响应)。
+async def check_network_status(monitor: MonitorSettings) -> tuple[bool, str, str]:
+    """网络状态检测（async） (TCP / HTTP / 网址响应)。
 
     仅做网络连通性检测，不做物理网络检查和认证地址检查。
     由监控循环调用，决定是否需要触发登录。
@@ -119,7 +110,7 @@ def check_network_status(monitor: MonitorSettings) -> tuple[bool, str, str]:
 
     source_ip = _resolve_source_ip(monitor)
 
-    ok = is_network_available(
+    ok = await is_network_available(
         test_sites=test_sites,
         test_urls=test_urls,
         timeout=monitor.network_check_timeout,
@@ -181,7 +172,7 @@ def check_login_prerequisites(
 # ── 内部实现 ──
 
 
-def is_network_available(
+async def is_network_available(
     test_sites: Sequence[tuple[str, int]] | None = None,
     test_urls: Iterable[str] | None = None,
     timeout: float = 1.5,
@@ -190,7 +181,7 @@ def is_network_available(
     url_checks: Sequence[tuple[str, str]] | None = None,
     source_ip: str | None = None,
 ) -> bool:
-    """底层网络状态检测，不包含物理网络检查。"""
+    """底层网络状态检测（async），不包含物理网络检查。"""
     enable_url = bool(url_checks)
 
     if not enable_tcp and not enable_http and not enable_url:
@@ -209,57 +200,50 @@ def is_network_available(
         "开" if enable_url else "关",
     )
 
-    pool = _decision_executor
-    futures = {}
+    tasks = []
     if enable_tcp:
-        futures[
-            pool.submit(
-                is_network_available_socket,
-                test_sites=test_sites,
-                timeout=timeout,
-                source_ip=source_ip,
+        tasks.append(
+            is_network_available_socket(
+                test_sites=test_sites, timeout=timeout, source_ip=source_ip
             )
-        ] = "tcp"
+        )
     if enable_http:
-        futures[
-            pool.submit(
-                is_network_available_http,
+        tasks.append(
+            is_network_available_http(
                 test_urls=urls_list,
                 timeout=max(timeout, 2.0),
                 follow_redirects=not enable_tcp,
                 source_ip=source_ip,
             )
-        ] = "http"
+        )
     if enable_url:
-        futures[
-            pool.submit(
-                is_network_available_url,
+        tasks.append(
+            is_network_available_url(
                 url_checks=url_checks,
                 timeout=max(timeout, 3.0),
                 source_ip=source_ip,
             )
-        ] = "url"
+        )
 
     overall_timeout = max(timeout, 3.0) + 2.0
     try:
-        for future in as_completed(futures, timeout=overall_timeout):
-            kind = futures[future]
-            try:
-                ok = future.result(timeout=1)
-            except Exception as exc:
-                logger.debug("检测 {} 异常: {}", kind, exc)
-                ok = False
-            if not ok:
-                # AND 逻辑：任一检测方法失败即判定网络不可用。
-                # 这是故意设计 — 宁可误报断网触发多余登录，不可漏报导致断网不处理。
-                # HTTP 200 可能是 captive portal 拦截页面，需 TCP/URL 同时验证。
-                cancel_pending(futures)
-                return False
+        results = await asyncio.wait_for(
+            asyncio.gather(*tasks, return_exceptions=True),
+            timeout=overall_timeout,
+        )
     except TimeoutError:
         logger.warning("网络检测失败: 超时 ({:.1f}s)", overall_timeout)
-        cancel_pending(futures)
         return False
 
+    # AND 逻辑：任一检测方法失败即判定网络不可用。
+    # 这是故意设计 — 宁可误报断网触发多余登录，不可漏报导致断网不处理。
+    # HTTP 200 可能是 captive portal 拦截页面，需 TCP/URL 同时验证。
+    for ok in results:
+        if isinstance(ok, Exception):
+            logger.debug("检测异常: {}", ok)
+            return False
+        if not ok:
+            return False
     return True
 
 
@@ -314,13 +298,3 @@ def _is_auth_url_reachable(
 
     logger.debug("认证地址不可达: {}", auth_url)
     return False
-
-
-def shutdown_decision_executor(wait: bool = True) -> None:
-    """关闭决策层线程池，在应用关闭时调用。幂等。"""
-    global _decision_shutdown_done
-    if _decision_shutdown_done:
-        return
-    _decision_shutdown_done = True
-    with contextlib.suppress(RuntimeError):
-        _decision_executor.shutdown(wait=wait)

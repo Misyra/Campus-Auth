@@ -1,37 +1,12 @@
 """网络检测模块综合测试
 
-覆盖 network_probes、network_decision 的全部函数，以及 network_test 向后兼容模块。
+覆盖 network_probes、network_decision 的全部函数。
 """
 
 from __future__ import annotations
 
 import socket
-from concurrent.futures import ThreadPoolExecutor
-from unittest.mock import MagicMock, patch
-
-import pytest
-
-
-@pytest.fixture(autouse=True)
-def _fresh_executor():
-    """确保模块级 executor 未被关闭（atexit 或前序测试可能已触发 shutdown）。"""
-    import app.network.probes as probes_mod
-    import app.network.decision as decision_mod
-
-    old = probes_mod.executor
-    try:
-        old.submit(lambda: None).result(timeout=1)
-    except RuntimeError:
-        # executor 已关闭，替换为新实例
-        fresh = ThreadPoolExecutor(max_workers=8, thread_name_prefix="net-test")
-        probes_mod.executor = fresh
-        decision_mod._executor = fresh
-        yield
-        fresh.shutdown(wait=False, cancel_futures=True)
-        probes_mod.executor = old
-        decision_mod._executor = old
-        return
-    yield
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.network.decision import (
     check_login_prerequisites,
@@ -80,7 +55,9 @@ class TestIsLocalNetworkConnected:
         }
         with (
             patch("app.network.probes.psutil.net_if_stats", return_value=mock_stats),
-            patch("app.network.probes._check_interface_connectivity", return_value=True),
+            patch(
+                "app.network.probes._check_interface_connectivity", return_value=True
+            ),
         ):
             assert is_local_network_connected() is True
 
@@ -111,162 +88,191 @@ class TestIsLocalNetworkConnected:
 
 
 # =====================================================================
-# network_probes — is_network_available_socket
+# network_probes — is_network_available_socket (async)
 # =====================================================================
 
 
 class TestIsNetworkAvailableSocket:
-    def test_success_on_first_target(self):
-        with patch("app.network.probes.socket.create_connection") as mock_conn:
-            mock_conn.return_value.__enter__ = lambda s: s
-            mock_conn.return_value.__exit__ = lambda s, *a: None
-            result = is_network_available_socket(
+    async def test_success_on_first_target(self):
+        mock_writer = MagicMock()
+        mock_writer.close = MagicMock()
+        mock_writer.wait_closed = AsyncMock()
+
+        async def fake_open_connection(host, port, **kwargs):
+            return (None, mock_writer)
+
+        with patch("asyncio.open_connection", fake_open_connection):
+            result = await is_network_available_socket(
                 test_sites=[("8.8.8.8", 53)], timeout=1.0
             )
             assert result is True
 
-    def test_failure_all_targets(self):
-        with patch(
-            "app.network.probes.socket.create_connection",
-            side_effect=TimeoutError,
-        ):
-            result = is_network_available_socket(
+    async def test_failure_all_targets(self):
+        async def fake_open_connection(host, port, **kwargs):
+            raise TimeoutError
+
+        with patch("asyncio.open_connection", fake_open_connection):
+            result = await is_network_available_socket(
                 test_sites=[("8.8.8.8", 53), ("1.1.1.1", 53)], timeout=0.1
             )
             assert result is False
 
-    def test_success_on_second_target(self):
+    async def test_success_on_second_target(self):
         call_count = 0
 
-        def side_effect(addr, timeout=None, source_address=None):
+        mock_writer = MagicMock()
+        mock_writer.close = MagicMock()
+        mock_writer.wait_closed = AsyncMock()
+
+        async def fake_open_connection(host, port, **kwargs):
             nonlocal call_count
             call_count += 1
-            if addr == ("8.8.8.8", 53):
+            if host == "8.8.8.8":
                 raise TimeoutError
-            m = MagicMock()
-            m.__enter__ = lambda s: s
-            m.__exit__ = lambda s, *a: None
-            return m
+            return (None, mock_writer)
 
-        with patch(
-            "app.network.probes.socket.create_connection",
-            side_effect=side_effect,
-        ):
-            result = is_network_available_socket(
+        with patch("asyncio.open_connection", fake_open_connection):
+            result = await is_network_available_socket(
                 test_sites=[("8.8.8.8", 53), ("1.1.1.1", 53)], timeout=0.1
             )
             assert result is True
 
 
 # =====================================================================
-# network_probes — is_network_available_http
+# network_probes — is_network_available_http (async)
 # =====================================================================
 
 
 class TestIsNetworkAvailableHttp:
-    def _setup_mock_client(self, MockClient, mock_resp):
-        """_get_probe_client() 直接返回 client 实例，不需要 __enter__ 上下文。"""
-        MockClient.return_value.get.return_value = mock_resp
-
-    def test_success_200(self):
+    async def test_success_200(self):
         mock_resp = MagicMock()
         mock_resp.status_code = 200
-        with patch("app.network.probes.httpx.Client") as MockClient:
-            self._setup_mock_client(MockClient, mock_resp)
-            result = is_network_available_http(
+
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(return_value=mock_resp)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with patch("app.network.probes.httpx.AsyncClient", return_value=mock_client):
+            result = await is_network_available_http(
                 test_urls=["https://www.baidu.com"], timeout=2.0
             )
             assert result is True
 
-    def test_failure_500(self):
+    async def test_failure_500(self):
         mock_resp = MagicMock()
         mock_resp.status_code = 500
-        with patch("app.network.probes.httpx.Client") as MockClient:
-            self._setup_mock_client(MockClient, mock_resp)
-            result = is_network_available_http(
+
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(return_value=mock_resp)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with patch("app.network.probes.httpx.AsyncClient", return_value=mock_client):
+            result = await is_network_available_http(
                 test_urls=["https://www.baidu.com"], timeout=2.0
             )
             assert result is False
 
-    def test_connection_error(self):
-        with patch("app.network.probes.httpx.Client") as MockClient:
-            MockClient.return_value.get.side_effect = Exception("connection error")
-            result = is_network_available_http(
+    async def test_connection_error(self):
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(side_effect=Exception("connection error"))
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with patch("app.network.probes.httpx.AsyncClient", return_value=mock_client):
+            result = await is_network_available_http(
                 test_urls=["https://www.baidu.com"], timeout=2.0
             )
             assert result is False
 
-    def test_empty_urls_uses_defaults(self):
+    async def test_empty_urls_uses_defaults(self):
         """空列表回退到默认 URL（captive portal），需要 204 才算成功"""
-        with patch("app.network.probes.httpx.Client") as MockClient:
-            mock_resp = MagicMock()
-            mock_resp.status_code = 204
-            self._setup_mock_client(MockClient, mock_resp)
-            result = is_network_available_http(test_urls=[], timeout=2.0)
+        mock_resp = MagicMock()
+        mock_resp.status_code = 204
+
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(return_value=mock_resp)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with patch("app.network.probes.httpx.AsyncClient", return_value=mock_client):
+            result = await is_network_available_http(test_urls=[], timeout=2.0)
             assert result is True
 
 
 # =====================================================================
-# network_probes — is_network_available_url
+# network_probes — is_network_available_url (async)
 # =====================================================================
 
 
 class TestIsNetworkAvailableUrl:
-    def setup_method(self):
-        """清空 _probe_client 缓存，确保每次测试使用新的 mock。"""
-        import app.network.probes as probes_module
-
-        probes_module._probe_client = None
-
-    def _setup_mock_client(self, MockClient, mock_resp):
-        """_get_probe_client() 直接返回 client 实例，不需要 __enter__ 上下文。"""
-        MockClient.return_value.get.return_value = mock_resp
-
-    def test_success_matching_content(self):
+    async def test_success_matching_content(self):
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.text = "Success"
-        with patch("app.network.probes.httpx.Client") as MockClient:
-            self._setup_mock_client(MockClient, mock_resp)
-            result = is_network_available_url(
+
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(return_value=mock_resp)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with patch("app.network.probes.httpx.AsyncClient", return_value=mock_client):
+            result = await is_network_available_url(
                 url_checks=[("http://test.com", "Success")], timeout=3.0
             )
             assert result is True
 
-    def test_failure_content_mismatch(self):
+    async def test_failure_content_mismatch(self):
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.text = "Login Page"
-        with patch("app.network.probes.httpx.Client") as MockClient:
-            self._setup_mock_client(MockClient, mock_resp)
-            result = is_network_available_url(
+
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(return_value=mock_resp)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with patch("app.network.probes.httpx.AsyncClient", return_value=mock_client):
+            result = await is_network_available_url(
                 url_checks=[("http://test.com", "Success")], timeout=3.0
             )
             assert result is False
 
-    def test_empty_checks_returns_true(self):
-        result = is_network_available_url(url_checks=[], timeout=3.0)
+    async def test_empty_checks_returns_true(self):
+        result = await is_network_available_url(url_checks=[], timeout=3.0)
         assert result is True
 
-    def test_connection_error(self):
-        with patch("app.network.probes.httpx.Client") as MockClient:
-            MockClient.return_value.get.side_effect = Exception("timeout")
-            result = is_network_available_url(
+    async def test_connection_error(self):
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(side_effect=Exception("timeout"))
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with patch("app.network.probes.httpx.AsyncClient", return_value=mock_client):
+            result = await is_network_available_url(
                 url_checks=[("http://test.com", "Success")], timeout=3.0
             )
             assert result is False
 
-    def test_check_url_keeps_verify_false(self):
+    async def test_check_url_keeps_verify_false(self):
         """verify=False 应保留（兼容校园网自签证书）"""
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.text = "Success"
-        with patch("app.network.probes.httpx.Client") as MockClient:
-            self._setup_mock_client(MockClient, mock_resp)
-            is_network_available_url(
+
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(return_value=mock_resp)
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+
+        with patch(
+            "app.network.probes.httpx.AsyncClient", return_value=mock_client
+        ) as MockClient:
+            await is_network_available_url(
                 url_checks=[("http://test.com", "Success")], timeout=3.0
             )
-            # 验证 verify=False 被传入 httpx.Client
+            # 验证 verify=False 被传入 AsyncClient
             _, kwargs = MockClient.call_args
             assert kwargs.get("verify") is False
 
@@ -291,7 +297,7 @@ class TestCheckPause:
 
 
 # =====================================================================
-# network_decision — check_network_status
+# network_decision — check_network_status (async)
 # =====================================================================
 
 
@@ -309,21 +315,21 @@ class TestCheckNetworkStatus:
         return MonitorSettings(**defaults)
 
     @patch("app.network.decision.is_network_available", return_value=True)
-    def test_network_ok(self, *mocks):
-        ok, reason, method = check_network_status(self._make_config())
+    async def test_network_ok(self, *mocks):
+        ok, reason, method = await check_network_status(self._make_config())
         assert ok is True
         assert reason == "network_ok"
         assert method in ("tcp", "http", "url", "local_only")
 
     @patch("app.network.decision.is_network_available", return_value=False)
-    def test_network_down(self, *mocks):
-        ok, reason, method = check_network_status(self._make_config())
+    async def test_network_down(self, *mocks):
+        ok, reason, method = await check_network_status(self._make_config())
         assert ok is False
         assert reason == "network_down"
         assert method == "none"
 
-    def test_all_disabled(self):
-        ok, reason, method = check_network_status(
+    async def test_all_disabled(self):
+        ok, reason, method = await check_network_status(
             self._make_config(
                 enable_tcp_check=False,
                 enable_http_check=False,
@@ -431,7 +437,9 @@ class TestIsAuthUrlReachable:
             mock_conn.return_value.__enter__ = lambda s: s
             mock_conn.return_value.__exit__ = lambda s, *a: None
             assert _is_auth_url_reachable("http://10.0.0.1:8080/login") is True
-            mock_conn.assert_called_once_with(("10.0.0.1", 8080), timeout=3, source_address=None)
+            mock_conn.assert_called_once_with(
+                ("10.0.0.1", 8080), timeout=3, source_address=None
+            )
 
     def test_connection_refused(self):
         from app.network.decision import _is_auth_url_reachable
@@ -465,7 +473,9 @@ class TestIsAuthUrlReachable:
             mock_conn.return_value.__enter__ = lambda s: s
             mock_conn.return_value.__exit__ = lambda s, *a: None
             _is_auth_url_reachable("https://example.com/auth")
-            mock_conn.assert_called_once_with(("example.com", 443), timeout=3, source_address=None)
+            mock_conn.assert_called_once_with(
+                ("example.com", 443), timeout=3, source_address=None
+            )
 
     def test_http_default_port(self):
         from app.network.decision import _is_auth_url_reachable
@@ -474,7 +484,9 @@ class TestIsAuthUrlReachable:
             mock_conn.return_value.__enter__ = lambda s: s
             mock_conn.return_value.__exit__ = lambda s, *a: None
             _is_auth_url_reachable("http://example.com/auth")
-            mock_conn.assert_called_once_with(("example.com", 80), timeout=3, source_address=None)
+            mock_conn.assert_called_once_with(
+                ("example.com", 80), timeout=3, source_address=None
+            )
 
     def test_extra_targets_reachable(self):
         """extra_targets 中任一目标可达返回 True。"""
@@ -507,22 +519,24 @@ class TestIsAuthUrlReachable:
                 is False
             )
 
-    @patch('app.network.decision.socket.create_connection', side_effect=TimeoutError)
+    @patch("app.network.decision.socket.create_connection", side_effect=TimeoutError)
     def test_extra_targets_empty_skip(self, mock_conn):
         """extra_targets 解析为空时跳过检测。"""
         from app.network.decision import _is_auth_url_reachable
 
-        assert _is_auth_url_reachable("http://10.0.0.1/login", extra_targets=[]) is False
+        assert (
+            _is_auth_url_reachable("http://10.0.0.1/login", extra_targets=[]) is False
+        )
 
 
 # =====================================================================
-# network_decision — is_network_available
+# network_decision — is_network_available (async)
 # =====================================================================
 
 
 class TestIsNetworkAvailable:
-    def test_all_disabled_returns_true(self):
-        result = is_network_available(
+    async def test_all_disabled_returns_true(self):
+        result = await is_network_available(
             enable_tcp=False,
             enable_http=False,
             url_checks=None,
@@ -531,8 +545,8 @@ class TestIsNetworkAvailable:
 
     @patch("app.network.decision.is_network_available_socket", return_value=True)
     @patch("app.network.decision.is_network_available_http", return_value=True)
-    def test_all_pass(self, *mocks):
-        result = is_network_available(
+    async def test_all_pass(self, *mocks):
+        result = await is_network_available(
             test_sites=[("8.8.8.8", 53)],
             test_urls=["https://www.baidu.com"],
             enable_tcp=True,
@@ -542,8 +556,8 @@ class TestIsNetworkAvailable:
 
     @patch("app.network.decision.is_network_available_socket", return_value=False)
     @patch("app.network.decision.is_network_available_http", return_value=True)
-    def test_tcp_fail_http_pass(self, *mocks):
-        result = is_network_available(
+    async def test_tcp_fail_http_pass(self, *mocks):
+        result = await is_network_available(
             test_sites=[("8.8.8.8", 53)],
             test_urls=["https://www.baidu.com"],
             enable_tcp=True,
@@ -552,8 +566,8 @@ class TestIsNetworkAvailable:
         assert result is False
 
     @patch("app.network.decision.is_network_available_socket", return_value=True)
-    def test_tcp_only(self, *mocks):
-        result = is_network_available(
+    async def test_tcp_only(self, *mocks):
+        result = await is_network_available(
             test_sites=[("8.8.8.8", 53)],
             enable_tcp=True,
             enable_http=False,
@@ -561,9 +575,9 @@ class TestIsNetworkAvailable:
         assert result is True
 
     @patch("app.network.decision.is_network_available_url", return_value=True)
-    def test_url_checks_only(self, *mocks):
+    async def test_url_checks_only(self, *mocks):
         """仅启用 URL 响应检测。"""
-        result = is_network_available(
+        result = await is_network_available(
             enable_tcp=False,
             enable_http=False,
             url_checks=[("http://test.com", "Success")],
@@ -571,19 +585,22 @@ class TestIsNetworkAvailable:
         assert result is True
 
     @patch("app.network.decision.is_network_available_url", return_value=False)
-    def test_url_checks_fail(self, *mocks):
+    async def test_url_checks_fail(self, *mocks):
         """URL 响应检测失败。"""
-        result = is_network_available(
+        result = await is_network_available(
             enable_tcp=False,
             enable_http=False,
             url_checks=[("http://test.com", "Success")],
         )
         assert result is False
 
-    @patch("app.network.decision.is_network_available_socket", side_effect=Exception("boom"))
-    def test_future_exception_returns_false(self, *mocks):
-        """future 抛异常时视为检测失败。"""
-        result = is_network_available(
+    @patch(
+        "app.network.decision.is_network_available_socket",
+        side_effect=Exception("boom"),
+    )
+    async def test_future_exception_returns_false(self, *mocks):
+        """gather 抛异常时视为检测失败。"""
+        result = await is_network_available(
             test_sites=[("8.8.8.8", 53)],
             enable_tcp=True,
             enable_http=False,

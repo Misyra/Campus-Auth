@@ -281,9 +281,7 @@ class TestInterfaceManagerGateway:
         mock_result = MagicMock(returncode=0, stdout=route_output)
         mgr = InterfaceManager()
 
-        with patch(
-            "app.network.interfaces.subprocess.run", return_value=mock_result
-        ):
+        with patch("app.network.interfaces.subprocess.run", return_value=mock_result):
             result = mgr._gateways_windows(ip_map)
 
         assert result.get("以太网") == "192.168.1.1"
@@ -301,9 +299,7 @@ class TestInterfaceManagerGateway:
         mock_result = MagicMock(returncode=0, stdout=route_output)
         mgr = InterfaceManager()
 
-        with patch(
-            "app.network.interfaces.subprocess.run", return_value=mock_result
-        ):
+        with patch("app.network.interfaces.subprocess.run", return_value=mock_result):
             result = mgr._gateways_windows(ip_map)
 
         assert result == {}
@@ -315,9 +311,7 @@ class TestInterfaceManagerGateway:
         mock_result = MagicMock(returncode=1, stdout="")
         mgr = InterfaceManager()
 
-        with patch(
-            "app.network.interfaces.subprocess.run", return_value=mock_result
-        ):
+        with patch("app.network.interfaces.subprocess.run", return_value=mock_result):
             result = mgr._gateways_windows({})
 
         assert result == {}
@@ -339,9 +333,7 @@ Internet6:
         mock_result = MagicMock(returncode=0, stdout=netstat_output)
         mgr = InterfaceManager()
 
-        with patch(
-            "app.network.interfaces.subprocess.run", return_value=mock_result
-        ):
+        with patch("app.network.interfaces.subprocess.run", return_value=mock_result):
             result = mgr._gateways_macos({})
 
         assert result.get("en0") == "192.168.1.1"
@@ -355,9 +347,7 @@ Internet6:
         mock_result = MagicMock(returncode=1, stdout="")
         mgr = InterfaceManager()
 
-        with patch(
-            "app.network.interfaces.subprocess.run", return_value=mock_result
-        ):
+        with patch("app.network.interfaces.subprocess.run", return_value=mock_result):
             result = mgr._gateways_macos({})
 
         assert result == {}
@@ -372,9 +362,7 @@ Internet6:
         with (
             patch("app.network.interfaces.platform.system", return_value="Linux"),
             patch.object(mgr, "_gateways_linux", return_value=expected) as mock_linux,
-            patch(
-                "app.network.interfaces.psutil.net_if_addrs", return_value={}
-            ),
+            patch("app.network.interfaces.psutil.net_if_addrs", return_value={}),
         ):
             result = mgr.get_gateways_by_name()
 

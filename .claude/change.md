@@ -2,6 +2,35 @@
 
 ## 2026-07-05
 
+### refactor(network): probes/decision 改 asyncio，消除 11 探测线程
+
+- `app/network/probes.py`：
+  - `socket.create_connection` → `asyncio.open_connection`，支持 `local_addr` 绑定源 IP
+  - `httpx.Client` → `httpx.AsyncClient`，per-call 创建替代全局单例
+  - 删除 `ThreadPoolExecutor(8)` 及相关同步客户端池（`_probe_client`、`_bound_clients`）
+  - 新增 `_race_first_success_async`（async 版 OR 语义竞态）
+  - `shutdown_probes()` 简化为仅设置 `_shutdown_event`
+- `app/network/decision.py`：
+  - `is_network_available()` → `async def`，`ThreadPoolExecutor(3)` + `as_completed` → `asyncio.gather`
+  - `check_network_status()` → `async def`
+  - 删除 `_decision_executor` 和 `shutdown_decision_executor()`
+- `app/services/monitor_service.py`：
+  - `NetworkMonitorCore.check_once()` → `async def`，内部 `await check_network_status()`
+  - 删除 `_check_bind_ip_change` 中的 `close_bound_client` 调用
+- `app/services/engine.py`：
+  - `_do_network_check_async`：`await asyncio.to_thread(core.check_once)` → `await core.check_once()`
+  - `test_network()`：改为通过 `_dispatch_command(TEST_NETWORK)` 派发到引擎 loop 异步执行
+  - 新增 `EngineCmdType.TEST_NETWORK` 和 `_handle_test_network` 处理器
+- `app/container.py`：删除 `shutdown_decision_executor()` 调用
+- `app/services/login_runner.py`：`check_network_status()` 改为 `asyncio.run(check_network_status())`
+- 测试适配：
+  - `tests/test_network/test_probes.py`：删除 executor/客户端池测试，新增 async 探测测试
+  - `tests/test_network/test_decision.py`：删除 executor 隔离测试，适配 async
+  - `tests/test_core/test_network_probes.py`：探测测试改为 async + `AsyncMock`
+  - `tests/test_services/test_engine.py`：`check_once` mock 改 `AsyncMock`，`test_network` 改 dispatch mock
+  - `tests/test_integration/`：适配 `check_network_status` 和 `check_once` async 化
+  - `tests/test_config/test_container.py`、`tests/test_app/`、`tests/test_services/test_container_cleanup.py`：删除 `shutdown_decision_executor` mock
+
 ### fix(engine): 修复 start_thread 语义回归 + login 回调线程安全
 
 - `app/services/engine.py`：

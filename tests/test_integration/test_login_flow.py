@@ -14,7 +14,7 @@ import itertools
 import threading
 import time
 from concurrent.futures import Future
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 from app.network.decision import NetworkCheckResult
 from app.schemas import LoginCredentials, MonitorSettings, RuntimeConfig
@@ -69,6 +69,7 @@ def _make_raw_engine() -> ScheduleEngine:
     svc._orchestrator = MagicMock()
     # LoginBridge — 登录委托
     from app.services.engine import LoginBridge
+
     _wakeup_placeholder = threading.Event()
     svc._login_bridge = LoginBridge(
         get_orchestrator=lambda: svc._orchestrator,
@@ -81,15 +82,19 @@ def _make_raw_engine() -> ScheduleEngine:
     )
     svc._retry_time_lock = threading.Lock()
     import time as _time
+
     def _bridge_retry_scheduled(delay: float) -> None:
         with svc._retry_time_lock:
             svc._next_retry_time = _time.time() + delay
+
     def _bridge_login_success() -> None:
         with svc._retry_time_lock:
             svc._next_retry_time = 0
+
     def _bridge_retry_exhausted() -> None:
         with svc._retry_time_lock:
             svc._next_retry_time = 0
+
     svc._login_bridge._on_retry_scheduled = _bridge_retry_scheduled
     svc._login_bridge._on_login_success = _bridge_login_success
     svc._login_bridge._on_retry_exhausted = _bridge_retry_exhausted
@@ -119,7 +124,9 @@ class TestFullLoginSequence:
         svc = _make_raw_engine()
         svc._runtime_config = RuntimeConfig(
             credentials=LoginCredentials(
-                username="testuser", password="testpass", auth_url="http://auth.example.com",
+                username="testuser",
+                password="testpass",
+                auth_url="http://auth.example.com",
             ),
         )
         handle = MagicMock()
@@ -144,7 +151,9 @@ class TestFullLoginSequence:
         svc = _make_raw_engine()
         svc._runtime_config = RuntimeConfig(
             credentials=LoginCredentials(
-                username="testuser", password="testpass", auth_url="http://auth.example.com",
+                username="testuser",
+                password="testpass",
+                auth_url="http://auth.example.com",
             ),
         )
         handle = MagicMock()
@@ -180,7 +189,9 @@ class TestFullLoginSequence:
         svc = _make_raw_engine()
         svc._runtime_config = RuntimeConfig(
             credentials=LoginCredentials(
-                username="testuser", password="testpass", auth_url="http://auth.example.com",
+                username="testuser",
+                password="testpass",
+                auth_url="http://auth.example.com",
             ),
             monitor=MonitorSettings(enable_local_check=False, check_auth_url=False),
         )
@@ -229,7 +240,19 @@ class TestLoginWithNetworkDetection:
         """网络检测发现 need_login 时，触发异步登录。"""
         svc = _make_raw_engine()
         mock_core = MagicMock()
-        mock_core.check_once.return_value = CheckOnceResult(paused=False, net_ok=False, net_reason="down", need_login=True, check_num=1, interval=300, result=NetworkCheckResult(available=False, method="none", latency_ms=0, detail="down"))
+        mock_core.check_once = AsyncMock(
+            return_value=CheckOnceResult(
+                paused=False,
+                net_ok=False,
+                net_reason="down",
+                need_login=True,
+                check_num=1,
+                interval=300,
+                result=NetworkCheckResult(
+                    available=False, method="none", latency_ms=0, detail="down"
+                ),
+            )
+        )
         mock_core.consume_profile_switch_flag.return_value = False
         svc._monitor_core = mock_core
         svc._do_async_login = MagicMock()
@@ -242,7 +265,19 @@ class TestLoginWithNetworkDetection:
         """网络正常时，不触发登录，通过 _retry_policy 重置退避。"""
         svc = _make_raw_engine()
         mock_core = MagicMock()
-        mock_core.check_once.return_value = CheckOnceResult(paused=False, net_ok=True, net_reason="", need_login=False, check_num=1, interval=600, result=NetworkCheckResult(available=True, method="tcp", latency_ms=0, detail=""))
+        mock_core.check_once = AsyncMock(
+            return_value=CheckOnceResult(
+                paused=False,
+                net_ok=True,
+                net_reason="",
+                need_login=False,
+                check_num=1,
+                interval=600,
+                result=NetworkCheckResult(
+                    available=True, method="tcp", latency_ms=0, detail=""
+                ),
+            )
+        )
         mock_core.consume_profile_switch_flag.return_value = False
         svc._monitor_core = mock_core
         svc._retry_policy._attempt = 2
@@ -257,7 +292,19 @@ class TestLoginWithNetworkDetection:
         """网络检测后更新检测间隔。"""
         svc = _make_raw_engine()
         mock_core = MagicMock()
-        mock_core.check_once.return_value = CheckOnceResult(paused=False, net_ok=True, net_reason="", need_login=False, check_num=1, interval=120, result=NetworkCheckResult(available=True, method="tcp", latency_ms=0, detail=""))
+        mock_core.check_once = AsyncMock(
+            return_value=CheckOnceResult(
+                paused=False,
+                net_ok=True,
+                net_reason="",
+                need_login=False,
+                check_num=1,
+                interval=120,
+                result=NetworkCheckResult(
+                    available=True, method="tcp", latency_ms=0, detail=""
+                ),
+            )
+        )
         mock_core.consume_profile_switch_flag.return_value = False
         svc._monitor_core = mock_core
 
@@ -269,7 +316,19 @@ class TestLoginWithNetworkDetection:
         """网络检测时检测到方案切换，重启监控。"""
         svc = _make_raw_engine()
         mock_core = MagicMock()
-        mock_core.check_once.return_value = CheckOnceResult(paused=False, net_ok=True, net_reason="", need_login=False, check_num=1, interval=300, result=NetworkCheckResult(available=True, method="tcp", latency_ms=0, detail=""))
+        mock_core.check_once = AsyncMock(
+            return_value=CheckOnceResult(
+                paused=False,
+                net_ok=True,
+                net_reason="",
+                need_login=False,
+                check_num=1,
+                interval=300,
+                result=NetworkCheckResult(
+                    available=True, method="tcp", latency_ms=0, detail=""
+                ),
+            )
+        )
         mock_core.consume_profile_switch_flag.return_value = True
         svc._monitor_core = mock_core
         svc._handle_stop = MagicMock()
@@ -286,7 +345,7 @@ class TestLoginWithNetworkDetection:
         """网络检测异常时不影响引擎运行，设置下次检测时间。"""
         svc = _make_raw_engine()
         mock_core = MagicMock()
-        mock_core.check_once.side_effect = RuntimeError("检测超时")
+        mock_core.check_once = AsyncMock(side_effect=RuntimeError("检测超时"))
         svc._monitor_core = mock_core
 
         await svc._do_network_check_async()
@@ -299,7 +358,19 @@ class TestLoginWithNetworkDetection:
 
         # 第一次检测：网络异常，触发登录
         mock_core = MagicMock()
-        mock_core.check_once.return_value = CheckOnceResult(paused=False, net_ok=False, net_reason="down", need_login=True, check_num=1, interval=300, result=NetworkCheckResult(available=False, method="none", latency_ms=0, detail="down"))
+        mock_core.check_once = AsyncMock(
+            return_value=CheckOnceResult(
+                paused=False,
+                net_ok=False,
+                net_reason="down",
+                need_login=True,
+                check_num=1,
+                interval=300,
+                result=NetworkCheckResult(
+                    available=False, method="none", latency_ms=0, detail="down"
+                ),
+            )
+        )
         mock_core.consume_profile_switch_flag.return_value = False
         svc._monitor_core = mock_core
         svc._runtime_config = RuntimeConfig()
@@ -309,7 +380,19 @@ class TestLoginWithNetworkDetection:
         svc._do_async_login.assert_called_once()
 
         # 第二次检测：网络恢复正常
-        mock_core.check_once.return_value = CheckOnceResult(paused=False, net_ok=True, net_reason="", need_login=False, check_num=1, interval=300, result=NetworkCheckResult(available=True, method="tcp", latency_ms=0, detail=""))
+        mock_core.check_once = AsyncMock(
+            return_value=CheckOnceResult(
+                paused=False,
+                net_ok=True,
+                net_reason="",
+                need_login=False,
+                check_num=1,
+                interval=300,
+                result=NetworkCheckResult(
+                    available=True, method="tcp", latency_ms=0, detail=""
+                ),
+            )
+        )
         svc._do_async_login.reset_mock()
 
         await svc._do_network_check_async()
@@ -323,7 +406,19 @@ class TestLoginWithNetworkDetection:
         # 创建一个真实的 monitor_core（_is_monitoring 是 property，通过设置 monitor_core 控制）
         mock_core = MagicMock()
         mock_core.monitoring = True
-        mock_core.check_once.return_value = CheckOnceResult(paused=False, net_ok=False, net_reason="down", need_login=True, check_num=1, interval=300, result=NetworkCheckResult(available=False, method="none", latency_ms=0, detail="down"))
+        mock_core.check_once = AsyncMock(
+            return_value=CheckOnceResult(
+                paused=False,
+                net_ok=False,
+                net_reason="down",
+                need_login=True,
+                check_num=1,
+                interval=300,
+                result=NetworkCheckResult(
+                    available=False, method="none", latency_ms=0, detail="down"
+                ),
+            )
+        )
         mock_core.consume_profile_switch_flag.return_value = False
         svc._monitor_core = mock_core
         # 关闭登录前置检查，确保 _do_async_login 真正提交到 orchestrator
@@ -340,6 +435,7 @@ class TestLoginWithNetworkDetection:
             def _wrapped(f):
                 cb(f)
                 callback_done.set()
+
             _orig_adc(_wrapped)
 
         future.add_done_callback = _wrapping_adc
@@ -402,6 +498,7 @@ class TestLoginConcurrencyProtection:
             def _wrapped(f):
                 cb(f)
                 callback_done.set()
+
             _orig_adc(_wrapped)
 
         future.add_done_callback = _wrapping_adc
@@ -436,7 +533,9 @@ class TestLoginConcurrencyProtection:
         svc = _make_raw_engine()
         svc._runtime_config = RuntimeConfig(
             credentials=LoginCredentials(
-                username="testuser", password="testpass", auth_url="http://auth.example.com",
+                username="testuser",
+                password="testpass",
+                auth_url="http://auth.example.com",
             ),
             monitor=MonitorSettings(enable_local_check=False, check_auth_url=False),
         )
@@ -448,6 +547,7 @@ class TestLoginConcurrencyProtection:
             def _wrapped(f):
                 cb(f)
                 callback_done.set()
+
             _orig_adc(_wrapped)
 
         future.add_done_callback = _wrapping_adc
@@ -516,7 +616,9 @@ class TestLoginConcurrencyProtection:
         svc = _make_raw_engine()
         svc._runtime_config = RuntimeConfig(
             credentials=LoginCredentials(
-                username="testuser", password="testpass", auth_url="http://auth.example.com",
+                username="testuser",
+                password="testpass",
+                auth_url="http://auth.example.com",
             ),
             monitor=MonitorSettings(enable_local_check=False, check_auth_url=False),
         )
@@ -542,7 +644,9 @@ class TestLoginConcurrencyProtection:
         svc = _make_raw_engine()
         svc._runtime_config = RuntimeConfig(
             credentials=LoginCredentials(
-                username="testuser", password="testpass", auth_url="http://auth.example.com",
+                username="testuser",
+                password="testpass",
+                auth_url="http://auth.example.com",
             ),
             monitor=MonitorSettings(enable_local_check=False, check_auth_url=False),
         )
@@ -554,6 +658,7 @@ class TestLoginConcurrencyProtection:
             def _wrapped(f):
                 cb(f)
                 callback_done.set()
+
             _orig_adc(_wrapped)
 
         future.add_done_callback = _wrapping_adc

@@ -8,25 +8,26 @@ from __future__ import annotations
 import threading
 import time
 from concurrent.futures import Future
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
-
-from app.network.decision import check_network_status
-from app.schemas import AppSettings, RuntimeConfig
-from app.schemas import LoginCredentials
+from app.schemas import AppSettings, LoginCredentials
 from app.workers.playwright_worker import WorkerResponse
 
 
 def _ensure_login_config(engine) -> None:
     """确保引擎运行时配置包含登录所需字段。"""
     old = engine._runtime_config
-    engine._runtime_config = old.model_copy(update={
-        "credentials": LoginCredentials(
-            username="testuser", password="testpass", auth_url="http://10.0.0.1",
-            isp=old.credentials.isp, carrier_custom=old.credentials.carrier_custom,
-        ),
-    })
+    engine._runtime_config = old.model_copy(
+        update={
+            "credentials": LoginCredentials(
+                username="testuser",
+                password="testpass",
+                auth_url="http://10.0.0.1",
+                isp=old.credentials.isp,
+                carrier_custom=old.credentials.carrier_custom,
+            ),
+        }
+    )
 
 
 class TestLoginConnection:
@@ -43,7 +44,7 @@ class TestLoginConnection:
         with (
             patch(
                 "app.network.decision.check_network_status",
-                return_value=(False, "network_down", "none"),
+                new=AsyncMock(return_value=(False, "network_down", "none")),
             ),
             patch(
                 "app.network.decision.check_login_prerequisites",
@@ -95,9 +96,14 @@ class TestLoginConnection:
         _ensure_login_config(engine)
 
         from app.schemas import MonitorSettings
-        engine._runtime_config = engine._runtime_config.model_copy(update={
-            "monitor": MonitorSettings(enable_local_check=False, check_auth_url=False),
-        })
+
+        engine._runtime_config = engine._runtime_config.model_copy(
+            update={
+                "monitor": MonitorSettings(
+                    enable_local_check=False, check_auth_url=False
+                ),
+            }
+        )
 
         mock_worker.submit.return_value = WorkerResponse(
             success=False, error="网络超时"
@@ -135,7 +141,9 @@ class TestLoginConnection:
 
         # 启动自动登录（异步）
         config = engine.get_runtime_config()
-        handle_auto = task_executor._login_orchestrator.submit(source="auto", config=config)
+        handle_auto = task_executor._login_orchestrator.submit(
+            source="auto", config=config
+        )
         future_auto = handle_auto.future
         login_started.wait(timeout=5)
 
@@ -158,7 +166,9 @@ class TestLoginConnection:
             success=True, data="手动登录成功"
         )
 
-        handle_manual = task_executor._login_orchestrator.submit(source="auto", config=config)
+        handle_manual = task_executor._login_orchestrator.submit(
+            source="auto", config=config
+        )
         future_manual = handle_manual.future
         ok, msg = future_manual.result(timeout=5)
         assert ok is True
@@ -209,12 +219,16 @@ class TestLoginConnection:
 
         # 线程 A 提交登录
         config = engine.get_runtime_config()
-        handle_a = task_executor._login_orchestrator.submit(source="auto", config=config)
+        handle_a = task_executor._login_orchestrator.submit(
+            source="auto", config=config
+        )
         future_a = handle_a.future
         start_event.wait(timeout=5)
 
         # 线程 B 尝试提交，应被去重（返回同一个 Future）
-        handle_b = task_executor._login_orchestrator.submit(source="auto", config=config)
+        handle_b = task_executor._login_orchestrator.submit(
+            source="auto", config=config
+        )
         future_b = handle_b.future
 
         # 验证 submit 只调了一次
