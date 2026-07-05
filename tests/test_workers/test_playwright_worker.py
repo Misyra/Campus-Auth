@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import queue
+import asyncio
 import threading
 from unittest.mock import MagicMock, patch
 
@@ -187,7 +187,7 @@ class TestStopJoinsOnQueueFull:
     """stop() 在命令队列满时仍应等待消费者线程退出。"""
 
     def test_stop_joins_consumer_when_queue_full(self):
-        """队列满 → put_nowait 抛 queue.Full → 仍调用 join 等待消费者线程。"""
+        """队列满 → put_nowait 抛 QueueFull → 仍调用 join 等待消费者线程。"""
         from app.workers.playwright_worker import PlaywrightWorker
 
         worker = PlaywrightWorker()
@@ -200,10 +200,7 @@ class TestStopJoinsOnQueueFull:
         fake_loop.is_running.return_value = True
         worker._loop = fake_loop
 
-        with (
-            patch.object(worker._cmd_queue, "put_nowait", side_effect=queue.Full),
-            patch.object(worker, "_wake_async"),
-        ):
+        with patch.object(worker._cmd_queue, "put_nowait", side_effect=asyncio.QueueFull):
             worker.stop(timeout=1)
 
         fake_thread.join.assert_called()
@@ -222,10 +219,7 @@ class TestStopJoinsOnQueueFull:
         fake_loop.is_running.return_value = True
         worker._loop = fake_loop
 
-        with (
-            patch.object(worker._cmd_queue, "put_nowait", side_effect=queue.Full),
-            patch.object(worker, "_wake_async"),
-        ):
+        with patch.object(worker._cmd_queue, "put_nowait", side_effect=asyncio.QueueFull):
             worker.stop(timeout=2)
 
         fake_loop.call_soon_threadsafe.assert_any_call(fake_loop.stop)
@@ -245,15 +239,13 @@ class TestStopJoinsOnQueueFull:
         fake_loop.is_running.return_value = False
         worker._loop = fake_loop
 
-        with (
-            patch.object(worker._cmd_queue, "put_nowait", side_effect=queue.Full),
-            patch.object(worker, "_wake_async"),
-        ):
+        # loop 未运行 → stop() 用 put_nowait（不走 call_soon_threadsafe）
+        with patch.object(worker._cmd_queue, "put_nowait", side_effect=asyncio.QueueFull):
             worker.stop(timeout=1)
 
         for c in fake_loop.call_soon_threadsafe.call_args_list:
             assert c.args[0] is not fake_loop.stop, (
-                "queue.Full 分支不应在循环未运行时调用 loop.stop"
+                "QueueFull 分支不应在循环未运行时调用 loop.stop"
             )
         fake_thread.join.assert_called()
 
@@ -268,7 +260,8 @@ class TestStopJoinsOnQueueFull:
         worker._consumer_thread = fake_thread
         worker._loop = None
 
-        with patch.object(worker._cmd_queue, "put_nowait", side_effect=queue.Full):
+        # loop 为 None → stop() 用 put_nowait（不走 call_soon_threadsafe）
+        with patch.object(worker._cmd_queue, "put_nowait", side_effect=asyncio.QueueFull):
             worker.stop(timeout=1)
 
         fake_thread.join.assert_called()
@@ -288,9 +281,8 @@ class TestStopJoinsOnQueueFull:
         worker._loop = fake_loop
 
         with (
-            patch.object(worker._cmd_queue, "put_nowait", side_effect=queue.Full),
+            patch.object(worker._cmd_queue, "put_nowait", side_effect=asyncio.QueueFull),
             patch("app.workers.playwright_worker.logger") as mock_logger,
-            patch.object(worker, "_wake_async"),
         ):
             worker.stop(timeout=1)
 
