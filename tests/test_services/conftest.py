@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import threading
 import time
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -102,8 +102,8 @@ def engine_factory():
             ws_manager=svc._ws_manager,
         )
 
-        # LoginBridge — 使用 MagicMock 解耦内部实现
-        svc._login_bridge = MagicMock()
+        # LoginBridge — 使用 AsyncMock 解耦内部实现（submit_login 已改 async）
+        svc._login_bridge = AsyncMock()
 
         def _fake_submit_login(is_manual=False, config_snapshot=None, on_complete=None):
             """模拟 LoginBridge.submit_login：委托 orchestrator 并调用 on_complete。"""

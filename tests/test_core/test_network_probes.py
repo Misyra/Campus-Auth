@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-import socket
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.network.decision import (
@@ -47,7 +46,7 @@ class TestSetBlockProxy:
 
 
 class TestIsLocalNetworkConnected:
-    def test_returns_true_when_interface_up(self):
+    async def test_returns_true_when_interface_up(self):
         """有活跃的非回环接口时返回 True。"""
         mock_stats = {
             "Ethernet": MagicMock(isup=True, speed=1000),
@@ -56,35 +55,37 @@ class TestIsLocalNetworkConnected:
         with (
             patch("app.network.probes.psutil.net_if_stats", return_value=mock_stats),
             patch(
-                "app.network.probes._check_interface_connectivity", return_value=True
+                "app.network.probes._check_interface_connectivity",
+                new_callable=AsyncMock,
+                return_value=True,
             ),
         ):
-            assert is_local_network_connected() is True
+            assert await is_local_network_connected() is True
 
-    def test_returns_false_on_loopback_only(self):
+    async def test_returns_false_on_loopback_only(self):
         """仅有回环接口时返回 False。"""
         mock_stats = {
             "lo": MagicMock(isup=True, speed=0),
         }
         with patch("app.network.probes.psutil.net_if_stats", return_value=mock_stats):
-            assert is_local_network_connected() is False
+            assert await is_local_network_connected() is False
 
-    def test_returns_false_on_exception(self):
+    async def test_returns_false_on_exception(self):
         """psutil 抛异常时返回 False。"""
         with patch(
             "app.network.probes.psutil.net_if_stats",
             side_effect=Exception("fail"),
         ):
-            assert is_local_network_connected() is False
+            assert await is_local_network_connected() is False
 
-    def test_returns_false_when_all_down(self):
+    async def test_returns_false_when_all_down(self):
         """所有接口都 down 时返回 False。"""
         mock_stats = {
             "Ethernet": MagicMock(isup=False, speed=0),
             "Wi-Fi": MagicMock(isup=False, speed=0),
         }
         with patch("app.network.probes.psutil.net_if_stats", return_value=mock_stats):
-            assert is_local_network_connected() is False
+            assert await is_local_network_connected() is False
 
 
 # =====================================================================
@@ -356,56 +357,56 @@ class TestCheckLoginPrerequisites:
         defaults.update(overrides)
         return MonitorSettings(**defaults)
 
-    @patch("app.network.decision._is_auth_url_reachable", return_value=True)
-    @patch("app.network.decision.is_local_network_connected", return_value=True)
-    def test_all_pass(self, *mocks):
-        ok, reason = check_login_prerequisites(
+    @patch("app.network.decision._is_auth_url_reachable", new_callable=AsyncMock, return_value=True)
+    @patch("app.network.decision.is_local_network_connected", new_callable=AsyncMock, return_value=True)
+    async def test_all_pass(self, *mocks):
+        ok, reason = await check_login_prerequisites(
             self._make_config(), "http://10.0.0.1/login"
         )
         assert ok is True
         assert reason == ""
 
-    @patch("app.network.decision.is_local_network_connected", return_value=False)
-    def test_local_disconnected(self, *mocks):
-        ok, reason = check_login_prerequisites(
+    @patch("app.network.decision.is_local_network_connected", new_callable=AsyncMock, return_value=False)
+    async def test_local_disconnected(self, *mocks):
+        ok, reason = await check_login_prerequisites(
             self._make_config(), "http://10.0.0.1/login"
         )
         assert ok is False
         assert reason == "local_disconnected"
 
-    @patch("app.network.decision._is_auth_url_reachable", return_value=False)
-    @patch("app.network.decision.is_local_network_connected", return_value=True)
-    def test_auth_url_unreachable(self, *mocks):
-        ok, reason = check_login_prerequisites(
+    @patch("app.network.decision._is_auth_url_reachable", new_callable=AsyncMock, return_value=False)
+    @patch("app.network.decision.is_local_network_connected", new_callable=AsyncMock, return_value=True)
+    async def test_auth_url_unreachable(self, *mocks):
+        ok, reason = await check_login_prerequisites(
             self._make_config(), "http://10.0.0.1/login"
         )
         assert ok is False
         assert reason == "auth_url_unreachable"
 
-    @patch("app.network.decision._is_auth_url_reachable", return_value=False)
-    @patch("app.network.decision.is_local_network_connected", return_value=False)
-    def test_local_check_disabled(self, *mocks):
-        ok, reason = check_login_prerequisites(
+    @patch("app.network.decision._is_auth_url_reachable", new_callable=AsyncMock, return_value=False)
+    @patch("app.network.decision.is_local_network_connected", new_callable=AsyncMock, return_value=False)
+    async def test_local_check_disabled(self, *mocks):
+        ok, reason = await check_login_prerequisites(
             self._make_config(enable_local_check=False),
             "http://10.0.0.1/login",
         )
         assert ok is False
         assert reason == "auth_url_unreachable"
 
-    @patch("app.network.decision._is_auth_url_reachable", return_value=True)
-    @patch("app.network.decision.is_local_network_connected", return_value=True)
-    def test_auth_url_check_disabled(self, *mocks):
-        ok, reason = check_login_prerequisites(
+    @patch("app.network.decision._is_auth_url_reachable", new_callable=AsyncMock, return_value=True)
+    @patch("app.network.decision.is_local_network_connected", new_callable=AsyncMock, return_value=True)
+    async def test_auth_url_check_disabled(self, *mocks):
+        ok, reason = await check_login_prerequisites(
             self._make_config(check_auth_url=False),
             "http://10.0.0.1/login",
         )
         assert ok is True
         assert reason == ""
 
-    @patch("app.network.decision._is_auth_url_reachable", return_value=False)
-    @patch("app.network.decision.is_local_network_connected", return_value=False)
-    def test_both_disabled(self, *mocks):
-        ok, reason = check_login_prerequisites(
+    @patch("app.network.decision._is_auth_url_reachable", new_callable=AsyncMock, return_value=False)
+    @patch("app.network.decision.is_local_network_connected", new_callable=AsyncMock, return_value=False)
+    async def test_both_disabled(self, *mocks):
+        ok, reason = await check_login_prerequisites(
             self._make_config(enable_local_check=False, check_auth_url=False),
             "http://10.0.0.1/login",
         )
@@ -419,114 +420,142 @@ class TestCheckLoginPrerequisites:
 
 
 class TestIsAuthUrlReachable:
-    def test_empty_url_returns_true(self):
+    async def test_empty_url_returns_true(self):
         from app.network.decision import _is_auth_url_reachable
 
-        assert _is_auth_url_reachable("") is True
+        assert await _is_auth_url_reachable("") is True
 
-    def test_no_hostname_returns_false(self):
+    async def test_no_hostname_returns_false(self):
         from app.network.decision import _is_auth_url_reachable
 
         # hostname 解析失败视为不可达（[44] 修复：原错误返回 True）
-        assert _is_auth_url_reachable("http://") is False
+        assert await _is_auth_url_reachable("http://") is False
 
-    def test_successful_connection(self):
+    async def test_successful_connection(self):
         from app.network.decision import _is_auth_url_reachable
 
-        with patch("app.network.decision.socket.create_connection") as mock_conn:
-            mock_conn.return_value.__enter__ = lambda s: s
-            mock_conn.return_value.__exit__ = lambda s, *a: None
-            assert _is_auth_url_reachable("http://10.0.0.1:8080/login") is True
-            mock_conn.assert_called_once_with(
-                ("10.0.0.1", 8080), timeout=3, source_address=None
-            )
+        mock_writer = MagicMock()
+        mock_writer.close = MagicMock()
+        mock_writer.wait_closed = AsyncMock()
 
-    def test_connection_refused(self):
+        async def fake_open_connection(host, port, **kwargs):
+            return (None, mock_writer)
+
+        with patch("asyncio.open_connection", fake_open_connection):
+            assert await _is_auth_url_reachable("http://10.0.0.1:8080/login") is True
+
+    async def test_connection_refused(self):
         from app.network.decision import _is_auth_url_reachable
 
-        with patch(
-            "app.network.decision.socket.create_connection",
-            side_effect=ConnectionRefusedError,
-        ):
-            assert _is_auth_url_reachable("http://10.0.0.1/login") is False
+        async def fake_open_connection(host, port, **kwargs):
+            raise ConnectionRefusedError
 
-    def test_timeout(self):
+        with patch("asyncio.open_connection", fake_open_connection):
+            assert await _is_auth_url_reachable("http://10.0.0.1/login") is False
+
+    async def test_timeout(self):
         from app.network.decision import _is_auth_url_reachable
 
-        with patch(
-            "app.network.decision.socket.create_connection", side_effect=TimeoutError
-        ):
-            assert _is_auth_url_reachable("http://10.0.0.1/login") is False
+        async def fake_open_connection(host, port, **kwargs):
+            raise TimeoutError
 
-    def test_dns_failure(self):
+        with patch("asyncio.open_connection", fake_open_connection):
+            assert await _is_auth_url_reachable("http://10.0.0.1/login") is False
+
+    async def test_dns_failure(self):
         from app.network.decision import _is_auth_url_reachable
 
-        with patch(
-            "app.network.decision.socket.create_connection", side_effect=socket.gaierror
-        ):
-            assert _is_auth_url_reachable("http://nonexistent.local/login") is False
+        async def fake_open_connection(host, port, **kwargs):
+            raise OSError("DNS failure")
 
-    def test_https_default_port(self):
+        with patch("asyncio.open_connection", fake_open_connection):
+            assert await _is_auth_url_reachable("http://nonexistent.local/login") is False
+
+    async def test_https_default_port(self):
         from app.network.decision import _is_auth_url_reachable
 
-        with patch("app.network.decision.socket.create_connection") as mock_conn:
-            mock_conn.return_value.__enter__ = lambda s: s
-            mock_conn.return_value.__exit__ = lambda s, *a: None
-            _is_auth_url_reachable("https://example.com/auth")
-            mock_conn.assert_called_once_with(
-                ("example.com", 443), timeout=3, source_address=None
-            )
+        captured = {}
 
-    def test_http_default_port(self):
+        mock_writer = MagicMock()
+        mock_writer.close = MagicMock()
+        mock_writer.wait_closed = AsyncMock()
+
+        async def fake_open_connection(host, port, **kwargs):
+            captured["host"] = host
+            captured["port"] = port
+            return (None, mock_writer)
+
+        with patch("asyncio.open_connection", fake_open_connection):
+            await _is_auth_url_reachable("https://example.com/auth")
+            assert captured["host"] == "example.com"
+            assert captured["port"] == 443
+
+    async def test_http_default_port(self):
         from app.network.decision import _is_auth_url_reachable
 
-        with patch("app.network.decision.socket.create_connection") as mock_conn:
-            mock_conn.return_value.__enter__ = lambda s: s
-            mock_conn.return_value.__exit__ = lambda s, *a: None
-            _is_auth_url_reachable("http://example.com/auth")
-            mock_conn.assert_called_once_with(
-                ("example.com", 80), timeout=3, source_address=None
-            )
+        captured = {}
 
-    def test_extra_targets_reachable(self):
+        mock_writer = MagicMock()
+        mock_writer.close = MagicMock()
+        mock_writer.wait_closed = AsyncMock()
+
+        async def fake_open_connection(host, port, **kwargs):
+            captured["host"] = host
+            captured["port"] = port
+            return (None, mock_writer)
+
+        with patch("asyncio.open_connection", fake_open_connection):
+            await _is_auth_url_reachable("http://example.com/auth")
+            assert captured["host"] == "example.com"
+            assert captured["port"] == 80
+
+    async def test_extra_targets_reachable(self):
         """extra_targets 中任一目标可达返回 True。"""
         from app.network.decision import _is_auth_url_reachable
 
-        with patch("app.network.decision.socket.create_connection") as mock_conn:
-            mock_conn.return_value.__enter__ = lambda s: s
-            mock_conn.return_value.__exit__ = lambda s, *a: None
+        mock_writer = MagicMock()
+        mock_writer.close = MagicMock()
+        mock_writer.wait_closed = AsyncMock()
+
+        async def fake_open_connection(host, port, **kwargs):
+            return (None, mock_writer)
+
+        with patch("asyncio.open_connection", fake_open_connection):
             assert (
-                _is_auth_url_reachable(
+                await _is_auth_url_reachable(
                     "",
                     extra_targets=["10.0.0.1:8080", "10.0.0.2:9090"],
                 )
                 is True
             )
 
-    def test_extra_targets_all_unreachable(self):
+    async def test_extra_targets_all_unreachable(self):
         """extra_targets 全部不可达返回 False。"""
         from app.network.decision import _is_auth_url_reachable
 
-        with patch(
-            "app.network.decision.socket.create_connection",
-            side_effect=TimeoutError,
-        ):
+        async def fake_open_connection(host, port, **kwargs):
+            raise TimeoutError
+
+        with patch("asyncio.open_connection", fake_open_connection):
             assert (
-                _is_auth_url_reachable(
+                await _is_auth_url_reachable(
                     "",
                     extra_targets=["10.0.0.1:8080", "10.0.0.2:9090"],
                 )
                 is False
             )
 
-    @patch("app.network.decision.socket.create_connection", side_effect=TimeoutError)
-    def test_extra_targets_empty_skip(self, mock_conn):
+    async def test_extra_targets_empty_skip(self):
         """extra_targets 解析为空时跳过检测。"""
         from app.network.decision import _is_auth_url_reachable
 
-        assert (
-            _is_auth_url_reachable("http://10.0.0.1/login", extra_targets=[]) is False
-        )
+        async def fake_open_connection(host, port, **kwargs):
+            raise TimeoutError
+
+        with patch("asyncio.open_connection", fake_open_connection):
+            assert (
+                await _is_auth_url_reachable("http://10.0.0.1/login", extra_targets=[]) is False
+            )
 
 
 # =====================================================================

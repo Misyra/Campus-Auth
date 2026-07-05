@@ -108,16 +108,14 @@ def _get_candidate_interfaces(
     return candidates
 
 
-def _check_interface_connectivity(interface_name: str) -> bool:
-    """通过 TCP Connect 验证网卡连通性。"""
-    # 常见可达目标
+async def _check_interface_connectivity(interface_name: str) -> bool:
+    """通过 TCP Connect 验证网卡连通性（async）。"""
     test_targets = [
-        ("8.8.8.8", 53),  # Google DNS
-        ("114.114.114.114", 53),  # 国内 DNS
-        ("1.1.1.1", 53),  # Cloudflare DNS
+        ("8.8.8.8", 53),
+        ("114.114.114.114", 53),
+        ("1.1.1.1", 53),
     ]
 
-    # 获取网卡绑定 IP
     addrs = psutil.net_if_addrs().get(interface_name, [])
     source_ip = None
     for addr in addrs:
@@ -128,28 +126,24 @@ def _check_interface_connectivity(interface_name: str) -> bool:
     if not source_ip:
         return False
 
-    # TCP Connect 测试
+    local_addr = (source_ip, 0)
     for host, port in test_targets:
         try:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.settimeout(1.0)
-            sock.bind((source_ip, 0))
-            result = sock.connect_ex((host, port))
-            sock.close()
-
-            if result == 0:
-                return True
-        except Exception:
+            _, writer = await asyncio.wait_for(
+                asyncio.open_connection(host, port, local_addr=local_addr),
+                timeout=1.0,
+            )
+            writer.close()
+            await writer.wait_closed()
+            return True
+        except (OSError, TimeoutError):
             continue
 
     return False
 
 
-def is_local_network_connected(interface_name: str = "") -> bool:
-    """检查本地网络是否有实际连接。
-
-    策略：候选网卡过滤 + TCP Connect 最终判定。
-    """
+async def is_local_network_connected(interface_name: str = "") -> bool:
+    """检查本地网络是否有实际连接（async）。"""
     try:
         candidates = _get_candidate_interfaces(interface_name)
         if not candidates:
@@ -159,17 +153,15 @@ def is_local_network_connected(interface_name: str = "") -> bool:
                 logger.warning("未找到候选网卡")
             return False
 
-        # 对候选网卡执行 TCP Connect 验证
         for name, stats in candidates:
-            if _check_interface_connectivity(name):
+            if await _check_interface_connectivity(name):
                 logger.debug("网卡 {} 连通性验证通过 (speed={}Mbps)", name, stats.speed)
                 return True
 
         logger.warning("所有候选网卡连通性验证失败")
         return False
-
     except Exception as exc:
-        logger.debug("psutil 网络检测失败: {}", exc)
+        logger.warning("本地网络连接检查失败: {}", exc)
         return False
 
 

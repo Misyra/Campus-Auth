@@ -206,7 +206,10 @@ class TestNetworkDetectionLogin:
             engine=engine
         )
         try:
-            result = engine._do_async_login()
+            import asyncio
+            loop = asyncio.new_event_loop()
+            result = loop.run_until_complete(engine._do_async_login())
+            loop.close()
             assert result is True
 
             assert done_event2.wait(timeout=5), "重试登录未在超时内完成"
