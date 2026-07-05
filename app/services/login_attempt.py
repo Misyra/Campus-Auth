@@ -104,8 +104,6 @@ class LoginAttempt:
         from playwright.async_api import Error as PlaywrightError
         from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
-        from app.utils.exceptions import LoginCancelledError
-
         _RETRYABLE_ERRORS: tuple[type[BaseException], ...] = (
             ConnectionResetError,
             ConnectionAbortedError,

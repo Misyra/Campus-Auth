@@ -16,7 +16,7 @@ import time
 from collections.abc import Callable
 from concurrent.futures import CancelledError, Future
 from dataclasses import dataclass, field
-from enum import Enum, StrEnum
+from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -49,15 +49,6 @@ class EngineCmdType(StrEnum):
     APPLY_PROFILE = "apply_profile"
     TEST_NETWORK = "test_network"
     NOOP = "noop"  # 空操作，仅用于唤醒 loop
-
-
-class StartResult(Enum):
-    """监控启动结果。"""
-
-    SUCCESS = "success"
-    ALREADY_RUNNING = "already_running"
-    INVALID_CONFIG = "invalid_config"
-    START_FAILED = "start_failed"
 
 
 @dataclass
@@ -621,13 +612,13 @@ class ScheduleEngine:
             is_manual=is_manual, config_snapshot=config_snapshot
         )
 
-    def _handle_start(self, cmd: EngineCommand) -> StartResult:
-        """启动监控（在引擎循环中调用）。返回启动结果。"""
+    def _handle_start(self, cmd: EngineCommand) -> None:
+        """启动监控（在引擎循环中调用）。"""
         if self._monitor_core is not None and self._monitor_core.monitoring:
             self._logger.warning("监控已在运行中")
             if cmd.response_future and not cmd.response_future.done():
                 cmd.response_future.set_result((True, "监控已在运行中"))
-            return StartResult.ALREADY_RUNNING
+            return
 
         # 统一验证配置（确保所有路径都经过验证）
         valid, error = validate_env_config(self._runtime_config)
@@ -635,7 +626,7 @@ class ScheduleEngine:
             self._logger.warning("启动监控失败: 配置无效: {}", error)
             if cmd.response_future and not cmd.response_future.done():
                 cmd.response_future.set_result((False, f"配置无效: {error}"))
-            return StartResult.INVALID_CONFIG
+            return
 
         pure_mode = cmd.data.get("pure_mode", self.pure_mode)
         # pure_mode 影响 browser 配置，需临时覆盖 getter
@@ -674,12 +665,12 @@ class ScheduleEngine:
             self._logger.info("监控已启动")
             if cmd.response_future and not cmd.response_future.done():
                 cmd.response_future.set_result((True, "监控已启动"))
-            return StartResult.SUCCESS
+            return
         except Exception as exc:
             self._logger.exception("监控启动失败: {}", exc)
             if cmd.response_future and not cmd.response_future.done():
                 cmd.response_future.set_result((False, f"监控启动失败: {exc}"))
-            return StartResult.START_FAILED
+            return
 
     def _handle_stop(self, cmd: EngineCommand | None = None) -> None:
         """停止监控。"""

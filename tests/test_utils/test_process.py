@@ -10,10 +10,10 @@ from unittest.mock import patch
 import psutil
 
 from app.utils.process import (
+    _get_process_create_time,
+    _get_process_name,
     cleanup_pid,
     get_pid_file,
-    get_process_create_time,
-    get_process_name,
     is_local_port_in_use,
     is_service_running,
     read_pid_file,
@@ -183,7 +183,7 @@ class TestIsLocalPortInUse:
             assert is_local_port_in_use(port) is True
 
 
-# ── get_process_name ──
+# ── _get_process_name ──
 
 
 class TestGetProcessName:
@@ -191,16 +191,16 @@ class TestGetProcessName:
 
     def test_current_process(self):
         """当前进程应有名称。"""
-        name = get_process_name(os.getpid())
+        name = _get_process_name(os.getpid())
         assert name is not None
         assert isinstance(name, str)
 
     def test_nonexistent_pid(self):
         """不存在的 PID 返回 None。"""
-        assert get_process_name(999999999) is None
+        assert _get_process_name(999999999) is None
 
 
-# ── get_process_create_time ──
+# ── _get_process_create_time ──
 
 
 class TestGetProcessCreateTime:
@@ -208,35 +208,35 @@ class TestGetProcessCreateTime:
 
     def test_current_process(self):
         """当前进程应有创建时间。"""
-        result = get_process_create_time(os.getpid())
+        result = _get_process_create_time(os.getpid())
         assert result is not None
         assert isinstance(result, float)
         assert result > 0
 
     def test_nonexistent_pid(self):
         """不存在的 PID 返回 None。"""
-        assert get_process_create_time(999999999) is None
+        assert _get_process_create_time(999999999) is None
 
     def test_no_such_process(self):
         """NoSuchProcess 异常时返回 None。"""
         with patch(
             "app.utils.process.psutil.Process", side_effect=psutil.NoSuchProcess(123)
         ):
-            assert get_process_create_time(123) is None
+            assert _get_process_create_time(123) is None
 
     def test_access_denied(self):
         """AccessDenied 异常时返回 None。"""
         with patch(
             "app.utils.process.psutil.Process", side_effect=psutil.AccessDenied(123)
         ):
-            assert get_process_create_time(123) is None
+            assert _get_process_create_time(123) is None
 
     def test_zombie_process(self):
         """ZombieProcess 异常时返回 None。"""
         with patch(
             "app.utils.process.psutil.Process", side_effect=psutil.ZombieProcess(123)
         ):
-            assert get_process_create_time(123) is None
+            assert _get_process_create_time(123) is None
 
 
 # ── verify_process_identity ──
@@ -262,7 +262,7 @@ class TestVerifyProcessIdentity:
     def test_create_time_not_available(self):
         """进程存在但无法获取 create_time → False（覆盖 103-104 行）。"""
         pid = os.getpid()
-        with patch("app.utils.process.get_process_create_time", return_value=None):
+        with patch("app.utils.process._get_process_create_time", return_value=None):
             assert verify_process_identity(pid, 12345.0) is False
 
     def test_create_time_mismatch(self):

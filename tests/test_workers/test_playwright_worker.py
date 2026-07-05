@@ -9,53 +9,21 @@ from unittest.mock import MagicMock, patch
 
 import psutil
 
-from app.workers.playwright_worker import (
-    _is_orphan,
-    cleanup_orphan_browsers,
-)
-
-# ── _is_orphan ──
-
-
-class TestIsOrphan:
-    """孤儿进程判断。"""
-
-    def test_parent_is_none(self):
-        """父进程为 None → 孤儿。"""
-        proc = MagicMock(spec=psutil.Process)
-        proc.parent.return_value = None
-        assert _is_orphan(proc) is True
-
-    def test_parent_not_running(self):
-        """父进程存在但已退出 → 孤儿。"""
-        parent = MagicMock(spec=psutil.Process)
-        parent.is_running.return_value = False
-        proc = MagicMock(spec=psutil.Process)
-        proc.parent.return_value = parent
-        assert _is_orphan(proc) is True
-
-    def test_parent_running(self):
-        """父进程存活 → 非孤儿。"""
-        parent = MagicMock(spec=psutil.Process)
-        parent.is_running.return_value = True
-        proc = MagicMock(spec=psutil.Process)
-        proc.parent.return_value = parent
-        assert _is_orphan(proc) is False
-
-    def test_no_such_process(self):
-        """进程已消失 → 孤儿（安全清理）。"""
-        proc = MagicMock(spec=psutil.Process)
-        proc.parent.side_effect = psutil.NoSuchProcess(123)
-        assert _is_orphan(proc) is True
-
+from app.workers.playwright_worker import cleanup_orphan_browsers
 
 # ── cleanup_orphan_browsers ──
 
 
-def _make_proc(pid, exe, cmdline):
-    """构造 mock 进程对象。"""
+def _make_proc(pid, exe, cmdline, orphan=True):
+    """构造 mock 进程对象。orphan=True 模拟父进程已死。"""
     proc = MagicMock(spec=psutil.Process)
     proc.info = {"pid": pid, "exe": exe, "cmdline": cmdline}
+    if orphan:
+        proc.parent.return_value = None
+    else:
+        parent = MagicMock(spec=psutil.Process)
+        parent.is_running.return_value = True
+        proc.parent.return_value = parent
     return proc
 
 
@@ -68,12 +36,10 @@ class TestCleanupOrphanBrowsers:
             100,
             "C:\\ms-playwright\\chromium-123\\chrome.exe",
             ["chrome.exe", "--ms-playwright"],
+            orphan=True,
         )
 
-        with (
-            patch("psutil.process_iter", return_value=[proc]),
-            patch("app.workers.playwright_worker._is_orphan", return_value=True),
-        ):
+        with patch("psutil.process_iter", return_value=[proc]):
             cleanup_orphan_browsers()
 
         proc.kill.assert_called_once()
@@ -84,12 +50,10 @@ class TestCleanupOrphanBrowsers:
             100,
             "C:\\ms-playwright\\chromium-123\\chrome.exe",
             ["chrome.exe", "--ms-playwright"],
+            orphan=False,
         )
 
-        with (
-            patch("psutil.process_iter", return_value=[proc]),
-            patch("app.workers.playwright_worker._is_orphan", return_value=False),
-        ):
+        with patch("psutil.process_iter", return_value=[proc]):
             cleanup_orphan_browsers()
 
         proc.kill.assert_not_called()
@@ -126,13 +90,11 @@ class TestCleanupOrphanBrowsers:
             400,
             "C:\\ms-playwright\\chromium-123\\chrome.exe",
             ["chrome.exe", "--ms-playwright"],
+            orphan=True,
         )
         proc.kill.side_effect = psutil.AccessDenied(400)
 
-        with (
-            patch("psutil.process_iter", return_value=[proc]),
-            patch("app.workers.playwright_worker._is_orphan", return_value=True),
-        ):
+        with patch("psutil.process_iter", return_value=[proc]):
             cleanup_orphan_browsers()  # 不应抛异常
 
     def test_kills_multiple_orphans(self):
@@ -141,17 +103,16 @@ class TestCleanupOrphanBrowsers:
             101,
             "C:\\ms-playwright\\chromium-123\\chrome.exe",
             ["chrome.exe", "--ms-playwright"],
+            orphan=True,
         )
         proc2 = _make_proc(
             102,
             "C:\\ms-playwright\\firefox-123\\firefox.exe",
             ["firefox.exe", "--ms-playwright"],
+            orphan=True,
         )
 
-        with (
-            patch("psutil.process_iter", return_value=[proc1, proc2]),
-            patch("app.workers.playwright_worker._is_orphan", return_value=True),
-        ):
+        with patch("psutil.process_iter", return_value=[proc1, proc2]):
             cleanup_orphan_browsers()
 
         proc1.kill.assert_called_once()
@@ -163,18 +124,16 @@ class TestCleanupOrphanBrowsers:
             101,
             "C:\\ms-playwright\\chromium-123\\chrome.exe",
             ["chrome.exe", "--ms-playwright"],
+            orphan=True,
         )
         alive = _make_proc(
             102,
             "C:\\ms-playwright\\chromium-124\\chrome.exe",
             ["chrome.exe", "--ms-playwright"],
+            orphan=False,
         )
 
-        with (
-            patch("psutil.process_iter", return_value=[orphan, alive]),
-            patch("app.workers.playwright_worker._is_orphan") as mock_orphan,
-        ):
-            mock_orphan.side_effect = [True, False]
+        with patch("psutil.process_iter", return_value=[orphan, alive]):
             cleanup_orphan_browsers()
 
         orphan.kill.assert_called_once()

@@ -65,11 +65,6 @@ def _get_temp_extension(binary: str) -> str:
     return _BINARY_EXT_MAP.get(lang, "")
 
 
-def get_default_binary() -> str:
-    """获取默认执行二进制（当前运行的 Python）。"""
-    return sys.executable
-
-
 # 向后兼容：保留旧名称供 API 路由使用
 detect_available_binaries = detect_binaries
 
@@ -90,7 +85,7 @@ class ScriptRunner:
     ):
         self.script_path = script_path
         self.timeout = timeout
-        self.binary_path = binary_path or get_default_binary()
+        self.binary_path = binary_path or sys.executable
         self._script_content: str | None = None
         self._cache_available_binaries: list[dict[str, Any]] | None = None
 

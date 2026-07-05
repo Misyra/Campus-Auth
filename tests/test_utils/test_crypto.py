@@ -389,7 +389,7 @@ class Test_DecryptionErrorFlag:
         """设置后应能清除。"""
         crypto_mod._decryption_failed.set()
         assert crypto_mod.has_decryption_error()
-        crypto_mod.clear_decryption_error()
+        crypto_mod._clear_decryption_error()
         assert not crypto_mod.has_decryption_error()
 
 

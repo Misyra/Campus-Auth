@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import copy
 import json
 import re
 import threading
@@ -334,12 +333,6 @@ class SaveResult:
     message: str
 
 
-def _rollback_config(data: ProfilesData, backup_data: ProfilesData) -> ProfilesData:
-    """回滚配置到备份状态（不可变版本）。
-
-    直接返回 backup_data 的副本（frozen 对象可安全共享，无需 deepcopy）。
-    """
-    return backup_data.model_copy(deep=True)
 
 
 def save_global_and_profile(
@@ -348,7 +341,7 @@ def save_global_and_profile(
     reload_fn,
 ) -> SaveResult:
     """原子保存全局配置 + 方案凭据。"""
-    backup_data = copy.deepcopy(profile_service.load())
+    backup_data = profile_service.load().model_copy(deep=True)
 
     def _apply(data: ProfilesData) -> ProfilesData:
         # 1. 更新全局配置
@@ -416,7 +409,7 @@ def save_global_and_profile(
         # 回滚
         profile_logger.warning("配置重载失败，正在回滚: {}", msg)
         try:
-            profile_service.update(lambda data: _rollback_config(data, backup_data))
+            profile_service.update(lambda data: backup_data.model_copy(deep=True))
             rollback_ok, rollback_msg = reload_fn()
             if not rollback_ok:
                 return SaveResult(

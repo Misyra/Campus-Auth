@@ -19,7 +19,6 @@ from app.workers.script_runner import (
     _get_interpreter_name,
     _get_temp_extension,
     detect_available_binaries,
-    get_default_binary,
 )
 
 
@@ -89,11 +88,6 @@ class TestLoadScriptContent:
         py_file.write_text("print(1)", encoding="utf-8")
         runner = ScriptRunner(py_file, binary_path=sys.executable)
         assert runner._load_script_content() is None
-
-
-class TestGetDefaultBinary:
-    def test_returns_sys_executable(self):
-        assert get_default_binary() == sys.executable
 
 
 # =====================================================================

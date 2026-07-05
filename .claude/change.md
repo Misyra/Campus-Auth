@@ -2,6 +2,33 @@
 
 ## 2026-07-05
 
+### refactor: ponytail-audit 代码清理
+
+- **死代码删除**：
+  - `app/utils/concurrent.py`：删除 `race_first_success`、`cancel_pending`（无调用方）
+  - `app/services/engine.py`：删除 `StartResult` 枚举（返回值从未被消费）
+  - `app/services/launcher.py`：删除空 `TYPE_CHECKING` 块
+  - `app/services/login_attempt.py`：删除 `execute()` 内重复导入
+- **内部函数降私有**：
+  - `app/utils/time_utils.py`：`is_in_pause_period` → `_is_in_pause_period`
+  - `app/network/utils.py`：`is_apipa_address` → `_is_apipa_address`
+  - `app/utils/process.py`：`get_process_name`/`get_process_create_time` 降私有
+  - `app/utils/crypto.py`：`clear_decryption_error` 降私有
+- **单调用函数内联**：
+  - `app/workers/script_runner.py`：`get_default_binary()` 内联为 `sys.executable`
+  - `app/network/interfaces.py`：`_is_routable_ip` 委托内联
+  - `app/network/probes.py`：`_is_captive_portal_url` 内联为条件表达式
+  - `app/workers/playwright_worker.py`：`_is_orphan` 内联到 `cleanup_orphan_browsers`
+  - `app/services/profile_service.py`：`_rollback_config` 内联为 `model_copy(deep=True)`
+  - `app/network/detect.py`：`_parse_linux_route_entry` 复用 `_parse_linux_gateway`
+  - `app/tasks/step_handlers.py`：`_find_with_deadline` 内联到 `_find_element`
+- **逻辑修复**：
+  - `app/services/profile_service.py`：`copy.deepcopy` 统一为 `model_copy(deep=True)`，修正 docstring 矛盾
+  - `app/services/launcher.py`：5 处 `resolve_port` 延迟导入统一到模块顶部
+  - `app/services/login_orchestrator.py`：`_bind_proxy_url` 在 `__init__` 中初始化
+  - `app/tasks/models.py`：`StepConfig._field_defaults` 加类级缓存避免重复反射
+- **测试适配**：7 个测试文件同步更新 import 和 mock 目标
+
 ### refactor(network): probes/decision 改 asyncio，消除 11 探测线程
 
 - `app/network/probes.py`：

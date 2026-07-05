@@ -2,20 +2,11 @@
 
 from __future__ import annotations
 
-import copy
-from unittest.mock import MagicMock
-
 from app.schemas import (
     BrowserSettings,
-    GlobalConfig,
     LoginCredentials,
     Profile,
-    ProfilesData,
     RuntimeConfig,
-)
-from app.services.profile_service import (
-    SaveResult,
-    _rollback_config,
 )
 from app.services.config_builder import build_runtime_config
 
@@ -82,26 +73,3 @@ class TestConfigBuilderBuild:
         assert result.credentials.username == "new"
         assert result.credentials.password == "new_pwd"
 
-
-class TestRollbackConfig:
-    """测试 _rollback_config 函数。"""
-
-    def test_rollback_restores_fields(self):
-        data = ProfilesData(
-            global_config=GlobalConfig(browser=BrowserSettings(timeout=60)),
-        )
-        backup = ProfilesData(
-            global_config=GlobalConfig(browser=BrowserSettings(timeout=30)),
-        )
-
-        result = _rollback_config(data, backup)
-        assert result.global_config.browser.timeout == 30
-
-    def test_rollback_all_fields(self):
-        """回滚应恢复 ProfilesData 的所有字段。"""
-        data = ProfilesData(auto_switch=True, active_profile="custom")
-        backup = ProfilesData(auto_switch=False, active_profile="default")
-
-        result = _rollback_config(data, backup)
-        assert result.auto_switch is False
-        assert result.active_profile == "default"

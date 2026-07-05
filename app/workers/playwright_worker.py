@@ -1160,20 +1160,6 @@ def shutdown_worker(timeout: float = 5) -> None:
 # ── 孤儿浏览器清理 ──
 
 
-def _is_orphan(proc: Any) -> bool:
-    """判断进程是否为孤儿（父进程已不存在）。
-
-    返回 True 表示父进程为 None 或已退出，可安全清理。
-    """
-    import psutil
-
-    try:
-        parent = proc.parent()
-        return parent is None or not parent.is_running()
-    except psutil.NoSuchProcess:
-        return True
-
-
 def cleanup_orphan_browsers() -> None:
     """清理孤儿 Playwright 浏览器进程。
 
@@ -1192,7 +1178,13 @@ def cleanup_orphan_browsers() -> None:
             cmdline = " ".join(info.get("cmdline") or []).lower()
             is_playwright_managed = "ms-playwright" in exe or "ms-playwright" in cmdline
             is_browser = any(kw in exe or kw in cmdline for kw in ("chrom", "firefox"))
-            if is_playwright_managed and is_browser and _is_orphan(proc):
+            is_orphan = False
+            try:
+                parent = proc.parent()
+                is_orphan = parent is None or not parent.is_running()
+            except psutil.NoSuchProcess:
+                is_orphan = True
+            if is_playwright_managed and is_browser and is_orphan:
                 proc.kill()
                 killed += 1
                 logger.debug("已终止孤儿浏览器进程 PID={}", info["pid"])
