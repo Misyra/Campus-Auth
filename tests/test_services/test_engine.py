@@ -1971,29 +1971,14 @@ class TestRetryWakeup:
 
     def test_retry_scheduled_wakes_loop(self, engine_factory):
         """_bridge_retry_scheduled 设置 _next_retry_time 后应投 noop 命令唤醒 loop。"""
-        svc = engine_factory(raw=True)
+        svc = engine_factory()
         mock_loop = MagicMock()
         mock_loop.is_running.return_value = True
         svc._engine_loop = mock_loop
         svc._cmd_queue = asyncio.Queue()
-        svc._retry_time_lock = threading.Lock()
-        svc._next_retry_time = 0
 
-        # 构造与 __init__ 一致的 _bridge_retry_scheduled 闭包
-        def _bridge_retry_scheduled(delay: float) -> None:
-            with svc._retry_time_lock:
-                svc._next_retry_time = time.time() + delay
-            loop = svc._engine_loop
-            if loop is not None and loop.is_running():
-                try:
-                    loop.call_soon_threadsafe(
-                        svc._cmd_queue.put_nowait,
-                        EngineCommand(type=EngineCmdType.NOOP),
-                    )
-                except RuntimeError:
-                    pass
-
-        _bridge_retry_scheduled(5.0)
+        # 调用 __init__ 中注册的真实 _bridge_retry_scheduled 闭包
+        svc._login_bridge._on_retry_scheduled(5.0)
 
         # 应通过 call_soon_threadsafe 向 queue 投 noop 命令唤醒 loop
         mock_loop.call_soon_threadsafe.assert_called_once()
@@ -2001,26 +1986,12 @@ class TestRetryWakeup:
 
     def test_retry_scheduled_loop_not_running(self, engine_factory):
         """loop 未运行时不应抛异常。"""
-        svc = engine_factory(raw=True)
+        svc = engine_factory()
         svc._engine_loop = None
-        svc._retry_time_lock = threading.Lock()
-        svc._next_retry_time = 0
 
-        def _bridge_retry_scheduled(delay: float) -> None:
-            with svc._retry_time_lock:
-                svc._next_retry_time = time.time() + delay
-            loop = svc._engine_loop
-            if loop is not None and loop.is_running():
-                try:
-                    loop.call_soon_threadsafe(
-                        svc._cmd_queue.put_nowait,
-                        EngineCommand(type=EngineCmdType.NOOP),
-                    )
-                except RuntimeError:
-                    pass
-
-        # 不应抛异常
-        _bridge_retry_scheduled(5.0)
+        # 调用 __init__ 中注册的真实 _bridge_retry_scheduled 闭包
+        # loop=None 应安全跳过 call_soon_threadsafe
+        svc._login_bridge._on_retry_scheduled(5.0)
         assert svc._next_retry_time > time.time()
 
     def test_noop_command_processed(self, engine_factory):
