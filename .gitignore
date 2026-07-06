@@ -50,6 +50,10 @@ debug/
 *.swo
 .workbuddy/
 
+# 工作区工具
+.superpowers/
+.workbuddy/
+
 # 本地工具（不随仓库分发）
 launcher.py
 !app/services/launcher.py
