@@ -1,5 +1,167 @@
 # 更新日志
 
+## v4.2.0
+
+### 新增功能
+
+- **登录会话复用**：新增 `LoginSession`，支持浏览器实例跨登录尝试复用与自动重试，减少浏览器反复启动的开销
+- **会话级重试策略**：新增 `LoginRetryPolicy`、`AttemptOutcomeType` 与 `AttemptOutcome` 数据模型，统一管理登录重试逻辑
+- **可中断异步等待**：新增 `interruptible_sleep` 工具函数，支持在等待期间被取消事件中断
+- **网卡绑定支持**：新增 `InterfaceManager`（30 秒 TTL 缓存 + 虚拟网卡过滤）、`InterfaceInfo` 数据模型、`bind_interface_name` 配置字段；网络探测层（TCP/HTTP/物理检查）支持按网卡绑定；新增 `GET /api/network/interfaces` 网卡枚举端点；网关检测支持按网卡名索引；前端新增网卡绑定下拉选择框与刷新按钮，支持"不绑定"选项
+- **SOCKS5 代理**：实现最小 SOCKS5 Forwarder（CONNECT，IPv4 + 域名，无认证），集成到 MonitorCore 生命周期与 IP 变化检测
+- **持久化浏览器上下文**：支持保留 cookies 和登录状态，跨会话复用浏览器数据
+- **Git 仓库克隆/更新工具**：新增 Git 仓库拉取启动器
+- **自启动运行模式配置驱动**：简化启动逻辑，自启动运行模式改为配置驱动
+- **PATCH /api/config 增量保存**：配置支持增量更新，无需全量提交
+- **ApiResponse 信封**：新增 `ApiResponse` 统一响应模型和类型化请求/响应模型，所有 GET 端点补充 `response_model`
+- **全局异常处理中间件**：统一错误响应格式，前端适配 `ApiResponse` 信封
+- **登录历史上限调整**：最多保留 200 条记录
+- **任务录制器分享链接更新**：分享链接指向 GitHub Issues，补充提交要求说明
+
+### 架构重构
+
+- **引擎异步迁移**：`ScheduleEngine` 命令队列改用 `asyncio.Queue` + `Future`，主循环改用 `async task`，消除 11 个探测线程；网络探测层 `probes`/`decision` 改为全 asyncio
+- **配置层统一**：收敛 `_runtime_config` 写路径到 `_swap_runtime_config`，消除多处直写导致的 TOCTOU 竞态；`ProfileService` 单例化并添加 mtime 内存缓存
+- **组件拆分**：从 `ScheduleEngine` 提取 `SchedulerService`、`StatusManager`、`WsBroadcaster`、`NetworkTester`、`LoginBridge`，降低引擎模块复杂度
+- **NetworkMonitorCore 改 getter 注入**：支持 reload 零停机；持久化层 frozen 化，统一不可变风格
+- **登录流程收敛**：移除 `login_runner` 外层重试收敛到 `LoginSession`，`_handle_login` 委托给 `LoginSession`，`LoginAttemptHandler` 重命名为 `LoginAttempt`
+- **网卡相关提取**：提取网络工具函数到 `utils.py`，统一 IP 地址分类逻辑到 `interfaces.py`，封装网卡可用性检查到 `InterfaceManager.is_interface_bindable`
+- **配置保存策略调整**：移除自动保存改为手动触发，优化密码字段 UX；删除自定义变量功能
+- **登录路径统一**：`LoginOrchestrator` 改用构造函数注入，`LoginBridge` 统一登录路径；`LoginAttempt` 适配 Session 模式；统一登录线程池 — `LoginOrchestrator` 复用 `BoundedExecutor`
+- **前端架构优化**：引入 `apiService` 集中管理 API 调用；配置数据模型改为嵌套 `app_settings` 结构；客户端校验降级为 UX 提示，后端作为权威来源；移除 47+ 个未使用的 `onConfigChange` 参数
+- **定时任务校验**：用 Pydantic 模型替代手写校验逻辑
+- **其他重构**：简化密码处理消除掩码往返；构造器注入替代 setter 消除循环依赖；`bind_runtime_config` 方法替代私有属性赋值；`LoginHistoryService.record()` 解耦改用 `add()` 直接传入名称
+- **服务层合并**：消除 `TaskService` 冗余层合并到 `TaskManager`，`config_service` 合并到 `profile_service`；`WsBroadcaster` 合并到 `WebSocketManager`，删除 `NullWebSocketManager`
+- **Worker 线程安全**：`_cmd_queue` 改用 `asyncio.Queue`，跨线程 `put` 改用 `call_soon_threadsafe` 并补充队列满和 `RuntimeError` 保护
+- **日志系统重构**：级别精简为 4 级（DEBUG/INFO/WARNING/ERROR），Source 简化为 2 类（backend/frontend）；`DashboardSink` 性能优化；废弃 `record_log`，调用点迁移到 `logger`；前端日志回流改用 `get_logger`
+- **代码清理**：删除散落的死函数、死常量、死属性；移除已废弃的 v3→v4→v5 迁移函数；清理 `tasks`、`workers`、`api`、`schemas`、`deps` 模块死代码
+- **测试套件瘦身**：合并重复测试文件、删除死测试、提取共享 fixture；`pystray` mock 改为按需 function 级 fixture
+
+### 外观重构
+
+- **设置页统一视觉重构**：外观设置重构为 4 张分区卡 + 统一控件，重写卡片与控件样式
+- **自定义色持久化**：支持自定义颜色方案持久化保存，新增 resetCard 长按重置和 auto 主题
+- **随机壁纸**：支持从链接下载随机壁纸
+- **默认主题改为浅色**：全局颜色对比度优化，提升深色/浅色模式可读性
+- **运行模式独立设置**：背景色按主题自动切换
+- **CSS 优化**：移除冗余 `!important`、补齐 webkit 前缀、修复 fadeIn 动画
+
+### 性能优化
+
+- 引擎循环改为内循环批量排空命令，减少多次唤醒周期
+- `WsBroadcaster` 改用 `asyncio.Event` 按需唤醒，消除空闲 50ms 固定轮询
+- Windows 网关检测优先使用 `route print`，减少 PowerShell 冷启动
+- WebSocket `frontend_log` 复用模块级 logger 实例
+- 任务录制器 `updateRecordedList` 改用事件委托
+
+### 修复
+
+- **修复 P0 问题**：浏览器定时任务退化、定时任务错过不可恢复
+- **修复 P1 问题**：孤儿浏览器残留、监控失败静默、掩码密码泄漏、虚拟网卡干扰、关闭竞态
+- 修复纯净模式切换失败和 UI 状态不同步
+- 修复完整模式托盘退出 PID 文件残留
+- 修复 `ScheduleEngine` 中 `_pure_mode_lock` 锁嵌套竞态，统一由 `_reload_lock` 保护
+- 修复 `submit()` 锁范围过大，`_dispatch` 移到锁外，哨兵防止并发重复提交
+- 修复 `start_thread` 清空残留命令时未调用 `task_done()` 导致 `join()` 阻塞
+- 修复 `submit_login` 入口未清理已完成的 Future 引用导致残留
+- 修复 `_next_retry_time` 跨线程读写 TOCTOU 竞态
+- 修复 `_dispatch` 的 `_on_done` 回调未清理 `CompositeCancelEvent` 源列表导致内存泄漏
+- 修复 `engine` frozen setattr 崩溃 + `pure_mode` getter 动态覆盖
+- 修复 `start_thread` 语义回归 + login 回调线程安全
+- 修复 `check_login_prerequisites` 阻塞事件循环，改为 async
+- 修复 retry 唤醒残留 `wakeup_event`，改为投 noop 命令
+- 修复 `ProfileService` 类型签名移除 `| None` 匹配强制注入语义
+- 修复 `LoginOrchestrator` 未捕获 `BoundedExecutor` 队列满异常
+- 修复 `toggle_pure_mode` 直写 `_pure_mode` 和 `update_log_level` TOCTOU
+- 修复 `_reload_config_internal` 裸写和 `toggle_pure_mode` TOCTOU
+- 修复 `toggle_pure_mode` 未同步更新运行时配置
+- 修复 `set_log_level` 未同步更新运行时配置
+- 修复 `CompositeCancelEvent.is_set()` 与 `wait()` 之间的死锁
+- 修复 `CompositeCancelEvent.clear` 未同时复位所有源事件
+- 修复登录去重命中时未回调 `on_complete` 导致手动登录挂起
+- 修复 `cancel_login` 未透传返回值并记录失败
+- 修复容器 shutdown 顺序，避免回调触及已关闭组件
+- 修复 `stop_web_services` 跨事件循环 await 导致 `RuntimeError`
+- 修复 `LoginHandle.result()` 未捕获 `CancelledError` 导致关闭时异常
+- 修复 `LoginCancelledError` 无法映射为 CANCELLED 终态
+- 修复异常传播修正与 Session 浏览器崩溃恢复
+- 修复 `debug_service` Windows 文件占用时重试删除
+- 修复调试会话使用错误类及 Playwright 超时未捕获
+- 修复调试会话清理时未同步释放 `_page` 引用
+- 修复 `saveConfig` 竞态导致账号凭据丢失
+- 修复 `CompositeCancelEvent` 死锁测试无法检测真实锁竞争
+- 修复孤儿浏览器清理增加父进程存活校验，避免误杀
+- 修复 Worker stop 在队列满时仍等待消费者线程 join
+- 修复 Worker 超时后 slot 过早释放
+- 修复 `call_soon_threadsafe` 队列满时静默丢弃命令
+- 修复 `call_soon_threadsafe` 补充 `RuntimeError` 保护
+- 修复 `script_runner` 跨平台解释器名解析
+- 修复绑定网卡 IP 不可路由时回退系统路由
+- 修复 SOCKS5 代理在 APIPA 地址、回环地址、本地地址时不绑定 `source_address`
+- 修复 Windows 上 `isloopback` 属性不存在导致网卡枚举失败
+- 修复网卡列表 API 调用路径错误（`network` → `monitor`）
+- 修复 `toggle_auto_switch` 端点添加异常处理
+- 修复删除所有方案后停止监控而非调用 `apply_profile(None)`
+- 修复端口检测增加 IPv6 支持和超时保护
+- 修复暂停时段判断支持分钟精度
+- 修复 Windows SSID 编码回退链增加 UTF-8/UTF-16 优先尝试
+- 修复 macOS 14+ SSID 检测增加 `system_profiler` 回退
+- 修复 Linux 网关解析增加字段长度与 IPv4 有效性校验
+- 修复 IPv4 解析增加 0-255 范围校验
+- 修复 IPv6 地址解析改用标准库 `ipaddress`
+- 修复网络目标解析跳过无效条目，避免单条错误丢弃全部
+- 修复网络决策层使用独立 executor，避免嵌套提交导致线程池饥饿
+- 修复网络探测模块显式生命周期管理，确保 in-flight 请求完成后再关闭
+- 修复 `retry_policy` `delay_before` 处理 `attempt <= 0` 越界
+- 修复检测方式切换守卫改为 watcher，避免 v-model 时序问题
+- 修复 URL 检测默认数组使用深拷贝，避免污染 `DEFAULT_CONFIG`
+- 修复 WebSocket 关闭时清理 ping 定时器
+- 修复旧 WebSocket 连接未清理全部回调导致竞争
+- 修复 WS 连接正常时跳过 HTTP 状态轮询
+- 修复 API 重试策略增加 jitter，缓解雪崩
+- 修复前端日志批量发送失败时未保留缓冲区
+- 修复前端日志页不显示截图
+- 修复保存按钮在 422 错误后无法点击
+- 修复状态轮询未捕获 Promise rejection
+- 修复 `resolve_for_js` 白名单替换，避免误处理 JS 双花括号
+- 修复环境变量模板替换改为单次非递归替换
+- 修复任务 ID 正则增加长度上限
+- 修复 `WaitUrlHandler` 统一使用 monotonic 时间源
+- 修复统一任务类型字面量为常量
+- 修复 Windows icacls 用户名处理域环境格式
+- 修复密钥长度异常时备份原文件再生成新密钥
+- 修复轻量模式注册 SIGINT 处理器
+- 修复 Chromium/ARM64 Chromium 路径检测与可执行校验
+- 修复 Windows Edge 注册增加可执行文件存在性校验
+- 修复重新下载 uv 前清理旧二进制与 `version.txt`
+- 修复 `start.sh` 先 SHA256 校验再验证 tar 归档
+- 修复 `start.go` 透传子进程退出码
+- 修复 `start.sh` 过滤 `--install-only` 后再传给 `main.py`
+- 修复反检测脚本恢复默认时触发配置保存
+- 修复通知下拉菜单支持点击外部关闭
+- 修复 `save_screenshot` 异常处理前未初始化 `local_path`
+- 修复 `dir_size_mb` 返回完整/不完整标记
+- 修复删除背景图片时处理 Windows 文件占用
+- 修复 `health` 接口 psutil 异常时返回空列表保持类型一致
+- 修复 `scripts API` 模块级 executor 增加显式生命周期管理
+- 修复 WebSocket 消息大小限制按 UTF-8 字节数计算
+- 修复 WebSocket 未知消息类型记录警告日志
+- 修复 `conftest.py` 中 `_ws_manager` 重复赋值
+- 修复 `os._exit` 杀死 pytest 进程
+- 修复集成测试 `boot()` 已启动监控，移除重复的 `start_monitoring()` 调用
+- 修复集成测试 `time.sleep(0.5)` 改为轮询等待 — 修复 CI macOS flaky test
+- 修复 16+ 个预存测试失败（executor 状态污染/暂停时段/mock 方法名/废弃 API）
+
+### 任务录制器
+
+- **代码规范化**：常量化、异常分级、`activate` 重构；修复 5 项正确性问题
+- **重构优化**：抽取 `createModal` 工厂，6 个弹窗复用；抽取重复代码（映射表/iframe 绑定/step 构建）；优化 `generatePrompt` 提示词内容（结构+清晰度）；`updateRecordedList` 改用事件委托
+- **分享链接更新**：任务分享说明移至提示词末尾
+
+### 文档
+
+- 高精度更新 API 接口文档和代码规范文档
+
 ## v4.1.0
 
 ### 新增功能
