@@ -2441,6 +2441,13 @@
     prompt += `在输出任务 JSON 后，请询问用户：\`"任务是否成功？"\`\n`;
     prompt += `如果用户反馈失败，请提供一套使用 \`eval\` 步骤的备选任务，通过 JavaScript 强制填入账号、密码、运营商并提交。请确保脚本中的选择器根据当前页面 HTML 进行了适配。\n`;
 
+    // 任务分享：放在末尾，让 AI 在交互后向用户提及（不干扰 JSON 生成）
+    prompt += `\n---\n\n## 任务分享（向用户提及）\n\n`;
+    prompt += `任务调试成功后，请向用户提及可选的分享途径：\n`;
+    prompt += `> 如果愿意将本任务分享给社区，可发布至 GitHub Issues：https://github.com/Misyra/campus-auth-tasks/issues/new\n`;
+    prompt += `> 标题格式：\`[任务] 学校名称 - 校园网认证页面描述\`\n`;
+    prompt += `> 正文需包含：完整任务 JSON、认证页面 URL、认证方式（如 Dr.com/锐捷/天翼/自研门户）、运营商与验证码说明\n`;
+
     return prompt;
   }
 
