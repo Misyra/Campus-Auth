@@ -30,22 +30,12 @@ export const formatterMethods = {
   },
   getLogClass(item) {
     const level = String(item?.level || '').toUpperCase();
-    if (level === 'ERROR' || level === 'CRITICAL') return 'error';
+    if (level === 'ERROR') return 'error';
     if (level === 'WARNING') return 'warning';
-    if (level === 'SUCCESS') return 'success';
-    // 成功消息没有专门的 level，保留关键词匹配作为补充
-    // 注意：不匹配英文 "success"，避免 success=False 等误判
-    const text = this.stripScreenshotHint(item?.message || item || '');
-    if (text.includes('成功') || text.includes('✓')) return 'success';
     return '';
   },
-  formatFileSize(bytes) {
-    if (bytes < 1024) return bytes + ' B';
-    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
-  },
   getSourceLabel(source) {
-    return LOG_SOURCES.find(s => s.value === source)?.label || (source ? source.toUpperCase().slice(0, 3) : '未知');
+    return LOG_SOURCES.find(s => s.value === source)?.label || source || '未知';
   },
 };
 

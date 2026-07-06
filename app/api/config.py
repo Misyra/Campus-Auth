@@ -2,122 +2,150 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from contextlib import contextmanager
 
-from app.deps import get_monitor_service, get_profile_service
-from app.schemas import ActionResponse, ConfigResponseDTO
-from app.services.config_service import save_global_and_profile
-from app.services.engine import ScheduleEngine
-from app.services.profile_service import ProfileService
+from fastapi import APIRouter, HTTPException, Request
+
+from app.deps import MonitorServiceDep, ProfileServiceDep
+from app.schemas import (
+    ApiResponse,
+    AppSettings,
+    BrowserSettings,
+    ConfigPatchRequest,
+    ConfigResponse,
+    ConfigSaveRequest,
+    LoggingSettings,
+    LogLevelRequest,
+    LogLevelResponse,
+    MonitorSettings,
+    PauseSettings,
+    RetrySettings,
+    StealthScriptResponse,
+)
+from app.services.profile_service import save_global_and_profile
 from app.utils.logging import get_logger
 
-router = APIRouter()
+router = APIRouter(tags=["配置"])
 api_logger = get_logger("api", source="backend")
 config_logger = get_logger("config", source="backend")
 
 
-@router.get("/api/config/log-levels")
-def get_log_levels():
-    """获取日志级别配置"""
+@contextmanager
+def _handle_config_error(operation: str, *, log_warning: bool = False):
+    """统一配置端点的 ValueError / 通用异常处理。"""
+    try:
+        yield
+    except ValueError as exc:
+        if log_warning:
+            api_logger.warning("配置更新被拒绝: {}", exc)
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        api_logger.warning("{}失败: {}", operation, exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"{operation}失败: {exc}") from exc
+
+
+@router.get("/api/config/log-levels", response_model=LogLevelResponse)
+def get_log_levels() -> LogLevelResponse:
     from app.utils.logging import LogConfigCenter
 
     config = LogConfigCenter.get_instance()
-    return {
-        "global_level": config.get_config().get("level", "INFO"),
-        "source_levels": config.get_all_source_levels(),
-    }
+    return LogLevelResponse(level=config.get_config().get("level", "INFO"))
 
 
-@router.put("/api/config/source-level")
-def set_source_level(payload: dict, request: Request):
-    """设置日志级别。source='global' 时设置全局级别，否则设置来源级别。"""
-    from app.utils.logging import LogConfigCenter
+@router.put("/api/config/log-level", response_model=ApiResponse)
+def set_log_level(payload: LogLevelRequest, request: Request) -> ApiResponse:
+    from app.utils.logging import VALID_LOG_LEVELS, LogConfigCenter
 
-    source = payload.get("source")
-    level = payload.get("level")
-
-    if not source or not level:
-        raise HTTPException(400, "缺少 source 或 level 参数")
-
+    requested = payload.level.strip().upper()
+    if requested not in VALID_LOG_LEVELS:
+        # 无效级别直接拒绝，避免 set_level 静默降级后仍返回 success=True（BUG-081）
+        raise HTTPException(status_code=400, detail=f"无效的日志级别: {payload.level}")
     config = LogConfigCenter.get_instance()
-
-    if source == "global":
-        config.set_level(level)
-        actual = config.get_config().get("level", "INFO")
-        if actual != level.upper():
-            return {"success": True, "message": f"无效级别 '{level}'，已降级为 {actual}"}
-    else:
-        try:
-            config.set_source_level(source, level)
-        except ValueError as e:
-            raise HTTPException(400, str(e)) from e
-
-    _persist_source_levels(request, config)
-
-    return {"success": True, "message": f"已设置 {source} 级别为 {level}"}
-
-
-def _persist_source_levels(request: Request, config):
-    """将 source_levels 持久化到 settings.json"""
+    config.set_level(requested)
+    actual = config.get_config().get("level", "INFO")
     profile_service = request.app.state.services.profile_service
     profile_service.update(
-        lambda d: setattr(d.global_config, "logging", d.global_config.logging.model_copy(update={"source_levels": config.get_all_source_levels()}))
+        lambda d: d.model_copy(
+            update={
+                "global_config": d.global_config.model_copy(
+                    update={
+                        "logging": d.global_config.logging.model_copy(
+                            update={"level": actual}
+                        ),
+                    }
+                ),
+            }
+        )
     )
+    # 同步更新引擎运行时配置（经公共方法，不再裸改私有属性）
+    engine = request.app.state.services.engine
+    engine.update_log_level(actual)
+    return ApiResponse(success=True, message=f"已设置全局日志级别为 {actual}")
 
 
-@router.get("/api/config", response_model=ConfigResponseDTO)
+@router.get("/api/config", response_model=ConfigResponse)
 def get_config(
-    svc: ScheduleEngine = Depends(get_monitor_service),
-    profile_svc: ProfileService = Depends(get_profile_service),
-) -> ConfigResponseDTO:
+    svc: MonitorServiceDep,
+    profile_svc: ProfileServiceDep,
+) -> ConfigResponse:
     data = profile_svc.load()
     cfg = profile_svc.build_runtime_config(data)
-    return ConfigResponseDTO(
-        browser=cfg.browser,
-        monitor=cfg.monitor,
-        retry=cfg.retry,
-        pause=cfg.pause,
-        logging=cfg.logging,
+
+    profile = profile_svc.get_active_profile()
+    carrier = profile.carrier or "无"
+    isp = "" if carrier == "无" else carrier
+
+    return ConfigResponse(
+        browser=cfg.browser.model_dump(),
+        monitor=cfg.monitor.model_dump(),
+        retry=cfg.retry.model_dump(),
+        pause=cfg.pause.model_dump(),
+        logging=cfg.logging.model_dump(),
+        app_settings=cfg.app_settings.model_dump(),
         username=cfg.credentials.username,
-        password="••••••••" if cfg.credentials.password else "",
+        password="",
+        has_password=bool(profile.password),
         auth_url=cfg.credentials.auth_url,
-        isp=cfg.credentials.isp,
+        isp=isp,
         carrier_custom=cfg.credentials.carrier_custom,
         active_task=cfg.active_task,
-        block_proxy=cfg.block_proxy,
-        shell_path=cfg.shell_path,
-        minimize_to_tray=cfg.minimize_to_tray,
-        startup_action=cfg.startup_action,
-        autostart_lightweight=cfg.autostart_lightweight,
-        lightweight_tray=cfg.lightweight_tray,
-        auto_open_browser=cfg.auto_open_browser,
-        proxy=cfg.proxy,
-        app_port=cfg.app_port,
-        custom_variables=cfg.custom_variables,
     )
 
 
-@router.get("/api/config/default-stealth-script")
-def get_default_stealth_script() -> dict:
+@router.get("/api/config/default-stealth-script", response_model=StealthScriptResponse)
+def get_default_stealth_script() -> StealthScriptResponse:
     """获取默认反检测脚本内容。"""
     from app.utils.browser import STEALTH_INIT_SCRIPT
 
-    return {"script": STEALTH_INIT_SCRIPT}
+    return StealthScriptResponse(script=STEALTH_INIT_SCRIPT)
 
 
-def _flatten_dict(d: dict, parent_key: str = "", sep: str = ".") -> dict:
+@router.get("/api/config/defaults")
+def get_config_defaults() -> dict:
+    """获取所有配置字段的默认值。"""
+    return {
+        "browser": BrowserSettings().model_dump(),
+        "monitor": MonitorSettings().model_dump(),
+        "retry": RetrySettings().model_dump(),
+        "pause": PauseSettings().model_dump(),
+        "logging": LoggingSettings().model_dump(),
+        "app_settings": AppSettings().model_dump(),
+    }
+
+
+def _flatten_dict(d: dict, parent_key: str = "") -> dict:
     """将嵌套字典扁平化为点分键。"""
     items: list[tuple[str, object]] = []
     for k, v in d.items():
-        new_key = f"{parent_key}{sep}{k}" if parent_key else k
+        new_key = f"{parent_key}.{k}" if parent_key else k
         if isinstance(v, dict):
-            items.extend(_flatten_dict(v, new_key, sep).items())
+            items.extend(_flatten_dict(v, new_key).items())
         else:
             items.append((new_key, v))
     return dict(items)
 
 
-def _log_config_changes(old_dict: dict, new_payload: ConfigResponseDTO) -> None:
+def _log_config_changes(old_dict: dict, new_payload: ConfigSaveRequest) -> None:
     """记录配置变更日志
 
     规则：
@@ -136,10 +164,10 @@ def _log_config_changes(old_dict: dict, new_payload: ConfigResponseDTO) -> None:
         "monitor.enable_local_check": "本地网络检测",
         "monitor.check_auth_url": "认证地址检测",
         "pause.enabled": "暂停时段",
-        "block_proxy": "屏蔽系统代理",
-        "minimize_to_tray": "最小化到托盘",
-        "auto_open_browser": "自动打开浏览器",
-        "autostart_lightweight": "自启动轻量模式",
+        "app_settings.block_proxy": "屏蔽系统代理",
+        "app_settings.minimize_to_tray": "最小化到托盘",
+        "app_settings.auto_open_browser": "自动打开浏览器",
+        "app_settings.runtime_mode": "自启动运行模式",
         "logging.access_log": "HTTP访问日志",
         "browser.browser_channel": "浏览器类型",
         "browser.timeout": "浏览器超时",
@@ -150,10 +178,9 @@ def _log_config_changes(old_dict: dict, new_payload: ConfigResponseDTO) -> None:
         "retry.retry_interval": "重试间隔",
         "logging.log_retention_days": "日志保留天数",
         "logging.level": "后端日志级别",
-        "logging.frontend_level": "前端日志级别",
-        "app_port": "网页端口",
-        "proxy": "网络代理",
-        "shell_path": "Shell路径",
+        "app_settings.app_port": "网页端口",
+        "app_settings.proxy": "网络代理",
+        "app_settings.shell_path": "Shell路径",
         "browser.viewport_width": "视口宽度",
         "browser.viewport_height": "视口高度",
         "pause.start_hour": "暂停开始时间",
@@ -167,7 +194,7 @@ def _log_config_changes(old_dict: dict, new_payload: ConfigResponseDTO) -> None:
     IGNORE_FIELDS = {"password"}
 
     # BUG-005 修复：扁平化嵌套字典后再比较
-    # old_dict 来自 RuntimeConfig（credentials 嵌套），new_payload 来自 ConfigResponseDTO（扁平）
+    # old_dict 来自 RuntimeConfig（credentials 嵌套），new_payload 来自 ConfigSaveRequest（凭据平铺）
     # 需要将 old_dict 的 credentials 扁平化到顶层后再比较
     _old = dict(old_dict)
     _old_creds = _old.pop("credentials", {})
@@ -180,7 +207,7 @@ def _log_config_changes(old_dict: dict, new_payload: ConfigResponseDTO) -> None:
     # 密码变更检测（顶层 password，不再嵌套在 credentials 下）
     new_pw = flat_new.get("password", "")
     old_pw = flat_old.get("password", "")
-    if new_pw and not new_pw.startswith("•") and old_pw != new_pw:
+    if new_pw and old_pw != new_pw:
         changes.append("密码已修改")
 
     for field_name in flat_old:
@@ -212,34 +239,66 @@ def _log_config_changes(old_dict: dict, new_payload: ConfigResponseDTO) -> None:
             changes.append(f"{name}已设置")
 
     if changes:
-        config_logger.info("配置变更: {}", "; ".join(changes))
+        config_logger.debug("配置变更: {}", "; ".join(changes))
 
 
-@router.put("/api/config", response_model=ActionResponse)
+@router.put("/api/config", response_model=ApiResponse)
 def save_config(
-    payload: ConfigResponseDTO,
-    svc: ScheduleEngine = Depends(get_monitor_service),
-    profile_svc: ProfileService = Depends(get_profile_service),
-) -> ActionResponse:
-    try:
-        # 获取当前配置用于变更日志
+    payload: ConfigSaveRequest,
+    svc: MonitorServiceDep,
+    profile_svc: ProfileServiceDep,
+) -> ApiResponse:
+    with _handle_config_error("配置保存", log_warning=True):
         old_data = profile_svc.load()
         old_cfg = profile_svc.build_runtime_config(old_data)
         old_dict = old_cfg.model_dump()
 
-        # 一次保存全局配置 + 方案凭据
         result = save_global_and_profile(payload, profile_svc, svc.reload_config)
         if not result.success:
             raise ValueError(result.message)
 
-        # 记录配置变更
         _log_config_changes(old_dict, payload)
 
-        api_logger.info("配置已保存 -> success=True")
-        return ActionResponse(success=True, message="配置保存成功")
-    except ValueError as exc:
-        api_logger.warning("配置更新被拒绝: {}", exc)
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except Exception as exc:
-        api_logger.error("配置保存失败: {}", exc, exc_info=True)
-        raise HTTPException(status_code=500, detail=f"配置保存失败: {exc}") from exc
+        api_logger.info("保存配置成功")
+        return ApiResponse(success=True, message="配置保存成功")
+
+
+@router.patch("/api/config", response_model=ApiResponse)
+def patch_config(
+    payload: ConfigPatchRequest,
+    svc: MonitorServiceDep,
+    profile_svc: ProfileServiceDep,
+) -> ApiResponse:
+    """增量更新配置 — 仅修改 payload 中非 None 的字段。"""
+    with _handle_config_error("配置增量保存"):
+        old_data = profile_svc.load()
+        old_cfg = profile_svc.build_runtime_config(old_data)
+
+        current = old_cfg.model_dump()
+        # 将 credentials 扁平化到顶层，与 ConfigSaveRequest/ConfigPatchRequest 的平铺结构对齐
+        # 否则 merged 顶层缺失 username/auth_url/isp/carrier_custom，ConfigSaveRequest 取默认空串，
+        # save_global_and_profile 会用空串覆盖已有凭据（BUG-027）
+        creds = current.pop("credentials", {})
+        current.update(creds)
+        # password 空串语义为不修改（见 save_password_field），不回填运行时明文以免无谓重新加密
+        current["password"] = ""
+
+        patch_data = payload.model_dump(exclude_none=True)
+
+        merged = {**current, **patch_data}
+        for key in ("browser", "monitor", "retry", "pause", "logging", "app_settings"):
+            if key in patch_data:
+                merged[key] = {**current.get(key, {}), **patch_data[key]}
+
+        full_request = ConfigSaveRequest.model_validate(merged)
+        result = save_global_and_profile(full_request, profile_svc, svc.reload_config)
+        if not result.success:
+            raise ValueError(result.message)
+
+        _log_config_changes(old_cfg.model_dump(), full_request)
+        api_logger.info("配置增量保存成功 (fields={})", list(patch_data.keys()))
+        return ApiResponse(
+            success=True,
+            message="配置保存成功",
+            data={"patched": list(patch_data.keys())},
+        )

@@ -4,6 +4,7 @@ import tempfile
 import time
 from datetime import datetime
 from pathlib import Path
+from typing import NamedTuple
 
 from .logging import get_logger
 
@@ -32,13 +33,11 @@ def atomic_write(
         suffix: 临时文件后缀（默认 ".tmp"）
     """
     path = str(path)
-    parent = os.path.dirname(path)
+    parent = str(Path(path).parent)
     if parent:
         os.makedirs(parent, exist_ok=True)
 
-    tmp_fd, tmp_path = tempfile.mkstemp(
-        dir=parent or ".", prefix=prefix, suffix=suffix
-    )
+    tmp_fd, tmp_path = tempfile.mkstemp(dir=parent or ".", prefix=prefix, suffix=suffix)
     try:
         try:
             f = os.fdopen(tmp_fd, "w", encoding=encoding, errors=errors)
@@ -85,6 +84,7 @@ async def save_screenshot(
     返回:
         截图文件的本地路径，失败时返回 None
     """
+    local_path = ""
     try:
         out_dir = Path(output_dir)
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -97,33 +97,41 @@ async def save_screenshot(
         await page.screenshot(path=local_path, full_page=True)
         return local_path
     except Exception as e:
-        logger.warning("截图保存失败: {}", e)
+        logger.warning("截图保存失败: path={}, error={}", local_path, e)
         return None
 
 
-def dir_size_mb(path: Path | str) -> float:
+class DirSizeResult(NamedTuple):
+    """dir_size_mb 的返回结果。"""
+
+    size_mb: float
+    complete: bool
+
+
+def dir_size_mb(path: Path | str) -> DirSizeResult:
     """递归计算目录或文件的磁盘占用（MB）。
 
     使用 rglob + stat 遍历所有文件，累加大小后转换为 MB。
-    OSError（权限不足等）的文件会被跳过。
+    遍历过程中遇到 OSError（权限不足等）时标记为不完整。
 
     Args:
         path: 目录或文件路径。
 
     Returns:
-        占用大小（MB），保留 1 位小数。路径不存在时返回 0.0。
+        DirSizeResult(size_mb, complete)。路径不存在时返回 DirSizeResult(0.0, True)。
     """
     p = Path(path)
     if not p.exists():
-        return 0.0
+        return DirSizeResult(0.0, True)
     if p.is_file():
-        return round(p.stat().st_size / (1024 * 1024), 1)
+        return DirSizeResult(round(p.stat().st_size / (1024 * 1024), 1), True)
 
     total = 0
+    complete = True
     try:
         for f in p.rglob("*"):
             if f.is_file():
                 total += f.stat().st_size
     except OSError:
-        pass
-    return round(total / (1024 * 1024), 1)
+        complete = False
+    return DirSizeResult(round(total / (1024 * 1024), 1), complete)

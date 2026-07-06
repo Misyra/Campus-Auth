@@ -47,10 +47,6 @@ class TaskRegistry:
 
     # ── 公开查询 ──
 
-    def get_tasks_dir(self) -> Path:
-        """获取任务目录路径。"""
-        return self._tasks_dir
-
     def get_script_path(self, script_id: str) -> Path | None:
         """获取脚本任务的文件路径。
 
@@ -99,7 +95,7 @@ class TaskRegistry:
                 json.dumps(data, ensure_ascii=False, indent=2),
             )
         except Exception as exc:
-            logger.error("保存定时任务失败 {}: {}", task_id, exc)
+            logger.warning("保存定时任务失败 {}: {}", task_id, exc)
             return False, f"定时任务保存失败: {exc}"
 
         # 磁盘成功后再更新缓存（锁内）
@@ -112,7 +108,7 @@ class TaskRegistry:
                 self._remove_from_index(task_id, old)
             self._add_to_index(task_id, stored)
 
-        logger.info("定时任务已保存: {}", task_id)
+        logger.info("保存定时任务 {} 成功", task_id)
         return True, "定时任务保存成功"
 
     def delete_task(self, task_id: str) -> tuple[bool, str]:
@@ -132,10 +128,10 @@ class TaskRegistry:
                 if old is not None:
                     self._remove_from_index(task_id, old)
 
-            logger.info("定时任务已删除: {}", task_id)
+            logger.info("删除定时任务 {} 成功", task_id)
             return True, "定时任务删除成功"
         except Exception as exc:
-            logger.error("删除定时任务失败 {}: {}", task_id, exc)
+            logger.warning("删除定时任务失败 {}: {}", task_id, exc)
             return False, f"定时任务删除失败: {exc}"
 
     # ── 调度索引 ──
@@ -153,24 +149,29 @@ class TaskRegistry:
     ) -> None:
         """更新任务的最后执行时间和状态。
 
-        前提：调度器保证同一 task_id 不会并发执行。
-        若未来引入手动执行与定时执行并发，需要为 task_id 增加独立锁。
+        磁盘写入在锁内执行，保证缓存与磁盘的一致性。
+        写入失败时回滚缓存，避免缓存已更新但未持久化。
         """
         with self._lock:
             task = self._cache.get(task_id)
             if task is None:
                 return
+            # 保存旧值用于回滚
+            old_run = task.get("last_run")
+            old_status = task.get("last_status")
             task["last_run"] = timestamp or datetime.now().isoformat()
             task["last_status"] = status
             snapshot = {k: v for k, v in task.items() if k != "id"}
-        # 锁外写磁盘（只读操作不被阻塞）
-        try:
-            atomic_write(
-                str(self._tasks_dir / f"{task_id}.json"),
-                json.dumps(snapshot, ensure_ascii=False, indent=2),
-            )
-        except Exception as exc:
-            logger.error("更新定时任务状态失败 {}: {}", task_id, exc)
+            try:
+                atomic_write(
+                    str(self._tasks_dir / f"{task_id}.json"),
+                    json.dumps(snapshot, ensure_ascii=False, indent=2),
+                )
+            except Exception as exc:
+                # 写入失败，回滚缓存
+                task["last_run"] = old_run
+                task["last_status"] = old_status
+                logger.warning("更新定时任务状态失败 {}: {}", task_id, exc)
 
     # ── 内部方法 ──
 
@@ -188,7 +189,7 @@ class TaskRegistry:
                 self._cache[task_id] = data
                 self._add_to_index(task_id, data)
             except Exception as exc:
-                logger.error("读取定时任务失败 {}: {}", file_path, exc)
+                logger.warning("读取定时任务失败 {}: {}", file_path, exc)
 
     def _add_to_index(self, task_id: str, config: dict[str, Any]) -> None:
         """将任务添加到调度索引（需要在锁内调用）。"""
@@ -204,7 +205,9 @@ class TaskRegistry:
             # BUG-052 修复：schedule 无效时记录警告
             logger.warning(
                 "任务 {} 已启用但 schedule 无效 (hour={}, minute={})",
-                task_id, hour, minute,
+                task_id,
+                hour,
+                minute,
             )
 
     def _remove_from_index(self, task_id: str, config: dict[str, Any]) -> None:
@@ -244,7 +247,7 @@ class TaskHistoryStore:
             data = json.loads(history_file.read_text(encoding="utf-8"))
             return list(data.get("runs", []))
         except Exception as exc:
-            logger.error("读取执行历史失败 {}: {}", task_id, exc)
+            logger.warning("读取执行历史失败 {}: {}", task_id, exc)
             return []
 
     def add_record(
@@ -281,7 +284,7 @@ class TaskHistoryStore:
                     encoding="utf-8",
                 )
             except Exception as exc:
-                logger.error("保存执行历史失败 {}: {}", task_id, exc)
+                logger.warning("保存执行历史失败 {}: {}", task_id, exc)
 
     def delete_history(self, task_id: str) -> None:
         """删除指定任务的全部历史记录。"""
@@ -291,6 +294,6 @@ class TaskHistoryStore:
         try:
             if history_file.exists():
                 history_file.unlink()
-                logger.info("已删除执行历史: {}", task_id)
+                logger.info("删除执行历史 {} 成功", task_id)
         except Exception as exc:
-            logger.error("删除执行历史失败 {}: {}", task_id, exc)
+            logger.warning("删除执行历史失败 {}: {}", task_id, exc)

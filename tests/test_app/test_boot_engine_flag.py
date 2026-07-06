@@ -14,9 +14,19 @@ from fastapi import APIRouter
 # ── 辅助 fixtures ──
 
 _ROUTER_NAMES = [
-    "monitor", "config", "tasks", "profiles", "debug",
-    "repo", "system", "autostart", "ocr", "tools",
-    "scripts", "scheduled_tasks", "history",
+    "monitor",
+    "config",
+    "tasks",
+    "profiles",
+    "debug",
+    "repo",
+    "system",
+    "autostart",
+    "ocr",
+    "tools",
+    "scripts",
+    "scheduled_tasks",
+    "history",
 ]
 
 
@@ -53,8 +63,11 @@ def _make_mock_container():
     mock_container.engine.boot = MagicMock()
     mock_container.shutdown = AsyncMock()
     mock_container.monitor_service.get_config.return_value = MagicMock(
-        username="", password="", auth_url="",
-        carrier="默认", check_interval_seconds=60,
+        username="",
+        password="",
+        auth_url="",
+        carrier="默认",
+        check_interval_seconds=60,
     )
     return mock_container
 
@@ -88,7 +101,7 @@ class TestBootEnginePropagation:
             mock_sys_settings = MagicMock()
             mock_sys_settings.access_log = False
             mock_sys_settings.log_retention_days = 7
-            mock_sys_settings.source_levels = {}
+
             mock_ps_instance.load.return_value.global_settings = mock_sys_settings
             mock_ps.return_value = mock_ps_instance
 
@@ -124,7 +137,7 @@ class TestBootEnginePropagation:
             mock_sys_settings = MagicMock()
             mock_sys_settings.access_log = False
             mock_sys_settings.log_retention_days = 7
-            mock_sys_settings.source_levels = {}
+
             mock_ps_instance.load.return_value.global_settings = mock_sys_settings
             mock_ps.return_value = mock_ps_instance
 
@@ -155,9 +168,7 @@ class TestLifespanBootOrder:
         from app.application import create_app
 
         mock_container = _make_mock_container()
-        _app = create_app(
-            existing_container=mock_container, boot_engine=True
-        )
+        _app = create_app(existing_container=mock_container, boot_engine=True)
 
         self._run_lifespan(_app)
 
@@ -169,9 +180,7 @@ class TestLifespanBootOrder:
         from app.application import create_app
 
         mock_container = _make_mock_container()
-        _app = create_app(
-            existing_container=mock_container, boot_engine=False
-        )
+        _app = create_app(existing_container=mock_container, boot_engine=False)
 
         self._run_lifespan(_app)
 
@@ -179,17 +188,13 @@ class TestLifespanBootOrder:
         mock_container.engine.start_thread.assert_called_once()
         mock_container.engine.boot.assert_not_called()
 
-    def test_boot_not_called_when_already_monitoring(
-        self, mock_all_routers, mock_deps
-    ):
+    def test_boot_not_called_when_already_monitoring(self, mock_all_routers, mock_deps):
         """引擎已在监控时，即使 boot_engine=True 也不应重复调用 boot()，但应启动线程。"""
         from app.application import create_app
 
         mock_container = _make_mock_container()
         mock_container.engine._is_monitoring = True
-        _app = create_app(
-            existing_container=mock_container, boot_engine=True
-        )
+        _app = create_app(existing_container=mock_container, boot_engine=True)
 
         self._run_lifespan(_app)
 
@@ -210,21 +215,21 @@ class TestLifespanBootOrder:
         mock_container.engine.start_thread.assert_called_once()
         mock_container.engine.boot.assert_not_called()
 
-    def test_call_order_start_web_services_then_boot(
-        self, mock_all_routers, mock_deps
-    ):
+    def test_call_order_start_web_services_then_boot(self, mock_all_routers, mock_deps):
         """验证调用顺序：start_web_services → start_thread → boot。"""
         from app.application import create_app
 
         mock_container = _make_mock_container()
         call_order = []
-        mock_container.start_web_services.side_effect = lambda: call_order.append("start_web_services")
-        mock_container.engine.start_thread.side_effect = lambda: call_order.append("start_thread")
+        mock_container.start_web_services.side_effect = lambda: call_order.append(
+            "start_web_services"
+        )
+        mock_container.engine.start_thread.side_effect = lambda: call_order.append(
+            "start_thread"
+        )
         mock_container.engine.boot.side_effect = lambda: call_order.append("boot")
 
-        _app = create_app(
-            existing_container=mock_container, boot_engine=True
-        )
+        _app = create_app(existing_container=mock_container, boot_engine=True)
 
         self._run_lifespan(_app)
 
@@ -239,8 +244,13 @@ class TestRunFullNoDirectBoot:
 
     def test_run_full_does_not_call_boot_directly(self):
         """_run_full 应将 boot_engine 传递给 run()，而非直接调 boot()。"""
-        from main import _run_full
-        from app.schemas import ApplicationContext, AppConfig, LaunchContext, LaunchSource
+        from app.services.launcher import launch_full as _run_full
+        from app.schemas import (
+            ApplicationContext,
+            AppConfig,
+            LaunchContext,
+            LaunchSource,
+        )
 
         ctx = ApplicationContext(
             config=AppConfig(),
@@ -252,21 +262,17 @@ class TestRunFullNoDirectBoot:
             patch("app.utils.ports.resolve_port", return_value=50721),
             patch("app.container.ServiceContainer") as mock_container_cls,
             patch("app.application.run") as mock_run,
-            patch("main.get_runtime_features") as mock_features,
-            patch("main.signal.signal"),
-            patch("main.create_profile_service") as mock_ps,
+            patch("app.services.launcher.get_runtime_features") as mock_features,
+            patch("app.services.launcher.signal.signal"),
+            patch("app.services.launcher.force_exit"),
         ):
             mock_container = MagicMock()
             mock_container_cls.return_value = mock_container
             mock_features.return_value = MagicMock(
                 tray_enabled=False, browser_enabled=False
             )
-            mock_ps_instance = MagicMock()
-            mock_sys_settings = MagicMock()
-            mock_sys_settings.access_log = False
-            mock_sys_settings.log_retention_days = 7
-            mock_ps_instance.load.return_value.global_settings = mock_sys_settings
-            mock_ps.return_value = mock_ps_instance
+            mock_container.profile_service.load.return_value.global_config.logging.access_log = False
+            mock_container.profile_service.load.return_value.global_config.logging.log_retention_days = 7
 
             # should_boot_engine=True
             _run_full(ctx, should_boot_engine=True, logger=logger, startup_begin=0.0)
@@ -281,8 +287,13 @@ class TestRunFullNoDirectBoot:
 
     def test_run_full_passes_boot_engine_false(self):
         """should_boot_engine=False 时传递 boot_engine=False。"""
-        from main import _run_full
-        from app.schemas import ApplicationContext, AppConfig, LaunchContext, LaunchSource
+        from app.services.launcher import launch_full as _run_full
+        from app.schemas import (
+            ApplicationContext,
+            AppConfig,
+            LaunchContext,
+            LaunchSource,
+        )
 
         ctx = ApplicationContext(
             config=AppConfig(),
@@ -294,21 +305,17 @@ class TestRunFullNoDirectBoot:
             patch("app.utils.ports.resolve_port", return_value=50721),
             patch("app.container.ServiceContainer") as mock_container_cls,
             patch("app.application.run") as mock_run,
-            patch("main.get_runtime_features") as mock_features,
-            patch("main.signal.signal"),
-            patch("main.create_profile_service") as mock_ps,
+            patch("app.services.launcher.get_runtime_features") as mock_features,
+            patch("app.services.launcher.signal.signal"),
+            patch("app.services.launcher.force_exit"),
         ):
             mock_container = MagicMock()
             mock_container_cls.return_value = mock_container
             mock_features.return_value = MagicMock(
                 tray_enabled=False, browser_enabled=False
             )
-            mock_ps_instance = MagicMock()
-            mock_sys_settings = MagicMock()
-            mock_sys_settings.access_log = False
-            mock_sys_settings.log_retention_days = 7
-            mock_ps_instance.load.return_value.global_settings = mock_sys_settings
-            mock_ps.return_value = mock_ps_instance
+            mock_container.profile_service.load.return_value.global_config.logging.access_log = False
+            mock_container.profile_service.load.return_value.global_config.logging.log_retention_days = 7
 
             _run_full(ctx, should_boot_engine=False, logger=logger, startup_begin=0.0)
 

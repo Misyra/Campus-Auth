@@ -50,13 +50,6 @@ class TestAllowlist:
         with pytest.raises(PermissionError, match="白名单"):
             policy.run_sync(["/usr/bin/malicious", "-c", "pass"])
 
-    @pytest.mark.asyncio
-    async def test_run_async_rejects_not_allowed(self):
-        """run（异步）对不在白名单的路径应抛出 PermissionError。"""
-        policy = ShellCommandPolicy(allowlist=["/usr/bin/python"])
-        with pytest.raises(PermissionError, match="白名单"):
-            await policy.run(["/usr/bin/malicious", "-c", "pass"])
-
 
 # =====================================================================
 # 超时钳制
@@ -101,89 +94,6 @@ class TestTimeoutClamp:
         ok, timeout, _ = policy.validate_and_prepare("/bin/sh", timeout=None)
         assert ok is True
         assert timeout == 42
-
-
-# =====================================================================
-# 审计日志
-# =====================================================================
-
-
-class TestAuditLog:
-    """测试执行前审计日志。"""
-
-    def test_audit_hook_called_on_run_sync(self):
-        """run_sync 执行时应调用审计钩子。"""
-        hook = MagicMock()
-        policy = ShellCommandPolicy(
-            allowlist=["/bin/sh"],
-            default_timeout=30,
-            audit_hook=hook,
-        )
-        # 模拟 subprocess.Popen 避免真实执行
-        mock_proc = MagicMock()
-        mock_proc.communicate.return_value = ("ok", "")
-        mock_proc.returncode = 0
-        with patch("app.utils.shell_policy.subprocess.Popen", return_value=mock_proc):
-            policy.run_sync(["/bin/sh", "-c", "echo ok"])
-
-        hook.assert_called_once()
-        call_args = hook.call_args[0]
-        assert call_args[0] == ["/bin/sh", "-c", "echo ok"]
-        assert call_args[1] == 30
-
-    @pytest.mark.asyncio
-    async def test_audit_hook_called_on_run_async(self):
-        """run（异步）执行时应调用审计钩子。"""
-        from unittest.mock import AsyncMock
-
-        hook = MagicMock()
-        policy = ShellCommandPolicy(
-            allowlist=["/bin/sh"],
-            default_timeout=30,
-            audit_hook=hook,
-        )
-
-        mock_proc = MagicMock()
-        mock_proc.communicate = AsyncMock(return_value=(b"ok", b""))
-        mock_proc.returncode = 0
-        mock_proc.kill = MagicMock()
-        mock_proc.wait = MagicMock()
-
-        with patch(
-            "app.utils.shell_policy.asyncio.create_subprocess_exec",
-            return_value=mock_proc,
-        ):
-            await policy.run(["/bin/sh", "-c", "echo ok"])
-
-        hook.assert_called_once()
-
-    def test_audit_hook_exception_does_not_propagate(self):
-        """审计钩子异常不应影响命令执行。"""
-
-        def bad_hook(argv, timeout):
-            raise RuntimeError("hook 故障")
-
-        policy = ShellCommandPolicy(
-            allowlist=["/bin/sh"],
-            audit_hook=bad_hook,
-        )
-        mock_proc = MagicMock()
-        mock_proc.communicate.return_value = ("ok", "")
-        mock_proc.returncode = 0
-        with patch("app.utils.shell_policy.subprocess.Popen", return_value=mock_proc):
-            # 不应抛出异常
-            code, out, err = policy.run_sync(["/bin/sh", "-c", "echo ok"])
-            assert code == 0
-
-    def test_no_hook_still_works(self):
-        """不设置审计钩子时命令执行应正常。"""
-        policy = ShellCommandPolicy(allowlist=["/bin/sh"], audit_hook=None)
-        mock_proc = MagicMock()
-        mock_proc.communicate.return_value = ("ok", "")
-        mock_proc.returncode = 0
-        with patch("app.utils.shell_policy.subprocess.Popen", return_value=mock_proc):
-            code, out, err = policy.run_sync(["/bin/sh", "-c", "echo ok"])
-            assert code == 0
 
 
 # =====================================================================
@@ -239,62 +149,31 @@ class TestRunSync:
 
 
 # =====================================================================
-# run（异步）完整路径
+# _clamp_timeout 边界行为 (from test_shell_policy_fix)
 # =====================================================================
 
 
-class TestRunAsync:
-    """测试异步执行路径。"""
+class TestClampTimeoutBoundary:
+    """_clamp_timeout 方法的边界行为验证。"""
 
-    @pytest.mark.asyncio
-    async def test_empty_argv_raises_value_error(self):
-        """空参数列表应抛出 ValueError。"""
+    def test_max_timeout_is_3600(self):
+        """确认 _MAX_TIMEOUT 常量为 3600。"""
+        assert _MAX_TIMEOUT == 3600
+
+    def test_clamp_timeout_at_max_boundary(self):
+        """_clamp_timeout 在 _MAX_TIMEOUT 边界的行为。"""
         policy = ShellCommandPolicy(allowlist=["/bin/sh"])
-        with pytest.raises(ValueError, match="不能为空"):
-            await policy.run([])
+        assert policy._clamp_timeout(_MAX_TIMEOUT) == _MAX_TIMEOUT
+        assert policy._clamp_timeout(_MAX_TIMEOUT + 1) == _MAX_TIMEOUT
 
-    @pytest.mark.asyncio
-    async def test_success_returns_zero(self):
-        """成功执行应返回 returncode=0。"""
-        from unittest.mock import AsyncMock
-
+    def test_clamp_timeout_at_min_boundary(self):
+        """_clamp_timeout 在下界的行为。"""
         policy = ShellCommandPolicy(allowlist=["/bin/sh"])
+        assert policy._clamp_timeout(1) == 1
+        assert policy._clamp_timeout(0) == 1
+        assert policy._clamp_timeout(-10) == 1
 
-        mock_proc = MagicMock()
-        mock_proc.communicate = AsyncMock(return_value=(b"hello", b""))
-        mock_proc.returncode = 0
-
-        with patch(
-            "app.utils.shell_policy.asyncio.create_subprocess_exec",
-            return_value=mock_proc,
-        ):
-            code, out, err = await policy.run(["/bin/sh", "-c", "echo hello"])
-            assert code == 0
-            assert out == "hello"
-
-    @pytest.mark.asyncio
-    async def test_timeout_returns_minus_one(self):
-        """超时应返回 returncode=-1 并 kill 进程。"""
-        from unittest.mock import AsyncMock
-
-        policy = ShellCommandPolicy(allowlist=["/bin/sh"])
-
-        mock_proc = MagicMock()
-        mock_proc.communicate = AsyncMock(side_effect=TimeoutError())
-        mock_proc.kill = MagicMock()
-        mock_proc.wait = AsyncMock()
-
-        with (
-            patch(
-                "app.utils.shell_policy.asyncio.create_subprocess_exec",
-                return_value=mock_proc,
-            ),
-            patch(
-                "app.utils.shell_policy.asyncio.wait_for",
-                side_effect=TimeoutError(),
-            ),
-        ):
-            code, out, err = await policy.run(["/bin/sh", "-c", "sleep 999"])
-            assert code == -1
-            assert "超时" in err
-            mock_proc.kill.assert_called_once()
+    def test_default_timeout_within_range_preserved(self):
+        """构造函数中 default_timeout 在有效范围内时保留原值。"""
+        policy = ShellCommandPolicy(allowlist=["/bin/sh"], default_timeout=120)
+        assert policy._default_timeout == 120

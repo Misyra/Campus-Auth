@@ -84,7 +84,7 @@ class TestValidateStep:
 
     def test_invalid_step_id(self):
         """无效步骤 ID。"""
-        step = {"id": "123", "type": "click", "selector": "#btn"}
+        step = {"id": "", "type": "click", "selector": "#btn"}
         errors = TaskValidator._validate_step(step, 0)
         assert any("格式无效" in e for e in errors)
 

@@ -1,4 +1,5 @@
 import { api, SETTINGS_TABS, LOG_LEVELS, LEVEL_VALUES } from './constants.js';
+import { apiService } from './api-service.js';
 import { createFrontendLogger } from './logger.js';
 import { actionMethods } from './methods/actions.js';
 import { appearanceMethods } from './methods/appearance.js';
@@ -63,14 +64,10 @@ export const appOptions = {
         { value: 'monitor', label: '启动后开始监控（推荐）' },
         { value: 'login_once', label: '自动登录，成功后退出' },
       ],
-      logSourceOptions: [
-        { value: '', label: '全部来源' },
-        { value: 'backend', label: 'BAK' },
-        { value: 'network', label: 'NET' },
-        { value: 'task', label: 'TSK' },
-        { value: 'frontend', label: 'FRT' },
-        { value: 'debug', label: 'DBG' },
-      ],
+      logSourceOptions: (() => {
+        const srcs = [{ value: 'backend',  label: 'backend' }, { value: 'frontend', label: 'frontend' }];
+        return [{ value: '', label: '全部来源' }, ...srcs];
+      })(),
       scheduledTaskTypeOptions: [
         { value: 'script', label: '自定义脚本' },
         { value: 'browser', label: '浏览器任务' },
@@ -79,6 +76,7 @@ export const appOptions = {
       appVersion: 'unknown',
       pythonVersion: '',
       shellCustomMode: false,
+      networkInterfaces: [],
     };
   },
   computed: {
@@ -179,19 +177,22 @@ export const appOptions = {
     shellPathMode: {
       get() {
         if (this.shellCustomMode) return '__custom__';
-        if (!this.config.shell_path) return '';
-        if (this.availableShells.some(s => s.path === this.config.shell_path)) return this.config.shell_path;
+        if (!this.config.app_settings.shell_path) return '';
+        if (this.availableShells.some(s => s.path === this.config.app_settings.shell_path)) return this.config.app_settings.shell_path;
         return '__custom__';
       },
       set(val) {
         this.shellCustomMode = (val === '__custom__');
-        if (val !== '__custom__') this.config.shell_path = val;
+        if (val !== '__custom__') this.config.app_settings.shell_path = val;
       },
     },
     shellPathOptions() {
       return [
         { value: '', label: '自动检测（推荐）' },
-        ...this.availableShells.map(s => ({ value: s.path, label: s.name + ' - ' + s.description })),
+        ...this.availableShells.map(s => ({
+          value: s.path,
+          label: (s.name || s.path) + (s.description ? ' - ' + s.description : ''),
+        })),
         { value: '__custom__', label: '自定义路径...' },
       ];
     },
@@ -200,8 +201,8 @@ export const appOptions = {
     },
     autostartModeOptions() {
       return [
-        { value: true, label: '轻量模式（推荐）' },
-        { value: false, label: '完整模式' },
+        { value: 'lightweight', label: '轻量模式（推荐）' },
+        { value: 'full', label: '完整模式' },
       ];
     },
     startupActionHint() {
@@ -210,10 +211,10 @@ export const appOptions = {
         monitor: '程序启动后自动开始网络监控，断网时自动重连',
         login_once: '启动后尝试登录一次，成功后自动退出。适用于开机自启动场景',
       };
-      return hints[this.config.startup_action] || hints.none;
+      return hints[this.config.app_settings.startup_action] || hints.none;
     },
     startupActionLabel() {
-      const opt = this.loginActionOptions.find(o => o.value === this.config.startup_action);
+      const opt = this.loginActionOptions.find(o => o.value === this.config.app_settings.startup_action);
       return opt ? opt.label.replace('（推荐）', '') : '不自动执行';
     },
     binaryOptions() {
@@ -223,6 +224,21 @@ export const appOptions = {
         { value: '__custom_python__', label: 'Python (自定义环境)' },
         { value: '__custom__', label: '自定义路径...' },
       ];
+    },
+    networkInterfaceOptions() {
+      return [
+        { value: '', label: '不绑定（系统默认路由）' },
+        ...this.networkInterfaces.map(iface => ({
+          value: iface.id,
+          label: `${iface.name} (${iface.ip} / 网关 ${iface.gateway || '无'})`,
+        })),
+      ];
+    },
+    selectedInterfaceDown() {
+      const name = this.config.monitor.bind_interface_name;
+      if (!name) return false;
+      const iface = this.networkInterfaces.find(i => i.id === name);
+      return iface ? !iface.is_up : true;
     },
   },
   watch: {
@@ -236,6 +252,26 @@ export const appOptions = {
         }, 100);
       },
       deep: true,
+    },
+    customColors: {
+      handler() {
+        localStorage.setItem('appearance.custom_colors', JSON.stringify(this.customColors));
+      },
+      deep: true,
+    },
+    'config.monitor.enable_tcp_check'() {
+      this._ensureAtLeastOneCheckMethod();
+    },
+    'config.monitor.enable_http_check'() {
+      this._ensureAtLeastOneCheckMethod();
+    },
+    urlCheckEnabled() {
+      this._ensureAtLeastOneCheckMethod();
+    },
+    currentSettingsTab(newTab) {
+      if (newTab === 'monitor' && this.networkInterfaces.length === 0) {
+        this.loadNetworkInterfaces();
+      }
     },
     currentPage(newPage) {
       if (this._dangerResolve) {
@@ -260,9 +296,19 @@ export const appOptions = {
   mounted() {
     document.getElementById('app').style.display = '';
     this.$api = api;
+    this.$apiService = apiService;
     this.init();
     // 应用保存的外观设置
     this.applyAppearance();
+    // 监听系统主题变化（仅当用户选择 'auto' 时生效）
+    this._mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    this._onSystemThemeChange = (e) => {
+      // 系统主题变化时重算 applyAppearance（内部会设置 data-theme）
+      if (this.appearance.theme === 'auto') {
+        this.applyAppearance();
+      }
+    };
+    this._mediaQuery.addEventListener('change', this._onSystemThemeChange);
   },
   beforeUnmount() {
     this._wsDestroyed = true;
@@ -272,10 +318,16 @@ export const appOptions = {
     if (this._toastTimer) clearTimeout(this._toastTimer);
     if (this._toastLeavingTimer) clearTimeout(this._toastLeavingTimer);
     if (this._appearanceTimer) clearTimeout(this._appearanceTimer);
-    if (this._saveConfigTimer) clearTimeout(this._saveConfigTimer);
+    if (this._mediaQuery && this._onSystemThemeChange) {
+      this._mediaQuery.removeEventListener('change', this._onSystemThemeChange);
+    }
+    if (this._loginCooldownTimer) clearTimeout(this._loginCooldownTimer);
     if (this._saveAbortController) this._saveAbortController.abort();
     if (this._logScrollRaf) cancelAnimationFrame(this._logScrollRaf);
-    this.timers.forEach((t) => clearInterval(t));
+    document.removeEventListener('mousedown', this._onNotifyOutsideClick);
+    if (this._releaseFocusTrap) this._releaseFocusTrap();
+    // 同时调用 clearTimeout/clearInterval 以兼容 setTimeout 与 setInterval id（二者对异类 id 互为安全 no-op）
+    this.timers.forEach((t) => { clearTimeout(t); clearInterval(t); });
     if (this._visibilityHandler) {
       document.removeEventListener('visibilitychange', this._visibilityHandler);
     }
@@ -292,7 +344,25 @@ export const appOptions = {
     ...scheduledTasksMethods,
     ...profileMethods,
     ...appearanceMethods,
-
     ...dragMethods,
+
+    confirmLightweightTray() {
+      if (this.config.app_settings.runtime_mode === 'lightweight' && !this.config.app_settings.lightweight_tray) {
+        const confirmed = confirm(
+          '轻量模式下 Web 界面不会自动启动，关闭托盘后将无法通过系统托盘打开管理界面（仍可通过 exe 重新启动程序进入）。\n\n确定要关闭托盘吗？'
+        );
+        if (!confirmed) {
+          this.config.app_settings.lightweight_tray = true;
+        }
+      }
+    },
+    async loadNetworkInterfaces() {
+      try {
+        const data = await this.$apiService.monitor.fetchInterfaces();
+        this.networkInterfaces = data;
+      } catch (e) {
+        console.error('Failed to load network interfaces:', e);
+      }
+    },
   },
 };

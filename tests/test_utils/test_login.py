@@ -1,8 +1,7 @@
-"""login.py 测试 — 覆盖 LoginAttemptHandler 核心逻辑。"""
+"""login_attempt.py 测试 — 覆盖 LoginAttempt 核心逻辑。"""
 
 from __future__ import annotations
 
-import asyncio
 import threading
 import time
 from pathlib import Path
@@ -11,15 +10,16 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.utils.exceptions import LoginCancelledError
-from app.utils.login import (
+from app.services.login_attempt import (
     LOGIN_SUCCESS_SETTLE_SECONDS,
     SCREENSHOT_URL_PATTERN,
-    LoginAttemptHandler,
+    LoginAttempt,
 )
-
+from app.services.login_models import AttemptOutcome, AttemptOutcomeType
+from app.utils.exceptions import LoginCancelledError
 
 # ── helpers ──────────────────────────────────────────────────────────
+
 
 def _make_config(**overrides: Any) -> dict[str, Any]:
     """构建最小配置字典。"""
@@ -30,7 +30,6 @@ def _make_config(**overrides: Any) -> dict[str, Any]:
         "active_task": "",
         "browser_settings": {"timeout": 8, "navigation_timeout": 15},
         "monitor": {},
-        "custom_variables": {},
     }
     base.update(overrides)
     return base
@@ -62,15 +61,15 @@ def _make_script_task(task_id: str = "script1", script_path: str = "/tmp/login.p
 
 
 class TestAttemptLogin:
-    """attempt_login 简化后直接委托 _perform_login_with_auth_class。"""
+    """attempt_login 直接委托 _perform_login_with_active_task。"""
 
     @pytest.mark.asyncio
     async def test_delegates_to_perform(self):
         config = _make_config()
-        handler = LoginAttemptHandler(config)
+        handler = LoginAttempt(config)
 
         with patch.object(
-            handler, "_perform_login_with_auth_class", new_callable=AsyncMock
+            handler, "_perform_login_with_active_task", new_callable=AsyncMock
         ) as mock_perform:
             mock_perform.return_value = (True, "ok")
             ok, msg = await handler.attempt_login()
@@ -80,37 +79,31 @@ class TestAttemptLogin:
         mock_perform.assert_awaited_once()
 
     @pytest.mark.asyncio
-    async def test_exception_caught_returns_false(self):
+    async def test_exception_returns_error(self):
+        """attempt_login 内异常应被捕获并返回错误消息。"""
         config = _make_config()
-        handler = LoginAttemptHandler(config)
+        handler = LoginAttempt(config)
 
         with patch.object(
             handler,
-            "_perform_login_with_auth_class",
+            "_perform_login_with_active_task",
             new_callable=AsyncMock,
             side_effect=RuntimeError("boom"),
         ):
             ok, msg = await handler.attempt_login()
-
-        assert ok is False
-        assert "boom" in msg
-
-
-# ── _perform_login_with_auth_class ───────────────────────────────────
-
-
-class TestPerformLoginWithAuthClass:
+            assert ok is False
+            assert "boom" in msg
 
     @pytest.mark.asyncio
     async def test_active_task_returns_result(self):
         config = _make_config()
-        handler = LoginAttemptHandler(config)
+        handler = LoginAttempt(config)
 
         with patch.object(
             handler, "_perform_login_with_active_task", new_callable=AsyncMock
         ) as mock_active:
             mock_active.return_value = (True, "任务成功")
-            ok, msg = await handler._perform_login_with_auth_class()
+            ok, msg = await handler.attempt_login()
 
         assert ok is True
         assert msg == "任务成功"
@@ -118,13 +111,13 @@ class TestPerformLoginWithAuthClass:
     @pytest.mark.asyncio
     async def test_no_active_task_returns_error(self):
         config = _make_config()
-        handler = LoginAttemptHandler(config)
+        handler = LoginAttempt(config)
 
         with patch.object(
             handler, "_perform_login_with_active_task", new_callable=AsyncMock
         ) as mock_active:
             mock_active.return_value = None
-            ok, msg = await handler._perform_login_with_auth_class()
+            ok, msg = await handler.attempt_login()
 
         assert ok is False
         assert "未找到可执行的任务" in msg
@@ -134,19 +127,21 @@ class TestPerformLoginWithAuthClass:
 
 
 class TestPerformLoginWithActiveTask:
-
     @pytest.mark.asyncio
     async def test_profile_task_id_path(self):
         """active_task 配置时走 load_task 分支（行 125-127）。"""
         config = _make_config(active_task="my_task")
-        handler = LoginAttemptHandler(config)
+        handler = LoginAttempt(config)
 
         mock_tm = MagicMock()
         mock_tm.load_task.return_value = _make_task_config()
 
-        with patch.object(handler, "_ensure_task_manager"), patch.object(
-            handler, "_execute_browser_task", new_callable=AsyncMock
-        ) as mock_exec:
+        with (
+            patch.object(handler, "_ensure_task_manager"),
+            patch.object(
+                handler, "_execute_browser_task", new_callable=AsyncMock
+            ) as mock_exec,
+        ):
             mock_exec.return_value = (True, "ok")
             handler._task_manager = mock_tm
             ok, msg = await handler._perform_login_with_active_task()
@@ -158,15 +153,18 @@ class TestPerformLoginWithActiveTask:
     async def test_no_profile_id_uses_active(self):
         """无 active_task 配置时使用 get_active_task（行 129-130）。"""
         config = _make_config(active_task="")
-        handler = LoginAttemptHandler(config)
+        handler = LoginAttempt(config)
 
         mock_tm = MagicMock()
         mock_tm.get_active_task.return_value = "auto_task"
         mock_tm.load_active_task.return_value = _make_task_config()
 
-        with patch.object(handler, "_ensure_task_manager"), patch.object(
-            handler, "_execute_browser_task", new_callable=AsyncMock
-        ) as mock_exec:
+        with (
+            patch.object(handler, "_ensure_task_manager"),
+            patch.object(
+                handler, "_execute_browser_task", new_callable=AsyncMock
+            ) as mock_exec,
+        ):
             mock_exec.return_value = (True, "ok")
             handler._task_manager = mock_tm
             ok, msg = await handler._perform_login_with_active_task()
@@ -178,7 +176,7 @@ class TestPerformLoginWithActiveTask:
     async def test_task_is_none_returns_none(self):
         """task 为 None 时返回 None（行 132-134）。"""
         config = _make_config()
-        handler = LoginAttemptHandler(config)
+        handler = LoginAttempt(config)
 
         mock_tm = MagicMock()
         mock_tm.get_active_task.return_value = None
@@ -194,16 +192,19 @@ class TestPerformLoginWithActiveTask:
     async def test_script_task_branch(self):
         """ScriptTaskInfo 任务走脚本分支（行 137-138）。"""
         config = _make_config()
-        handler = LoginAttemptHandler(config)
+        handler = LoginAttempt(config)
         script_task = _make_script_task()
 
         mock_tm = MagicMock()
         mock_tm.get_active_task.return_value = "script1"
         mock_tm.load_active_task.return_value = script_task
 
-        with patch.object(handler, "_ensure_task_manager"), patch.object(
-            handler, "_execute_script_task", new_callable=AsyncMock
-        ) as mock_exec:
+        with (
+            patch.object(handler, "_ensure_task_manager"),
+            patch.object(
+                handler, "_execute_script_task", new_callable=AsyncMock
+            ) as mock_exec,
+        ):
             mock_exec.return_value = (True, "脚本成功")
             handler._task_manager = mock_tm
             ok, msg = await handler._perform_login_with_active_task()
@@ -213,9 +214,9 @@ class TestPerformLoginWithActiveTask:
 
     @pytest.mark.asyncio
     async def test_login_cancelled_error(self):
-        """LoginCancelledError 被捕获（行 143-145）。"""
+        """LoginCancelledError 传播到 execute() 并映射为 CANCELLED 终态。"""
         config = _make_config()
-        handler = LoginAttemptHandler(config)
+        handler = LoginAttempt(config)
 
         mock_tm = MagicMock()
         mock_tm.get_active_task.return_value = "default"
@@ -223,16 +224,16 @@ class TestPerformLoginWithActiveTask:
 
         with patch.object(handler, "_ensure_task_manager"):
             handler._task_manager = mock_tm
-            ok, msg = await handler._perform_login_with_active_task()
+            outcome = await handler.execute()
 
-        assert ok is False
-        assert "登录已取消" in msg
+        assert outcome.type == AttemptOutcomeType.CANCELLED
+        assert "登录已取消" in outcome.message
 
     @pytest.mark.asyncio
-    async def test_generic_exception(self):
-        """通用异常被捕获（行 146-149）。"""
+    async def test_generic_exception_propagates(self):
+        """程序异常不再被 _perform_login_with_active_task 吞掉，直接传播。"""
         config = _make_config()
-        handler = LoginAttemptHandler(config)
+        handler = LoginAttempt(config)
 
         mock_tm = MagicMock()
         mock_tm.get_active_task.return_value = "default"
@@ -240,10 +241,8 @@ class TestPerformLoginWithActiveTask:
 
         with patch.object(handler, "_ensure_task_manager"):
             handler._task_manager = mock_tm
-            ok, msg = await handler._perform_login_with_active_task()
-
-        assert ok is False
-        assert "task error" in msg
+            with pytest.raises(RuntimeError, match="task error"):
+                await handler._perform_login_with_active_task()
 
 
 # ── _execute_browser_task ────────────────────────────────────────────
@@ -258,66 +257,78 @@ class TestExecuteBrowserTask:
         config = _make_config()
         cancel = threading.Event()
         cancel.set()
-        handler = LoginAttemptHandler(config, cancel_event=cancel)
+        handler = LoginAttempt(config, cancel_event=cancel)
 
         task = _make_task_config()
-        ok, msg = await handler._execute_browser_task(task, "default", time.perf_counter())
+        ok, msg = await handler._execute_browser_task(
+            task, "default", time.perf_counter()
+        )
 
         assert ok is False
         assert "登录已取消" in msg
 
     @pytest.mark.asyncio
-    async def test_existing_browser_closed_first(self):
-        """已有浏览器实例时先关闭（行 190-191）。"""
+    async def test_session_mode_reuses_browser(self):
+        """Session 模式复用传入的浏览器，不创建新实例，不关闭。"""
         config = _make_config()
-        handler = LoginAttemptHandler(config)
-
-        # 模拟已有浏览器上下文
-        handler._browser_ctx = MagicMock()
-        handler._browser_ctx.__aexit__ = AsyncMock()
-
         mock_page = MagicMock()
         mock_page.on = MagicMock()
         mock_page.remove_listener = MagicMock()
+        mock_page.is_closed = MagicMock(return_value=False)
 
-        mock_browser_mgr = MagicMock()
-        mock_browser_mgr.page = mock_page
-        mock_browser_mgr.__aenter__ = AsyncMock(return_value=mock_browser_mgr)
-        mock_browser_mgr.__aexit__ = AsyncMock()
+        mock_browser = MagicMock()
+        mock_browser.page = mock_page
+        mock_browser.__aexit__ = AsyncMock()
+
+        handler = LoginAttempt(config, browser=mock_browser)
 
         task = _make_task_config()
 
-        with patch(
-            "app.utils.login.BrowserContextManager", return_value=mock_browser_mgr
-        ), patch(
-            "app.utils.login.build_login_template_vars", return_value={}
-        ), patch(
-            "app.tasks.browser_runner.TaskExecutor"
-        ) as MockExecutor:
-            MockExecutor.return_value.execute = AsyncMock(return_value=(True, "登录成功"))
+        with (
+            patch(
+                "app.services.login_attempt.build_login_template_vars", return_value={}
+            ),
+            patch("app.tasks.BrowserTaskRunner") as MockExecutor,
+        ):
+            MockExecutor.return_value.execute = AsyncMock(
+                return_value=(True, "登录成功")
+            )
 
-            ok, msg = await handler._execute_browser_task(task, "default", time.perf_counter())
+            ok, msg = await handler._execute_browser_task(
+                task, "default", time.perf_counter()
+            )
 
         assert ok is True
         assert msg == "登录成功"
+        # Session 模式不关闭浏览器
+        mock_browser.__aexit__.assert_not_called()
+        # _browser_ctx 仍然指向传入的浏览器
+        assert handler._browser_ctx is mock_browser
 
     @pytest.mark.asyncio
     async def test_browser_enter_failure_raises(self):
         """浏览器 __aenter__ 失败时传播异常（行 201-206）。"""
         config = _make_config()
-        handler = LoginAttemptHandler(config)
+        handler = LoginAttempt(config)
 
         mock_browser_mgr = MagicMock()
-        mock_browser_mgr.__aenter__ = AsyncMock(side_effect=RuntimeError("browser fail"))
+        mock_browser_mgr.__aenter__ = AsyncMock(
+            side_effect=RuntimeError("browser fail")
+        )
         mock_browser_mgr.__aexit__ = AsyncMock()
 
         task = _make_task_config()
 
-        with patch(
-            "app.utils.login.BrowserContextManager", return_value=mock_browser_mgr
-        ), patch(
-            "app.utils.login.build_login_template_vars", return_value={}
-        ), pytest.raises(RuntimeError, match="browser fail"):
+        with (
+            patch(
+                "app.services.login_attempt.BrowserContextManager",
+                return_value=mock_browser_mgr,
+            ),
+            patch(
+                "app.services.login_attempt.build_login_template_vars", return_value={}
+            ),
+            pytest.raises(RuntimeError, match="browser fail"),
+        ):
             await handler._execute_browser_task(task, "default", time.perf_counter())
 
         # __aexit__ 应被调用来清理
@@ -327,7 +338,7 @@ class TestExecuteBrowserTask:
     async def test_page_none_raises(self):
         """浏览器页面为 None 时抛出 RuntimeError（行 213-214）。"""
         config = _make_config()
-        handler = LoginAttemptHandler(config)
+        handler = LoginAttempt(config)
 
         mock_browser_mgr = MagicMock()
         mock_browser_mgr.page = None
@@ -336,18 +347,23 @@ class TestExecuteBrowserTask:
 
         task = _make_task_config()
 
-        with patch(
-            "app.utils.login.BrowserContextManager", return_value=mock_browser_mgr
-        ), patch(
-            "app.utils.login.build_login_template_vars", return_value={}
-        ), pytest.raises(RuntimeError, match="浏览器页面初始化失败"):
+        with (
+            patch(
+                "app.services.login_attempt.BrowserContextManager",
+                return_value=mock_browser_mgr,
+            ),
+            patch(
+                "app.services.login_attempt.build_login_template_vars", return_value={}
+            ),
+            pytest.raises(RuntimeError, match="浏览器页面初始化失败"),
+        ):
             await handler._execute_browser_task(task, "default", time.perf_counter())
 
     @pytest.mark.asyncio
     async def test_login_success_closes_browser(self):
         """登录成功后关闭浏览器（行 243-248, 254）。"""
         config = _make_config()
-        handler = LoginAttemptHandler(config)
+        handler = LoginAttempt(config)
 
         mock_page = MagicMock()
         mock_page.on = MagicMock()
@@ -360,18 +376,24 @@ class TestExecuteBrowserTask:
 
         task = _make_task_config()
 
-        with patch(
-            "app.utils.login.BrowserContextManager", return_value=mock_browser_mgr
-        ), patch(
-            "app.utils.login.build_login_template_vars", return_value={}
-        ), patch(
-            "app.tasks.browser_runner.TaskExecutor"
-        ) as MockExecutor, patch(
-            "app.utils.login.asyncio.sleep", new_callable=AsyncMock
-        ) as mock_sleep:
+        with (
+            patch(
+                "app.services.login_attempt.BrowserContextManager",
+                return_value=mock_browser_mgr,
+            ),
+            patch(
+                "app.services.login_attempt.build_login_template_vars", return_value={}
+            ),
+            patch("app.tasks.BrowserTaskRunner") as MockExecutor,
+            patch(
+                "app.services.login_attempt.asyncio.sleep", new_callable=AsyncMock
+            ) as mock_sleep,
+        ):
             MockExecutor.return_value.execute = AsyncMock(return_value=(True, "成功"))
 
-            ok, msg = await handler._execute_browser_task(task, "default", time.perf_counter())
+            ok, msg = await handler._execute_browser_task(
+                task, "default", time.perf_counter()
+            )
 
         assert ok is True
         assert msg == "成功"
@@ -382,7 +404,7 @@ class TestExecuteBrowserTask:
     async def test_login_failure_closes_browser(self):
         """登录失败时关闭浏览器。"""
         config = _make_config()
-        handler = LoginAttemptHandler(config)
+        handler = LoginAttempt(config)
 
         mock_page = MagicMock()
         mock_page.on = MagicMock()
@@ -395,18 +417,23 @@ class TestExecuteBrowserTask:
 
         task = _make_task_config()
 
-        with patch(
-            "app.utils.login.BrowserContextManager", return_value=mock_browser_mgr
-        ), patch(
-            "app.utils.login.build_login_template_vars", return_value={}
-        ), patch(
-            "app.tasks.browser_runner.TaskExecutor"
-        ) as MockExecutor:
+        with (
+            patch(
+                "app.services.login_attempt.BrowserContextManager",
+                return_value=mock_browser_mgr,
+            ),
+            patch(
+                "app.services.login_attempt.build_login_template_vars", return_value={}
+            ),
+            patch("app.tasks.BrowserTaskRunner") as MockExecutor,
+        ):
             MockExecutor.return_value.execute = AsyncMock(
                 return_value=(False, "密码错误")
             )
 
-            ok, msg = await handler._execute_browser_task(task, "default", time.perf_counter())
+            ok, msg = await handler._execute_browser_task(
+                task, "default", time.perf_counter()
+            )
 
         assert ok is False
         assert msg == "密码错误"
@@ -416,7 +443,7 @@ class TestExecuteBrowserTask:
     async def test_dialog_handler_registered_and_removed(self):
         """弹窗监听器注册后在 finally 中移除（行 232-241）。"""
         config = _make_config()
-        handler = LoginAttemptHandler(config)
+        handler = LoginAttempt(config)
 
         mock_page = MagicMock()
         mock_page.on = MagicMock()
@@ -429,13 +456,16 @@ class TestExecuteBrowserTask:
 
         task = _make_task_config()
 
-        with patch(
-            "app.utils.login.BrowserContextManager", return_value=mock_browser_mgr
-        ), patch(
-            "app.utils.login.build_login_template_vars", return_value={}
-        ), patch(
-            "app.tasks.browser_runner.TaskExecutor"
-        ) as MockExecutor:
+        with (
+            patch(
+                "app.services.login_attempt.BrowserContextManager",
+                return_value=mock_browser_mgr,
+            ),
+            patch(
+                "app.services.login_attempt.build_login_template_vars", return_value={}
+            ),
+            patch("app.tasks.BrowserTaskRunner") as MockExecutor,
+        ):
             MockExecutor.return_value.execute = AsyncMock(return_value=(True, "ok"))
 
             await handler._execute_browser_task(task, "default", time.perf_counter())
@@ -451,7 +481,7 @@ class TestExecuteBrowserTask:
     async def test_screenshot_url_in_message(self):
         """失败消息包含截图 URL（行 249）。"""
         config = _make_config()
-        handler = LoginAttemptHandler(config)
+        handler = LoginAttempt(config)
 
         mock_page = MagicMock()
         mock_page.on = MagicMock()
@@ -464,18 +494,23 @@ class TestExecuteBrowserTask:
 
         task = _make_task_config()
 
-        with patch(
-            "app.utils.login.BrowserContextManager", return_value=mock_browser_mgr
-        ), patch(
-            "app.utils.login.build_login_template_vars", return_value={}
-        ), patch(
-            "app.tasks.browser_runner.TaskExecutor"
-        ) as MockExecutor:
+        with (
+            patch(
+                "app.services.login_attempt.BrowserContextManager",
+                return_value=mock_browser_mgr,
+            ),
+            patch(
+                "app.services.login_attempt.build_login_template_vars", return_value={}
+            ),
+            patch("app.tasks.BrowserTaskRunner") as MockExecutor,
+        ):
             MockExecutor.return_value.execute = AsyncMock(
                 return_value=(False, "操作失败 截图：/tmp/shot.png")
             )
 
-            ok, msg = await handler._execute_browser_task(task, "default", time.perf_counter())
+            ok, msg = await handler._execute_browser_task(
+                task, "default", time.perf_counter()
+            )
 
         assert ok is False
         assert "截图" in msg
@@ -493,7 +528,7 @@ class TestExecuteScriptTask:
         config = _make_config()
         cancel = threading.Event()
         cancel.set()
-        handler = LoginAttemptHandler(config, cancel_event=cancel)
+        handler = LoginAttempt(config, cancel_event=cancel)
 
         task = _make_script_task()
         ok, msg = await handler._execute_script_task(task, time.perf_counter())
@@ -505,15 +540,16 @@ class TestExecuteScriptTask:
     async def test_script_execution_failure(self):
         """脚本执行失败时返回失败消息（行 282-285）。"""
         config = _make_config(monitor={"script_timeout": 30})
-        handler = LoginAttemptHandler(config)
+        handler = LoginAttempt(config)
 
         task = _make_script_task()
 
-        with patch(
-            "app.workers.script_runner.ScriptRunner"
-        ) as MockRunner, patch(
-            "app.utils.login.asyncio.get_running_loop"
-        ) as mock_get_loop:
+        with (
+            patch("app.workers.script_runner.ScriptRunner") as MockRunner,
+            patch(
+                "app.services.login_attempt.asyncio.get_running_loop"
+            ) as mock_get_loop,
+        ):
             mock_runner_instance = MagicMock()
             MockRunner.return_value = mock_runner_instance
 
@@ -531,18 +567,19 @@ class TestExecuteScriptTask:
     async def test_script_success_network_ok(self):
         """脚本成功且网络正常时返回成功（行 287-295）。"""
         config = _make_config()
-        handler = LoginAttemptHandler(config)
+        handler = LoginAttempt(config)
 
         task = _make_script_task()
 
-        with patch(
-            "app.workers.script_runner.ScriptRunner"
-        ) as MockRunner, patch(
-            "app.utils.login.asyncio.get_running_loop"
-        ) as mock_get_loop, patch(
-            "app.utils.login.asyncio.to_thread", new_callable=AsyncMock
-        ) as mock_to_thread, patch(
-            "app.utils.login.asyncio.sleep", new_callable=AsyncMock
+        with (
+            patch("app.workers.script_runner.ScriptRunner") as MockRunner,
+            patch(
+                "app.services.login_attempt.asyncio.get_running_loop"
+            ) as mock_get_loop,
+            patch(
+                "app.services.login_attempt.asyncio.to_thread", new_callable=AsyncMock
+            ) as mock_to_thread,
+            patch("app.services.login_attempt.asyncio.sleep", new_callable=AsyncMock),
         ):
             mock_runner_instance = MagicMock()
             MockRunner.return_value = mock_runner_instance
@@ -562,18 +599,19 @@ class TestExecuteScriptTask:
     async def test_script_success_network_fail(self):
         """脚本成功但网络不通时返回失败（行 296-298）。"""
         config = _make_config()
-        handler = LoginAttemptHandler(config)
+        handler = LoginAttempt(config)
 
         task = _make_script_task()
 
-        with patch(
-            "app.workers.script_runner.ScriptRunner"
-        ) as MockRunner, patch(
-            "app.utils.login.asyncio.get_running_loop"
-        ) as mock_get_loop, patch(
-            "app.utils.login.asyncio.to_thread", new_callable=AsyncMock
-        ) as mock_to_thread, patch(
-            "app.utils.login.asyncio.sleep", new_callable=AsyncMock
+        with (
+            patch("app.workers.script_runner.ScriptRunner") as MockRunner,
+            patch(
+                "app.services.login_attempt.asyncio.get_running_loop"
+            ) as mock_get_loop,
+            patch(
+                "app.services.login_attempt.asyncio.to_thread", new_callable=AsyncMock
+            ) as mock_to_thread,
+            patch("app.services.login_attempt.asyncio.sleep", new_callable=AsyncMock),
         ):
             mock_runner_instance = MagicMock()
             MockRunner.return_value = mock_runner_instance
@@ -594,18 +632,19 @@ class TestExecuteScriptTask:
     async def test_script_timeout_config_used(self):
         """脚本超时从 config.monitor.script_timeout 读取（行 276）。"""
         config = _make_config(monitor={"script_timeout": 42})
-        handler = LoginAttemptHandler(config)
+        handler = LoginAttempt(config)
 
         task = _make_script_task()
 
-        with patch(
-            "app.workers.script_runner.ScriptRunner"
-        ) as MockRunner, patch(
-            "app.utils.login.asyncio.get_running_loop"
-        ) as mock_get_loop, patch(
-            "app.utils.login.asyncio.to_thread", new_callable=AsyncMock
-        ) as mock_to_thread, patch(
-            "app.utils.login.asyncio.sleep", new_callable=AsyncMock
+        with (
+            patch("app.workers.script_runner.ScriptRunner") as MockRunner,
+            patch(
+                "app.services.login_attempt.asyncio.get_running_loop"
+            ) as mock_get_loop,
+            patch(
+                "app.services.login_attempt.asyncio.to_thread", new_callable=AsyncMock
+            ) as mock_to_thread,
+            patch("app.services.login_attempt.asyncio.sleep", new_callable=AsyncMock),
         ):
             mock_runner_instance = MagicMock()
             MockRunner.return_value = mock_runner_instance
@@ -625,11 +664,10 @@ class TestExecuteScriptTask:
 
 
 class TestCloseBrowser:
-
     @pytest.mark.asyncio
     async def test_close_with_active_context(self):
         config = _make_config()
-        handler = LoginAttemptHandler(config)
+        handler = LoginAttempt(config)
 
         mock_ctx = AsyncMock()
         handler._browser_ctx = mock_ctx
@@ -642,7 +680,7 @@ class TestCloseBrowser:
     @pytest.mark.asyncio
     async def test_close_without_context(self):
         config = _make_config()
-        handler = LoginAttemptHandler(config)
+        handler = LoginAttempt(config)
         handler._browser_ctx = None
 
         await handler.close_browser()
@@ -651,7 +689,7 @@ class TestCloseBrowser:
     @pytest.mark.asyncio
     async def test_close_with_exception_in_aexit(self):
         config = _make_config()
-        handler = LoginAttemptHandler(config)
+        handler = LoginAttempt(config)
 
         mock_ctx = AsyncMock()
         mock_ctx.__aexit__ = AsyncMock(side_effect=RuntimeError("close error"))
@@ -661,31 +699,202 @@ class TestCloseBrowser:
         assert handler._browser_ctx is None
 
 
+# ── execute() ─────────────────────────────────────────────────────────
+
+
+class TestExecute:
+    """execute() 方法返回 AttemptOutcome，含异常分类。"""
+
+    @pytest.mark.asyncio
+    async def test_success_returns_success_outcome(self):
+        config = _make_config()
+        handler = LoginAttempt(config)
+
+        with patch.object(
+            handler, "attempt_login", new_callable=AsyncMock
+        ) as mock_login:
+            mock_login.return_value = (True, "登录成功")
+            outcome = await handler.execute()
+
+        assert isinstance(outcome, AttemptOutcome)
+        assert outcome.type == AttemptOutcomeType.SUCCESS
+        assert outcome.message == "登录成功"
+        assert outcome.should_retry is False
+
+    @pytest.mark.asyncio
+    async def test_failure_returns_retryable_outcome(self):
+        config = _make_config()
+        handler = LoginAttempt(config)
+
+        with patch.object(
+            handler, "attempt_login", new_callable=AsyncMock
+        ) as mock_login:
+            mock_login.return_value = (False, "密码错误")
+            outcome = await handler.execute()
+
+        assert outcome.type == AttemptOutcomeType.RETRYABLE
+        assert outcome.message == "密码错误"
+        assert outcome.should_retry is True
+
+    @pytest.mark.asyncio
+    async def test_cancelled_error_returns_cancelled(self):
+        config = _make_config()
+        handler = LoginAttempt(config)
+
+        with patch.object(
+            handler,
+            "attempt_login",
+            new_callable=AsyncMock,
+            side_effect=LoginCancelledError("用户取消"),
+        ):
+            outcome = await handler.execute()
+
+        assert outcome.type == AttemptOutcomeType.CANCELLED
+        assert outcome.message == "登录已取消"
+        assert outcome.should_retry is False
+
+    @pytest.mark.asyncio
+    async def test_connection_reset_returns_retryable(self):
+        config = _make_config()
+        handler = LoginAttempt(config)
+
+        with patch.object(
+            handler,
+            "attempt_login",
+            new_callable=AsyncMock,
+            side_effect=ConnectionResetError("连接被重置"),
+        ):
+            outcome = await handler.execute()
+
+        assert outcome.type == AttemptOutcomeType.RETRYABLE
+        assert "连接被重置" in outcome.message
+
+    @pytest.mark.asyncio
+    async def test_timeout_error_returns_retryable(self):
+        config = _make_config()
+        handler = LoginAttempt(config)
+
+        with patch.object(
+            handler,
+            "attempt_login",
+            new_callable=AsyncMock,
+            side_effect=TimeoutError("操作超时"),
+        ):
+            outcome = await handler.execute()
+
+        assert outcome.type == AttemptOutcomeType.RETRYABLE
+
+    @pytest.mark.asyncio
+    async def test_playwright_target_closed_returns_retryable(self):
+        config = _make_config()
+        handler = LoginAttempt(config)
+
+        with patch.object(
+            handler,
+            "attempt_login",
+            new_callable=AsyncMock,
+        ) as mock_login:
+            from playwright.async_api import Error as PlaywrightError
+
+            mock_login.side_effect = PlaywrightError("Target closed")
+            outcome = await handler.execute()
+
+        assert outcome.type == AttemptOutcomeType.RETRYABLE
+
+    @pytest.mark.asyncio
+    async def test_playwright_other_error_propagates(self):
+        """非可重试 PlaywrightError 应向上传播。"""
+        config = _make_config()
+        handler = LoginAttempt(config)
+
+        with patch.object(
+            handler,
+            "attempt_login",
+            new_callable=AsyncMock,
+        ) as mock_login:
+            from playwright.async_api import Error as PlaywrightError
+
+            mock_login.side_effect = PlaywrightError("unexpected internal error")
+
+            with pytest.raises(PlaywrightError, match="unexpected internal error"):
+                await handler.execute()
+
+    @pytest.mark.asyncio
+    async def test_program_error_propagates(self):
+        """TypeError/KeyError 等程序异常不捕获，直接抛出。"""
+        config = _make_config()
+        handler = LoginAttempt(config)
+
+        with (
+            patch.object(
+                handler,
+                "attempt_login",
+                new_callable=AsyncMock,
+                side_effect=TypeError("missing argument"),
+            ),
+            pytest.raises(TypeError, match="missing argument"),
+        ):
+            await handler.execute()
+
+
+# ── __init__ browser 参数 ─────────────────────────────────────────────
+
+
+class TestInitBrowser:
+    """__init__ 的 browser 参数。"""
+
+    def test_browser_parameter_sets_ctx(self):
+        """传入 browser 时 _browser_ctx 指向该对象。"""
+        config = _make_config()
+        mock_browser = MagicMock()
+        handler = LoginAttempt(config, browser=mock_browser)
+
+        assert handler._browser_ctx is mock_browser
+
+    def test_browser_none_keeps_none(self):
+        """未传入 browser 时 _browser_ctx 为 None。"""
+        config = _make_config()
+        handler = LoginAttempt(config)
+
+        assert handler._browser_ctx is None
+
+    def test_browser_is_keyword_only(self):
+        """browser 必须以关键字传入。"""
+        config = _make_config()
+        mock_browser = MagicMock()
+
+        with pytest.raises(TypeError):
+            LoginAttempt(config, None, mock_browser)  # type: ignore[misc]
+
+
 # ── SCREENSHOT_URL_PATTERN 正则 ──────────────────────────────────────
 
 
 class TestScreenshotUrlPattern:
-
     def test_removes_chinese_colon(self):
         import re
+
         msg = "操作失败 截图：/tmp/shot.png"
         result = re.sub(SCREENSHOT_URL_PATTERN, "", msg)
         assert result == "操作失败"
 
     def test_removes_english_colon(self):
         import re
+
         msg = "操作失败 截图: /tmp/shot.png"
         result = re.sub(SCREENSHOT_URL_PATTERN, "", msg)
         assert result == "操作失败"
 
     def test_removes_jpg(self):
         import re
+
         msg = "失败 截图：/path/to/screen.jpg"
         result = re.sub(SCREENSHOT_URL_PATTERN, "", msg)
         assert result == "失败"
 
     def test_no_screenshot_unchanged(self):
         import re
+
         msg = "普通错误消息"
         result = re.sub(SCREENSHOT_URL_PATTERN, "", msg)
         assert result == msg
@@ -695,11 +904,10 @@ class TestScreenshotUrlPattern:
 
 
 class TestEnsureTaskManager:
-
     def test_initializes_task_manager(self):
         """首次调用时初始化 TaskManager（行 153-162）。"""
         config = _make_config()
-        handler = LoginAttemptHandler(config)
+        handler = LoginAttempt(config)
 
         assert handler._task_manager is None
 
@@ -712,7 +920,7 @@ class TestEnsureTaskManager:
     def test_already_initialized_skips(self):
         """已初始化时跳过（行 153）。"""
         config = _make_config()
-        handler = LoginAttemptHandler(config)
+        handler = LoginAttempt(config)
         handler._task_manager = MagicMock()
 
         with patch("app.tasks.manager.TaskManager") as MockTM:
@@ -723,10 +931,11 @@ class TestEnsureTaskManager:
     def test_project_root_override(self):
         """CAMPUS_AUTH_PROJECT_ROOT 环境变量覆盖项目根目录（行 156-161）。"""
         config = _make_config()
-        handler = LoginAttemptHandler(config)
+        handler = LoginAttempt(config)
 
-        with patch("app.tasks.manager.TaskManager") as MockTM, patch.dict(
-            "os.environ", {"CAMPUS_AUTH_PROJECT_ROOT": "/custom/root"}
+        with (
+            patch("app.tasks.manager.TaskManager") as MockTM,
+            patch.dict("os.environ", {"CAMPUS_AUTH_PROJECT_ROOT": "/custom/root"}),
         ):
             handler._ensure_task_manager()
 
@@ -740,10 +949,9 @@ class TestEnsureTaskManager:
 
 
 class TestInit:
-
     def test_default_values(self):
         config = _make_config()
-        handler = LoginAttemptHandler(config)
+        handler = LoginAttempt(config)
 
         assert handler.config is config
         assert handler.cancel_event is None
@@ -753,6 +961,6 @@ class TestInit:
     def test_custom_values(self):
         config = _make_config()
         cancel = threading.Event()
-        handler = LoginAttemptHandler(config, cancel_event=cancel)
+        handler = LoginAttempt(config, cancel_event=cancel)
 
         assert handler.cancel_event is cancel

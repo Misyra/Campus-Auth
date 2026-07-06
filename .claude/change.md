@@ -1,5 +1,1574 @@
 # 修改日志
 
+## 2026-07-06
+
+### fix: 修复前端日志页不显示截图的问题
+
+- **Bug 修复**：
+  - `app/tasks/step_handlers.py`：`ScreenshotHandler` 日志级别从 `DEBUG` 改为 `INFO`，消息添加 `截图:` 前缀，使前端 `extractScreenshotUrl()` 正则能匹配到截图 URL
+  - `app/services/login_attempt.py`：移除 `re.sub(SCREENSHOT_URL_PATTERN)` 对失败消息的截图 URL 剥离逻辑，使登录失败时的截图也能出现在日志中
+- **文档同步**：
+  - `docs/guides/task-writing-guide.md`：对齐实际代码，修复 11 项差异（OCR char_range、步骤 ID 格式、navigate 行为描述、select 模糊匹配、required 字段补充、select_delay 补充、post_login_delay 补充等）
+
+### fix: 变量解析与网络检测修复 + ponytail-audit 代码清理
+
+- **Bug 修复**：
+  - `app/tasks/variable_resolver.py`：`resolve_for_js()` 补充 `config.variables` 查找链，修复任务级变量（如 `{{username}}`）未替换导致 eval 步骤 `SyntaxError`
+  - `app/tasks/browser_runner.py`：`check_network_status` 改为直接 `await`，修复 `asyncio.to_thread` 包装 async 函数导致 "cannot unpack coroutine" 错误
+  - `app/network/probes.py`：探测异常日志补充异常类型名，避免空消息
+- **死代码删除**：
+  - `app/tasks/models.py`：删除 `TaskError` 无用中间层，`StepError` 直接继承 `Exception`
+  - `app/network/interfaces.py`：删除 `is_interface_up`（无调用方）
+  - `app/utils/shutdown.py`：删除 `register_exit_handler`（无调用方）
+  - `app/services/engine.py`：删除 `get_config()` 重复方法
+  - `app/services/profile_service.py`：删除 `create_profile_service()` 无用别名
+- **单调用函数内联**：
+  - `app/services/task_executor.py`：`_get_script_path()` 内联
+  - `app/services/login_orchestrator.py`：`_link_cancel()` 内联、`_runtime_config()` 移除无用 fallback
+  - `app/services/login_runner.py`：`load_login_config()` 内联
+  - `app/services/scheduler_service.py`：`has_enabled_tasks()` 内联
+- **合并 wrapper 链**：
+  - `app/services/engine.py`：删除 `notify_network_state_changed()`、`set_dashboard_sink()` 无附加值包装
+- **os.path → pathlib**：
+  - `app/workers/script_runner.py`：`os.path.splitext(os.path.basename(x))` → `Path(x).stem`
+  - `app/utils/files.py`：`os.path.dirname(path)` → `Path(path).parent`
+  - `app/utils/logging.py`：`os.path.join(...)` → `Path(...) / ...`
+  - `app/utils/process.py`：`os.path.basename(...)` → `Path(...).name`
+- **统一变量解析器**：
+  - 提取 `_lookup()` 统一三层查找链（runtime → template → config.variables）
+  - 提取 `_to_str()` 工具方法
+- **测试同步**：删除 8 个测试已删除 API 的用例，修复 1 个 mock 目标，新增 2 个 config.variables 测试
+
+## 2026-07-05
+
+### refactor: ponytail-audit 代码清理
+
+- **死代码删除**：
+  - `app/utils/concurrent.py`：删除 `race_first_success`、`cancel_pending`（无调用方）
+  - `app/services/engine.py`：删除 `StartResult` 枚举（返回值从未被消费）
+  - `app/services/launcher.py`：删除空 `TYPE_CHECKING` 块
+  - `app/services/login_attempt.py`：删除 `execute()` 内重复导入
+- **内部函数降私有**：
+  - `app/utils/time_utils.py`：`is_in_pause_period` → `_is_in_pause_period`
+  - `app/network/utils.py`：`is_apipa_address` → `_is_apipa_address`
+  - `app/utils/process.py`：`get_process_name`/`get_process_create_time` 降私有
+  - `app/utils/crypto.py`：`clear_decryption_error` 降私有
+- **单调用函数内联**：
+  - `app/workers/script_runner.py`：`get_default_binary()` 内联为 `sys.executable`
+  - `app/network/interfaces.py`：`_is_routable_ip` 委托内联
+  - `app/network/probes.py`：`_is_captive_portal_url` 内联为条件表达式
+  - `app/workers/playwright_worker.py`：`_is_orphan` 内联到 `cleanup_orphan_browsers`
+  - `app/services/profile_service.py`：`_rollback_config` 内联为 `model_copy(deep=True)`
+  - `app/network/detect.py`：`_parse_linux_route_entry` 复用 `_parse_linux_gateway`
+  - `app/tasks/step_handlers.py`：`_find_with_deadline` 内联到 `_find_element`
+- **逻辑修复**：
+  - `app/services/profile_service.py`：`copy.deepcopy` 统一为 `model_copy(deep=True)`，修正 docstring 矛盾
+  - `app/services/launcher.py`：5 处 `resolve_port` 延迟导入统一到模块顶部
+  - `app/services/login_orchestrator.py`：`_bind_proxy_url` 在 `__init__` 中初始化
+  - `app/tasks/models.py`：`StepConfig._field_defaults` 加类级缓存避免重复反射
+- **测试适配**：7 个测试文件同步更新 import 和 mock 目标
+
+### refactor(network): probes/decision 改 asyncio，消除 11 探测线程
+
+- `app/network/probes.py`：
+  - `socket.create_connection` → `asyncio.open_connection`，支持 `local_addr` 绑定源 IP
+  - `httpx.Client` → `httpx.AsyncClient`，per-call 创建替代全局单例
+  - 删除 `ThreadPoolExecutor(8)` 及相关同步客户端池（`_probe_client`、`_bound_clients`）
+  - 新增 `_race_first_success_async`（async 版 OR 语义竞态）
+  - `shutdown_probes()` 简化为仅设置 `_shutdown_event`
+- `app/network/decision.py`：
+  - `is_network_available()` → `async def`，`ThreadPoolExecutor(3)` + `as_completed` → `asyncio.gather`
+  - `check_network_status()` → `async def`
+  - 删除 `_decision_executor` 和 `shutdown_decision_executor()`
+- `app/services/monitor_service.py`：
+  - `NetworkMonitorCore.check_once()` → `async def`，内部 `await check_network_status()`
+  - 删除 `_check_bind_ip_change` 中的 `close_bound_client` 调用
+- `app/services/engine.py`：
+  - `_do_network_check_async`：`await asyncio.to_thread(core.check_once)` → `await core.check_once()`
+  - `test_network()`：改为通过 `_dispatch_command(TEST_NETWORK)` 派发到引擎 loop 异步执行
+  - 新增 `EngineCmdType.TEST_NETWORK` 和 `_handle_test_network` 处理器
+- `app/container.py`：删除 `shutdown_decision_executor()` 调用
+- `app/services/login_runner.py`：`check_network_status()` 改为 `asyncio.run(check_network_status())`
+- 测试适配：
+  - `tests/test_network/test_probes.py`：删除 executor/客户端池测试，新增 async 探测测试
+  - `tests/test_network/test_decision.py`：删除 executor 隔离测试，适配 async
+  - `tests/test_core/test_network_probes.py`：探测测试改为 async + `AsyncMock`
+  - `tests/test_services/test_engine.py`：`check_once` mock 改 `AsyncMock`，`test_network` 改 dispatch mock
+  - `tests/test_integration/`：适配 `check_network_status` 和 `check_once` async 化
+  - `tests/test_config/test_container.py`、`tests/test_app/`、`tests/test_services/test_container_cleanup.py`：删除 `shutdown_decision_executor` mock
+
+### fix(engine): 修复 start_thread 语义回归 + login 回调线程安全
+
+- `app/services/engine.py`：
+  - `start_thread()`：提取 `_start_engine_thread()` 内部方法，`start_thread()` 仅启动引擎 loop 线程不再调用 `start_monitoring()`，修复 `startup_action=none` 场景下监控被意外启动的语义回归
+  - `boot()`：引擎线程已运行时直接调用 `start_monitoring()`，否则先启动线程再启动监控
+  - `_handle_login` 的 `_on_complete` 回调：`cmd.response_future.set_result()` 改为 `self._engine_loop.call_soon_threadsafe(cmd.response_future.set_result, ...)`,修复 `concurrent.futures.Future.add_done_callback` 在工作线程中触发时对 `asyncio.Future.set_result()` 的线程安全问题
+- 测试：
+  - `tests/test_services/test_engine.py`：`test_handle_login_success` 改为使用运行中的 engine loop + `threading.Event` 同步，适配 `call_soon_threadsafe` 异步语义
+
+### fix(engine): 修复 frozen setattr 崩溃 + pure_mode getter 动态覆盖
+
+- `app/services/engine.py`：
+  - `toggle_pure_mode`：`setattr(d, "global_config", ...)` → `d.model_copy(update={...})`，修复 frozen 模型 ValidationError
+  - `_handle_start` pure_mode getter：闭包捕获副本改为动态覆盖 `base_getter` + `model_copy`，reload 后 config 变化自动生效
+- `app/api/autostart.py`：
+  - `_save_runtime_mode`：`setattr(d.global_config, "app_settings", ...)` → `d.model_copy(update={...})`，修复 frozen 模型 ValidationError
+- 测试：
+  - `tests/test_services/test_engine.py`：`TestTogglePureMode` 新增 `test_toggle_pure_mode_persists_to_disk`，用真实 frozen ProfilesData 验证 lambda 不崩溃
+
+### refactor(monitor): NetworkMonitorCore 改 getter 注入，reload 零停机
+
+- `app/services/monitor_service.py`：
+  - `__init__` 的 `config` 参数改为 `get_config: Callable[[], RuntimeConfig]`
+  - 所有 `self.config.X` 改为 `self._get_config().X`（14 处）
+  - `_get_test_sites` 删除缓存，每次重算
+  - `_start_bind_proxy` 记录指纹，新增 `_needs_bind_proxy_rebuild`
+  - 删除 `self._test_sites_cache` 和 `self.config`
+- `app/services/engine.py`：
+  - `_handle_start` 构造 NetworkMonitorCore 改传 getter（pure_mode 闭包捕获）
+  - `_handle_reload` 不再 stop+start，仅 bind 变化时重建 SOCKS5 Forwarder
+  - `_handle_apply_profile` 同上简化
+- 测试：
+  - `tests/test_services/test_monitor_core.py`：新增 `TestGetterInjection`（3 测试）
+  - `tests/test_core/test_monitor.py`：全部 `config=` 改为 `get_config=lambda: config`；`test_caching` 改为 `test_no_caching_returns_fresh`
+  - `tests/test_services/test_engine.py`：`test_handle_reload_monitoring` 断言不再 stop+start；新增 `test_reload_bind_change_rebuilds_proxy`、`test_apply_profile_bind_change_rebuilds`；`test_handle_start_pure_mode` 改查 `get_config` 参数
+  - `tests/test_services/test_monitor_service_masking.py`、`tests/test_integration/test_profile_connection.py`、`tests/test_integration/test_network_connection.py`：适配 getter 注入
+
+### refactor(schemas): 持久化层 frozen 化，统一不可变风格
+
+- `app/schemas.py`：`GlobalConfig`、`ProfilesData`、`Profile` 加 `frozen=True`
+- `app/services/profile_service.py`：
+  - `update` 签名改为 `Callable[[ProfilesData], ProfilesData | None]`，支持返回新对象
+  - `set_active_profile` 改用 `model_copy(update={"active_profile": profile_id})`
+  - `save_profile` 改用 `model_copy` 构建新 Profile 和 ProfilesData
+  - `delete_profile` 改用 dict 推导 + `model_copy` 构建新对象
+  - `set_auto_switch` 改用 `model_copy(update={"auto_switch": enabled})`
+  - `_rollback_config` 改为返回 `backup_data.model_copy(deep=True)`
+  - `save_global_and_profile._apply` 改为返回新 `ProfilesData`
+- `app/api/config.py`：`set_log_level` 的 `update` lambda 改为返回新 `ProfilesData`
+- 测试：新增 `TestFrozenModels`（3 测试）；更新 rollback/merge/backend 测试适配不可变模式
+
+### refactor(profile): ProfileService 加 mtime 内存缓存 + 单例化
+
+- `app/services/profile_service.py`：
+  - `__init__` 新增 `_cache` / `_cache_mtime` 字段
+  - `_load_unsafe` 改为 mtime 缓存：mtime 未变返回缓存引用，变化时读盘更新缓存
+  - `_save_unsafe` 写盘后同步刷新缓存
+  - 新增 `get_profile_service()` 双重检查锁定单例，`create_profile_service()` 改为兼容别名
+  - 新增 `reset_profile_service_singleton()` 仅供测试重置
+- `tests/test_services/test_profile_service.py`：新增 `autouse` fixture `_reset_singleton`；`test_load_returns_new_instance_each_time` 改为 `test_load_returns_cached_instance_when_unchanged`；新增 `TestProfileServiceCache`（3 测试：缓存命中、mtime 失效、update 刷新）
+- `tests/test_app/test_backend_services.py`：`TestCorruptRenameEAFP` 两处 `__new__` 构造补充 `_cache` / `_cache_mtime` 属性
+
+### fix(engine): 修复 _reload_config_internal 裸写和 toggle_pure_mode TOCTOU
+
+- `app/services/engine.py`：
+  - `_swap_runtime_config` 新增可选 `pure_mode` 参数，支持在原子替换配置的同时更新 `_pure_mode`
+  - `_reload_config_internal` 改为调用 `_swap_runtime_config(new_config, pure_mode=pure_mode)`，消除裸写 `self._runtime_config = new_config`
+  - `toggle_pure_mode` 在同一把锁内读取 `self._runtime_config`（保存为 `base_config`），消除 TOCTOU 竞态
+
+### refactor(engine): 收敛 _runtime_config 写路径到 _swap_runtime_config
+
+- `app/services/engine.py`：新增 `_swap_runtime_config`（单一写入口，`_reload_lock` 下原子替换）和 `update_log_level` 公共方法；重写 `_reload_config_internal`（磁盘 IO 移出锁外，B5）；`toggle_pure_mode` 改用 `_swap` 替换运行时配置
+- `app/api/config.py`：`set_log_level` 路由改调 `engine.update_log_level()`，不再裸改私有属性
+- `tests/test_services/test_engine.py`：新增 `TestSwapRuntimeConfig`（2 测试）、`TestUpdateLogLevel`（2 测试）
+- `tests/test_api/test_api_config_routes.py`：调整 `set_log_level` 测试验证 `update_log_level` 被调用
+
+### refactor(orchestrator): 移除 LoginOrchestrator 自建 fallback pool 死代码
+
+- `app/services/login_orchestrator.py`：executor 改为必传（body 校验），删除 pool 参数与 set_executor 方法，shutdown 不再关闭外部 executor
+- `app/services/task_executor.py`：login_orchestrator 改可选 + 新增 bind_login_orchestrator 延迟绑定，login_executor queue_size 从 1 调为 2
+- `app/container.py`：调整创建顺序 TaskExecutor → LoginOrchestrator → bind，删除 set_executor 调用
+- `app/services/login_runner.py`：login_once 路径显式创建一次性 ThreadPoolExecutor
+- `tests/test_services/test_login_orchestrator.py`：删除 TestSetExecutor，新增 TestExecutorRequired（5 测试）+ _make_mock_executor 辅助，10 处调用点适配
+- `tests/test_integration/conftest.py`：integration_stack fixture 调整创建顺序
+
+### refactor: 简化启动逻辑，配置驱动运行模式
+
+**核心变更**：自启动脚本不再硬编码运行模式，改为由配置文件统一驱动。CLI 参数覆盖配置，不加参数时读取配置。
+
+- `app/schemas.py`：
+  - `AppSettings.autostart_lightweight: bool` → `runtime_mode: RuntimeMode`（直接存储模式值）
+  - `AppConfig.from_runtime_config()` 新增 `runtime_mode` 从配置读取
+  - `AutoStartStatusResponse.lightweight: bool` → `runtime_mode: str`
+  - `AutostartEnableRequest` → `AutostartModeRequest`（字段 `lightweight` → `runtime_mode`）
+- `app/services/autostart.py`：
+  - `_autostart_cli_args()` 移除 `lightweight` 参数，只传 `--no-browser --source autostart`
+  - `enable()` / `_enable_macos()` / `_enable_linux()` / `_enable_windows()` 移除 `lightweight` 参数
+- `app/api/autostart.py`：
+  - `_read_autostart_lightweight` → `_read_runtime_mode`（从配置读取）
+  - `_save_autostart_lightweight` → `_save_runtime_mode`（写入配置）
+  - `enable_autostart` 不再需要请求体
+  - `set_autostart_mode` 仅保存配置，不重新生成脚本
+- `app/api/config.py`：变更检测标签 `autostart_lightweight` → `runtime_mode`
+- `main.py`：`--runtime-mode` 帮助文本更新
+- `resources/tools/start/start.go`：启动时加 `--runtime-mode full`，确保手动启动始终全量模式
+- `frontend/js/constants.js`：`autostart_lightweight: true` → `runtime_mode: "full"`
+- `frontend/js/app-options.js`：`autostartModeOptions` 值从 `true/false` 改为 `"lightweight"/"full"`
+- `frontend/js/api-service.js`：`setMode` 参数从 `lightweight` 改为 `runtime_mode`
+- `frontend/js/methods/config.js`：`setAutostartMode` 参数从 `lightweight` 改为 `runtimeMode`
+- `frontend/js/data/status.js`：`autostart.lightweight` → `autostart.runtime_mode`
+- `frontend/partials/pages/settings/settings-system.html`：模式选择器绑定从 `autostart.lightweight` 改为 `config.app_settings.runtime_mode`
+- 测试文件：同步更新所有 `autostart_lightweight` / `lightweight` 相关断言和参数
+- `app/api/autostart.py`：`_read_runtime_mode` 异常回退默认值从 `FULL` 改为 `LIGHTWEIGHT`（与旧代码一致，避免端口冲突）
+- `frontend/js/methods/config.js`：`fetchAutostart` 404 回退对象补充 `runtime_mode: 'full'` 字段
+- `docs/changelog.md`：移除未同步版本号的 v4.2.0 条目
+
+## 2026-07-04
+
+### refactor: 删除自定义变量功能
+
+- `app/schemas.py`：删除 `AppSettings.custom_variables` 字段
+- `app/utils/env.py`：删除 `_ENV_DENYLIST` 常量和 `build_login_template_vars()` 中的 `custom_variables` 参数及相关逻辑
+- `app/services/login_orchestrator.py`：删除 `custom_variables` 传递
+- `app/services/login_attempt.py`：删除 `self._custom_variables` 存储和传递
+- `app/services/debug_service.py`：删除 `custom_variables` 参数传递
+- `frontend/partials/pages/settings/settings-account.html`：将自定义变量编辑 UI 替换为功能移除提示
+- `frontend/js/methods/ui.js`：删除 `addCustomVar()`、`removeCustomVar()`、`updateCustomVarKey()` 方法
+- `frontend/js/constants.js`：删除 `custom_variables` 默认值
+- `frontend/js/data/config.js`：简化 `cloneConfig()` 中的 `app_settings` 拷贝
+- `docs/dev/architecture.md`：删除变量优先级表中的自定义变量行
+- 测试文件：删除所有 `custom_variables` 相关测试和断言
+
+### fix(login): 修复 LoginCancelledError 无法映射为 CANCELLED 终态
+
+### fix(login): 修复 LoginCancelledError 无法映射为 CANCELLED 终态
+
+- `app/services/login_attempt.py`：`attempt_login()` 和 `_perform_login_with_active_task()` 的 `except Exception` catch-all 会吞掉 `LoginCancelledError`，导致 `execute()` 的 `except LoginCancelledError` 成为死代码。在两层 catch-all 前增加 `except LoginCancelledError: raise`，让异常传播到 `execute()` 正确映射为 CANCELLED 终态
+- `tests/test_utils/test_login.py`：`test_login_cancelled_error` 改为通过 `execute()` 验证 CANCELLED 映射（不再直接测 `_perform_login_with_active_task`）
+
+### refactor(login): 移除 login_runner 外层重试，收敛到 LoginSession
+
+- `app/services/login_runner.py`：`execute_login_with_retries` 移除外层 `for attempt` 重试循环和 `time.sleep` 间隔，改为单次 `orchestrator.submit`；删除顶部 `import time`；重试逻辑由 Worker 内 LoginSession 负责（复用浏览器），避免外层 × 内层重试次数乘积放大
+- `tests/test_integration/test_login_integration_extended.py`：`TestLoginOnceRetry` 移除 `patch("time.sleep")`；`test_execute_login_with_retries_exhausted` 断言 `submit.call_count == 1`（原为 2）；删除 `test_execute_login_with_retries_retry_then_succeed`（外层重试已移除）
+- `tests/test_app/test_main.py`：`TestRunLoginThenExit` 删除 `test_retry_then_succeed`（外层重试已移除）；`test_retries_exhausted` 移除 `patch("time.sleep")` 并更新 warning 断言为"登录失败"；`TestLoginOnceRetryInterval` 删除 `test_fixed_retry_interval`（外层重试间隔已不存在）；其余测试移除多余的 `patch("time.sleep")`
+
+### feat(login): 新增 LoginSession 浏览器复用与重试循环
+
+- `app/services/login_session.py`：新增 `LoginSession` 类，单 `async with BrowserContextManager` 包住整个重试循环；所有终态（成功/失败/取消/耗尽/异常）都触发 `__aexit__` 关闭浏览器；`interruptible_sleep` 支持等待中取消；最后一次重试后不再等待；`LoginRetryPolicy` 默认从 `config["retry_settings"]` 构造
+- `tests/test_services/test_login_session.py`：新增 12 个测试用例（3 个测试类），覆盖首试成功、重试后成功、重试耗尽、凭证错误不重试、取消不重试、等待中取消、cancel_event 预设、max_retries=1 无等待、浏览器在各种终态下关闭、异常传播时浏览器仍关闭
+
+### refactor(login): LoginAttempt 适配 Session 模式
+
+- `app/services/login_attempt.py`：`__init__` 新增 `browser` keyword-only 参数（Session 模式复用传入浏览器）；`_execute_browser_task` 条件分支（browser 非 None 时复用，None 时旧行为）；`finally` 块使用 `browser_owned` 标志控制关闭；新增 `execute()` 方法返回 `AttemptOutcome`，含异常分类（LoginCancelledError → CANCELLED，连接/超时异常 → RETRYABLE，PlaywrightError 含特定子串 → RETRYABLE）；保留 `attempt_login()`/`close_browser()` 兼容旧调用方
+- `tests/test_utils/test_login.py`：`test_existing_browser_closed_first` 改为 `test_session_mode_reuses_browser`；新增 `TestExecute`（8 用例）和 `TestInitBrowser`（3 用例）
+
+### feat(utils): 新增 interruptible_sleep 可中断异步等待
+
+- `app/utils/concurrent.py`：新增 `interruptible_sleep(seconds, cancel_event, *, poll_interval=0.2)` 函数，纯异步轮询模式，兼容 `threading.Event` 与 `CompositeCancelEvent`，用于 LoginSession 重试间隔
+- `tests/test_utils/test_concurrent_sleep.py`：新增 6 个测试用例，覆盖正常完成、中途取消、零秒/负秒防御、已设置事件快速返回、自定义轮询间隔
+
+### feat(login): 新增 LoginRetryPolicy 会话级重试策略
+
+- `app/services/login_models.py`：新增 `LoginRetryPolicy` dataclass，从 `RuntimeConfig.retry` 派生，`max_retries` 裁剪到 [1, 10]，`next_delay(attempt_index)` 返回固定间隔或 None
+- `tests/test_services/test_login_models.py`：新增 9 个测试用例，覆盖边界裁剪、next_delay 范围判断、from_runtime_config 构造
+
+### feat(login): 新增 AttemptOutcomeType 与 AttemptOutcome 数据模型
+
+- `app/services/login_models.py`：新增模块，定义 `AttemptOutcomeType`(StrEnum) 和 `AttemptOutcome`(frozen dataclass)
+- `tests/test_services/test_login_models.py`：新增单元测试，覆盖枚举值、不可变性、should_retry 逻辑
+
+### fix: 浏览器定时任务退化为通用登录
+
+- `app/services/task_executor.py`：`_execute_browser` 方法从 registry 加载任务配置后，将 `task_id` 注入到 `RuntimeConfig.active_task`，确保 `LoginAttemptHandler` 加载正确的任务配置，而非全局活动任务
+
+### fix: 定时任务错过不可恢复
+
+- `app/services/scheduler_service.py`：新增追赶机制，`tick()` 方法从上次 tick 到当前时间之间的所有分钟都会被检查，错过的定时任务会被补执行；新增 `MAX_CATCHUP_MINUTES = 30` 限制追赶窗口，避免启动时执行过期任务；新增 `_get_catchup_minutes()` 方法计算追赶分钟列表，正确处理跨天边界
+- `tests/test_services/test_p0_fixes.py`：新增 P0 修复验证测试，覆盖 task_id 注入和追赶机制的各种场景
+
+### fix: P1 问题批量修复
+
+- P1-1 孤儿浏览器清理整合到 `Engine.boot()`：所有启动入口（完整模式、轻量模式）统一执行 `cleanup_orphan_browsers()`，从 `container.py` 的 `startup()` 中移除重复调用
+- P1-3 方案切换监控失败静默：新增 `StartResult` 枚举（SUCCESS/ALREADY_RUNNING/INVALID_CONFIG/START_FAILED），`_handle_start()` 返回启动结果，`_handle_apply_profile()` 和 `_handle_reload()` 检查返回值，失败时返回错误信息
+- P1-4 掩码密码处理：`Profile.password` 和 `ConfigSaveRequest.password` 改为 `str | None`，`None` 表示不修改密码；前端未编辑密码时传 `null`；后端 `get_profile` 不返回实际密码值
+- P1-5 Windows 虚拟网卡误判：扩展 `_VIRTUAL_NIC_PREFIXES` 增加 Windows 前缀（hyper-v/virtualbox/vmware），新增 `_VIRTUAL_NIC_KEYWORDS` 关键词匹配，`is_local_network_connected` 改为候选过滤 + TCP Connect 最终判定
+- P1-6 decision_executor 关闭竞态：删除 `atexit.register()`，添加幂等保护 `_decision_shutdown_done`
+
+### refactor: 提取网络工具函数到 utils.py
+
+- `app/network/utils.py`：新增模块，包含 `is_local_address`、`is_apipa_address`、`is_routable_ip` 三个 IP 地址分类工具函数
+- `app/network/interfaces.py`：移除内联的工具函数，改为从 `utils.py` 导入 `is_routable_ip`
+- `app/network/proxy.py`：从 `utils.py` 导入 `is_local_address` 和 `is_routable_ip`，简化 `_handle_client` 中的条件判断
+
+### refactor: 统一 IP 地址分类逻辑到 interfaces.py
+
+- `app/network/interfaces.py`：新增模块级函数 `is_local_address`、`is_apipa_address`、`is_routable_ip`，`InterfaceManager._is_routable_ip` 改为调用 `is_routable_ip`
+- `app/network/proxy.py`：移除 `Socks5Server._is_local_address` 和 `_is_non_routable` 方法，改为导入并调用 `is_local_address`、`is_apipa_address`
+
+### refactor: 封装网卡可用性检查到 InterfaceManager.is_interface_bindable
+
+- `app/network/interfaces.py`：新增 `_is_routable_ip` 静态方法判断 IP 是否可路由；新增 `is_interface_bindable` 方法，检查网卡是否存在、是否 up、IP 是否可路由，返回 (是否可用, 原因) 元组
+- `app/services/monitor_service.py`：移除 `_is_non_routable` 方法，`_start_bind_proxy` 改用 `is_interface_bindable` 统一检查
+
+### fix: 绑定网卡 IP 不可路由时回退系统路由
+
+- `app/services/monitor_service.py`：新增 `_is_non_routable` 静态方法判断不可路由 IP（127.0.0.0/8 或 169.254.0.0/16）；`_start_bind_proxy` 中检测到绑定 IP 不可路由时，不启动 SOCKS5 代理，直接回退系统路由
+
+### fix: SOCKS5 APIPA 地址不绑定 source_address
+
+- `app/network/proxy.py`：新增 `_is_non_routable` 静态方法判断不可路由地址（本地回环或 APIPA 169.254.0.0/16）；`_handle_client` 中当绑定 IP 是不可路由地址时，不绑定 source_address，避免 Windows 上 APIPA 地址连接远程地址失败（WinError 10049）
+
+### fix: SOCKS5 绑定 IP 是回环地址时不绑定 source_address
+
+- `app/network/proxy.py`：`_handle_client` 中当绑定 IP 是回环地址（127.0.0.0/8）时，不绑定 source_address，避免 Windows 上回环 IP 连接远程地址失败（WinError 10051）
+
+### fix: SOCKS5 代理连接本地地址时不绑定 source_address
+
+- `app/network/proxy.py`：新增 `_is_local_address` 静态方法判断本地地址（127.0.0.0/8 或 localhost）；`_handle_client` 中本地地址不绑定 source_address，避免 Windows 上非回环 IP 连接回环地址失败（WinError 10049）
+
+### fix: 修复 Windows 上 isloopback 属性不存在导致网卡枚举失败
+
+- `app/network/interfaces.py`：`_is_physical` 方法移除对 `stats.isloopback` 的依赖（Windows 的 `snicstats` 无此属性），改为仅通过接口名称判断回环
+
+### fix: 修复网卡列表 API 调用路径错误（network → monitor）
+
+- `frontend/js/app-options.js`：`loadNetworkInterfaces` 方法中 API 调用路径从 `this.$apiService.network.fetchInterfaces()` 修正为 `this.$apiService.monitor.fetchInterfaces()`，匹配 `api-service.js` 中的实际分组
+
+### fix: 修复网络探测测试因 source_address 参数不匹配导致的 4 个失败
+
+- `tests/test_core/test_network_probes.py`：`test_success_on_second_target` mock 的 `side_effect` 函数签名补充 `source_address=None` 参数；`test_successful_connection`、`test_https_default_port`、`test_http_default_port` 三个断言补充 `source_address=None` 以匹配 NIC 绑定功能引入的 `socket.create_connection` 新参数
+
+### feat: 集成 SOCKS5 代理生命周期和 IP 变化检测到 MonitorCore
+
+- `app/services/monitor_service.py`：`init_monitoring()` 新增 `_start_bind_proxy()` 调用，启动 SOCKS5 Forwarder；`stop_monitoring()` 新增 `_stop_bind_proxy()` 调用；新增 `bind_proxy_url` 属性暴露代理 URL；新增 `_check_bind_ip_change()` 在 `check_once()` 中检测 DHCP IP 变化并自动更新代理绑定
+- `app/services/login_orchestrator.py`：`runtime_config_to_worker_dict()` 新增 `bind_proxy` 可选参数，注入到 `browser_settings`；`LoginOrchestrator` 新增 `set_bind_proxy()` 方法和 `_dispatch()` 中传递给 worker dict
+- `app/services/engine.py`：`_handle_start()` 中监控启动后将 `core.bind_proxy_url` 传递给 orchestrator
+- `app/workers/playwright_worker.py`：`_build_context_options()` 检测 `bind_proxy` 设置并注入 Playwright proxy 选项
+
+### feat: 为网络探测层添加网卡绑定支持（TCP/HTTP/物理检查）
+
+- `app/network/probes.py`：`is_network_available_socket` 新增 `source_ip` 参数，传递 `source_address=(source_ip, 0)` 给 `socket.create_connection`；新增绑定 Client 池 `_get_bound_client`（按 IP 缓存，最多 4 个，LRU 淘汰），`is_network_available_http` 和 `is_network_available_url` 新增 `source_ip` 参数；`is_local_network_connected` 新增 `interface_name` 参数，绑定网卡不可用时回退检查所有物理网卡；`shutdown_probes` 清理绑定 Client
+- `app/network/decision.py`：新增 `_resolve_source_ip` 辅助函数，从 `MonitorSettings.bind_interface_name` 解析 IP；`is_network_available` 新增 `source_ip` 参数并透传给三个探测函数；`check_login_prerequisites` 传递 `interface_name` 给物理检查、`source_ip` 给认证可达性检查；`_is_auth_url_reachable` 支持 `source_address` 绑定
+- `tests/test_network/test_probes.py`：新增 `TestTcpProbeSourceIp`（2 个用例）、`TestPhysicalCheckFallback`（4 个用例）、`TestBoundClientPool`（5 个用例）
+- `tests/test_network/test_decision.py`：新增 `TestResolveSourceIp`（3 个用例）、`TestCheckNetworkStatusPassesSourceIp`（1 个用例）
+
+### feat: 扩展网关检测支持按网卡名索引
+
+- `app/network/detect.py`：新增 3 个通用解析辅助函数 `_parse_windows_all_routes`、`_parse_linux_route_entry`、`_parse_darwin_netstat_routes`，从 route print / /proc/net/route / netstat -rn 输出中提取所有默认路由（网关+接口）
+- `app/network/interfaces.py`：`InterfaceManager` 新增 `get_gateways_by_name()` 方法及三平台实现，`list_interfaces()` 调用该方法填充 `gateway` 字段
+- `tests/test_network/test_interfaces.py`：新增 `TestInterfaceManagerGateway`（10 个用例），现有 list_interfaces 测试添加 gateway mock
+- `tests/test_network/test_detect.py`：新增 3 个测试类（16 个用例），覆盖新增的通用解析函数
+
+### feat: 新增 InterfaceInfo 数据模型和 bind_interface_name 配置字段
+
+- `app/network/interfaces.py`：新增 `InterfaceInfo` frozen dataclass（含 slots），包含 `name`、`ip`、`gateway`、`is_up` 四个字段，用于统一网络接口信息表示
+- `app/schemas.py`：`MonitorSettings` 新增 `bind_interface_name: str` 字段（默认空串，表示不绑定）
+- `frontend/js/constants.js`：`DEFAULT_CONFIG.monitor` 新增 `bind_interface_name` 默认值
+- `tests/test_network/test_interfaces.py`：新增 3 个测试用例（frozen 不可变、空值、slots 限制）
+
+### feat: 新增 Git 仓库克隆/更新工具和启动程序
+
+- `resources/tools/git-puller/main.go`：新增 git-puller 工具，自动检测/安装 Git，尝试多个镜像源（GitClone、CNPMJS、GHProxy、GitHub 官方）克隆/更新仓库，支持分支选择，默认推荐 main 分支
+- `resources/tools/start/start.go`：将原 `start.go` 迁移到 `resources/tools/start/`，自动下载 uv、安装依赖、启动应用
+- 两个工具均校验项目根目录（检测 pyproject.toml），编译后 exe 放在项目根目录运行
+
+### feat: 前端网卡绑定 UI — 下拉选择框与刷新按钮
+
+- `frontend/js/api-service.js`：`monitor` 分组新增 `fetchInterfaces` 方法，调用 `/api/network/interfaces`
+- `frontend/js/app-options.js`：`data()` 新增 `networkInterfaces` 数组；`computed` 新增 `networkInterfaceOptions`（下拉选项）和 `selectedInterfaceDown`（网卡断连警告）；`methods` 新增 `loadNetworkInterfaces` 异步方法；`watch` 新增 `currentSettingsTab` 监听，切换到 monitor tab 时懒加载网卡列表
+- `frontend/partials/pages/settings/settings-monitor.html`：在"屏蔽系统代理"与"登录请求超时"之间添加绑定网卡下拉框（`custom-select`）、刷新按钮和网卡断连警告
+- `frontend/styles/pages/settings.css`：新增 `.form-warning` 样式类
+- 移除原 `start.go`，源码统一归入 `resources/tools/` 目录
+
+## 2026-07-03
+
+### fix: toggle_auto_switch 端点添加异常处理
+
+- `app/api/profiles.py`：`toggle_auto_switch` 端点中 `set_auto_switch` 调用包裹在 try/except 中，写入失败时记录警告日志并返回 500 + 明确错误信息，而非依赖 FastAPI 默认的通用 500 错误
+- `tests/test_api/test_api_profiles_routes.py`：新增 `test_auto_switch_write_failure` 测试用例，验证写入失败时返回 500 且错误信息包含原始异常内容
+
+### fix: 删除所有方案后停止监控而非调用 apply_profile(None)
+
+- `app/api/profiles.py`：`delete_profile` 端点删除方案后，检查 `active_profile` 是否为 `None`；若所有方案已删除则调用 `stop_monitoring()` 停止监控，而非无意义地调用 `apply_profile(None)`
+- `tests/test_api/test_api_profiles_routes.py`：新增 `test_delete_last_profile_stops_monitoring` 和 `test_delete_profile_applies_new_active` 两个测试用例
+
+### fix: Worker 超时后 slot 过早释放缓解
+
+- `app/services/login_orchestrator.py`：`_run()` 的 `except Exception` 处理中，检测超时异常（中文"超时"或英文"timed out"）时主动设置 `cancel_event` 并等待 0.5 秒，给 Worker 响应取消信号的时间窗口，降低新登录进入仍忙碌 Worker 的概率
+
+### fix: 修复 Windows 托盘退出时 PID 文件残留
+
+- `app/services/launcher.py`：轻量模式 `on_exit` lambda 从 `os.kill(os.getpid(), signal.SIGTERM)` 改为直接设置 `_web_server_shutdown_event.set()`，确保托盘退出走正常优雅退出路径，finally 块中的 `cleanup_pid()` 能够执行
+- `app/services/launcher.py`：完整模式 `on_exit` lambda 从 `os.kill(os.getpid(), signal.SIGTERM)` 改为新增 `_tray_exit()` 辅助函数，直接调用 `cleanup_pid()` 并设置 `_uvicorn_server[0].should_exit = True` 触发优雅关闭，通过 `_shutdown_initiated` 标志防止重复清理
+
+### fix: 轻量模式托盘开关在未开启自启动时异常显示
+
+- `frontend/partials/pages/settings/settings-system.html`：轻量模式托盘开关的 `v-if` 条件从 `autostart.lightweight` 改为 `autostart.enabled && autostart.lightweight`，防止自启动关闭时开关仍然显示
+
+### style: 全局颜色对比度优化
+
+- `frontend/styles/base.css`：深色/浅色模式文字色、边框色、卡片背景透明度全面调整，提升 WCAG AA 可读性
+- 深色模式：`--text-muted` 提亮至 `#8293a9`，`--text-tertiary` 提亮至 `#6b7c93`，`--border` alpha 0.1→0.15，`--bg-card` alpha 0.45→0.6，`--bg-glass` alpha 0.35→0.5，`--bg-glass-heavy` alpha 0.65→0.8
+- 浅色模式：`--text-secondary` 加深至 `#374151`，`--text-muted` 加深至 `#4b5e73`，`--text-tertiary` 加深至 `#6b7280`，`--border` alpha 0.18→0.25，`--bg-card` alpha 0.6→0.75，`--bg-glass` alpha 0.55→0.7，`--bg-glass-heavy` alpha 0.7→0.85，`--accent` 覆盖为 `#0891b2`，`--accent-hover` 覆盖为 `#0e7490`
+
+### refactor: 设置页面统一视觉重构
+
+- `frontend/styles/pages/settings.css`：新增 `.settings-card-header`、`.settings-card-icon`、`.settings-grid-2col`、`.settings-toggle-spacer`、`.settings-toggle-compact`、`.settings-monospace-textarea` 统一样式类，新增 `@media (max-width: 700px)` 响应式断点
+- `frontend/partials/pages/settings/settings-monitor.html`：IA 4→3 卡片（合并"检测设置"+"重试策略"→"检测与重试"），添加图标头部，`.settings-detect-columns` → `.settings-grid-2col`，内联 style → CSS 类
+- `frontend/partials/pages/settings/settings-system.html`：IA 3→4 卡片（拆分"启动与界面"→"启动行为"+"界面行为"），添加图标头部，`.settings-log-columns` → `.settings-grid-2col`，移除 `.settings-section-divider`
+- `frontend/partials/pages/settings/settings-account.html`：添加图标头部（用户图标、代码图标）
+- `frontend/partials/pages/settings/settings-browser.html`：添加图标头部（棱镜、滑块、盾牌、星形），textarea 内联 style → `.settings-monospace-textarea`
+- `frontend/partials/pages/settings/settings-tasks.html`：添加图标头部（四宫格、录制、文件勾选），移除录制器 SVG 内联 style
+
+### style: 增大设置页面「立即保存」按钮尺寸
+
+- `frontend/styles/pages/settings.css`：`.save-btn` 增加 `padding: 14px 28px`、`font-size: 15px`、`min-height: 48px`、`min-width: 130px`，图标从 15px 增至 18px
+
+### style: 将默认主题从深色改为浅色
+
+- `frontend/js/constants.js`：`DEFAULT_APPEARANCE.theme` 默认值从 `'dark'` 改为 `'light'`
+
+### refactor: 测试模块清理 — 删除无用测试、合并 fix 文件、重命名
+
+- 删除 16 个无价值的"存在性"测试（`assert callable`、`assert hasattr`、`assert isinstance`）
+- 合并 5 个 `*_fix.py` 文件到对应的主测试文件（application_fix → application_logic、main_fix → main、crypto_fix → crypto、env_fix → env、shell_policy_fix → shell_policy）
+- 重命名 7 个 `*_fix.py` 文件为语义化名称（config_fix → api_config_rollback、scheduled_tasks_fix → api_scheduled_tasks_side_effect、container_cleanup_fix → container_cleanup、debug_session_fix → debug_session_thread_safety、monitor_service_fix → monitor_service_masking、task_executor_fix → task_executor_lifecycle、uninstall_fix → uninstall_safety）
+- 清理所有 `__pycache__` 目录
+- 测试文件数：110 → 105，测试用例数：2422 → 2406
+
+## 2026-07-03
+
+### fix: test_application_fix mock shutdown_probes 防止全局资源关闭
+
+- `tests/test_app/test_application_fix.py`：`_mock_decision_executor_shutdown` fixture 新增 mock `app.network.probes.shutdown_probes`，防止 `TestClient(app)` 触发 lifespan 时关闭 probes 全局资源影响后续测试
+
+### test: 集成测试与服务层测试质量改进（Task 9.1-9.7）
+
+- `tests/test_integration/conftest.py`：integration teardown 各 shutdown 调用独立 try/except 保护
+- `tests/test_services/conftest.py`：`_make_raw` 中 LoginBridge 改为 MagicMock 解耦内部实现；`_update_status_snapshot` 保持真实方法绑定
+- `tests/test_services/test_engine.py`：提取 `_make_future_with_callback` 辅助函数减少 5 处重复；pure mode 锁测试改用共享计数器验证互斥；移除 `_update_status_snapshot` 手动 `__get__` 重绑定
+- `tests/test_services/test_login_orchestrator.py`：移除对私有 `_DISPATCHING` 哨兵的导入
+- `tests/conftest.py`：pystray mock 从 session-scoped autouse 改为 function-scoped opt-in fixture
+
+### fix: 替换 atexit 私有 API 调用
+
+- `app/utils/shutdown.py`：移除 `import atexit`，新增 `_exit_handlers` 列表和 `register_exit_handler()` 函数，`force_exit()` 中调用 `_run_exit_handlers()` 替代 `atexit._run_exitfuncs()`
+- `tests/test_utils/test_shutdown.py`：新增 `TestRegisterExitHandler` 测试类（4 个用例），更新 `TestForceExit` 测试用例使用新的 handler 列表
+
+### fix: 环境变量模板替换改为单次非递归替换
+
+- `app/utils/env.py`：新增 `import re`，`build_login_template_vars` 中将 `for` 循环 `str.replace()` 替换为 `_VAR_PATTERN.sub(_replacer, task_url)` 单次正则替换，避免变量值中包含 `{{VAR}}` 模式时的双重替换
+- `tests/test_utils/test_env.py`：新建测试文件，11 个测试用例覆盖基础替换、双重替换防护、边界情况
+
+### fix: 浏览器注册增加 ARM64 Chromium 路径检测
+
+- `app/utils/browser_registry.py`：`has_playwright_chromium()` 中 `import platform` 移至模块顶层，新增 `platform.machine() == "arm64"` 检测，ARM64 架构下额外搜索 `chrome-linux-arm64/chrome` 和 `chrome-mac-arm64/chrome` 路径
+- `tests/test_utils/test_browser_registry.py`：新增 3 个测试用例（ARM64 Linux、ARM64 macOS、非 ARM64 不搜索 ARM64 路径）
+
+### fix: Windows icacls 用户名处理域环境格式
+
+- `app/utils/crypto.py`：`_get_or_create_key()` 中 icacls 命令执行前，对用户名执行 `split("\\")[-1]` 提取，兼容域环境 `DOMAIN\user` 格式
+- `tests/test_utils/test_crypto.py`：新增 `TestIcaclsDomainUsername` 测试类（3 个用例：域格式提取、普通用户名不变、getpass.getuser 域格式回退）
+
+### fix: 密钥长度异常时备份原文件再生成新密钥
+
+- `app/utils/crypto.py`：提取 `_backup_key_file()` 函数，密钥长度异常（`len(key) != 32`）时调用备份，替换原 except 分支中的内联备份代码
+- `tests/test_utils/test_crypto.py`：`test_corrupted_key_file_wrong_length` 增加断言验证长度异常时创建 `.bak.*` 备份文件
+
+### refactor: start.go 重命名 path 变量避免遮蔽包名
+
+- `start.go`：`findUv()` 函数中将局部变量 `path` 重命名为 `filePath`，避免遮蔽包名
+
+### fix: 重新下载 uv 前清理旧二进制与 version.txt
+
+- `start.sh`：在 `_download_uv()` 中 `mkdir` 之后、下载循环之前添加 `rm -f "$UV_DIR/uv" "$UV_DIR/version.txt"`，避免残留的旧版本文件干扰新下载
+
+### fix: API 重试策略增加 jitter，缓解雪崩
+
+- `frontend/js/constants.js`：GET 重试响应拦截器的退避延迟中新增 0-1000ms 随机 jitter，防止多客户端同时重试造成雪崩
+
+### fix: WS 连接正常时跳过 HTTP 状态轮询
+
+- `frontend/js/methods/lifecycle.js`：状态轮询定时器中新增 WebSocket 连接状态检查，当 `ws.readyState === WebSocket.OPEN` 时跳过 HTTP `fetchStatus()` 调用，避免 WS 已实时推送状态时的冗余轮询
+
+### fix: WebSocket 关闭时清理 ping 定时器
+
+- `frontend/js/methods/lifecycle.js`：`this.ws.onclose` 回调中新增 ping 定时器清理逻辑，WebSocket 断开时清除 `_wsPingTimer` 并从 `timers` 数组移除，避免无意义的心跳发送尝试
+
+### fix: 优化容器 shutdown 顺序，避免回调触及已关闭组件
+
+- `app/services/task_executor.py`：新增 `wait_for_callbacks()` 异步方法，等待所有 `_running_tasks` 中的 pending futures 完成
+- `app/container.py`：`shutdown()` 在 `engine.shutdown()` 之后、`task_executor.shutdown()` 之前调用 `wait_for_callbacks()`，超时 10 秒后放弃等待继续关闭
+- `tests/test_config/test_container.py`：新增 `TestWaitForCallbacks`（4 个用例）和 `TestShutdownOrder`（2 个用例）
+- `tests/test_services/test_container_cleanup_fix.py`：同步 mock `wait_for_callbacks` 为 `AsyncMock`
+
+### fix: cancel_login 透传返回值并记录失败
+
+- `app/services/engine.py`：`ScheduleEngine.cancel_login()` 捕获 `_login_bridge.cancel_login()` 返回值，失败时记录 warning 日志
+- `tests/test_services/test_engine.py`：新增 `TestCancelLogin` 测试类（3 个用例：成功时不记录日志、失败时记录警告日志、委托给 bridge）
+
+### fix: toggle_pure_mode 同步更新运行时配置
+
+- `app/services/engine.py`：`toggle_pure_mode` 方法新增 `_runtime_config` 同步更新，切换纯净模式时同步更新 `_runtime_config.browser.pure_mode`
+- `tests/test_services/test_engine.py`：新增 `test_toggle_pure_mode_syncs_runtime_config` 测试用例，验证切换纯净模式后 `_runtime_config.browser.pure_mode` 正确同步
+
+### fix: websocket_manager zip 启用 strict 检测连接/队列长度不一致
+
+- `app/services/websocket_manager.py`：第 93 行 `zip(connections, results, strict=False)` 改为 `strict=True`，connections 与 results 长度不一致时抛出 ValueError
+- `tests/test_services/test_websocket_manager.py`：新增 `TestBroadcastStrictZip` 测试类（2 个用例：长度不一致时抛 ValueError、长度一致时正常工作）
+
+### refactor: 使用标准 sys 模块替代 os.sys
+
+- `app/api/system.py`：将 `os.sys.version_info` 替换为标准 `sys.version_info`，新增 `import sys`，保留 `import os`（`os.getpid()` 仍需使用）
+
+### fix: WebSocket 消息大小限制按 UTF-8 字节数计算
+
+- `app/api/ws.py`：消息大小预检从 `len(raw)`（字符数）改为 `len(raw.encode("utf-8"))`（字节数），确保中文等多字节字符按实际传输大小计算
+- `tests/test_api/test_ws.py`：新增 `TestMessageSizeLimit` 测试类（6 个用例：ASCII 在限制内/超限、中文字符数在限制内但字节数超限/字节数在限制内、边界值 65536/65537 字节）
+
+### fix: 删除背景图片时处理 Windows 文件占用
+
+- `app/api/tools.py`：`delete_background` 中 `filepath.unlink()` 包裹 try/except，`PermissionError` 返回 409（文件被占用），`OSError` 返回 500（删除失败）
+- `tests/test_api/test_api_tools_routes.py`：新增 `test_delete_permission_error` 和 `test_delete_os_error` 两个测试用例
+
+### fix: Chromium 安装后增加二进制存在与可执行校验
+
+- `app/workers/playwright_bootstrap.py`：新增 `_verify_chromium_install()` 函数，遍历 Playwright 缓存目录下的 `chromium-*` 子目录，检查 `chrome-win64/chrome.exe`、`chrome-linux/chrome`、`chrome-mac/Chromium.app/.../Chromium` 二进制文件是否存在且可执行；`ensure_playwright_ready()` 安装成功后调用该校验，失败时重置 `_BOOTSTRAP_DONE` 并返回 `False`
+- `tests/test_workers/test_playwright_bootstrap.py`：新增 `TestVerifyChromiumInstall` 测试类（7 个用例：Windows/Linux/macOS 二进制通过 / 空目录失败 / 无执行权限失败 / 目录名不匹配失败 / 文件非目录失败）
+
+### fix: 调试会话清理时同步释放 _page 引用
+
+- `app/workers/playwright_worker.py`：`_cleanup_debug_session()` 方法末尾添加 `self._page = None`，确保调试会话清理时同步释放 `_page` 引用
+- `tests/test_workers/test_playwright_worker.py`：新增 `TestCleanupDebugSession` 测试类（4 个用例：完整清理 / debug_page 为 None 时仍清理 / 关闭未关闭页面 / 已关闭页面跳过 close）
+
+### fix: Worker stop 在队列满时仍等待消费者线程 join
+
+- `app/workers/playwright_worker.py`：移除 `stop()` 方法中 `except queue.Full` 块末尾的 `return` 语句，确保无论队列是否满都会调用 `_consumer_thread.join()` 等待消费者线程退出
+- `tests/test_workers/test_playwright_worker.py`：新增 `TestStopJoinsOnQueueFull` 测试类（5 个用例：队列满仍 join / loop.stop 后仍 join / 循环未运行仍 join / 无循环仍 join / warning 日志验证）
+
+### fix: 孤儿浏览器清理增加父进程存活校验，避免误杀
+
+- `app/workers/playwright_worker.py`：新增 `_is_orphan()` 函数，通过 `proc.parent()` 检查父进程是否存活；`cleanup_orphan_browsers()` 条件追加 `_is_orphan(proc)` 判断，仅在父进程已退出时才终止浏览器进程
+- `tests/test_workers/test_playwright_worker.py`：新增 `TestIsOrphan`（4 个用例：父进程为 None / 已退出 / 存活 / NoSuchProcess）和 `TestCleanupOrphanBrowsers`（7 个用例：孤儿清理 / 存活跳过 / 非 Playwright 跳过 / 非浏览器跳过 / AccessDenied 处理 / 多孤儿清理 / 混合场景）
+
+### fix: 暂停时段判断支持分钟精度
+
+- `app/schemas.py`：`PauseSettings` 新增 `start_minute` / `end_minute` 字段（默认 0，范围 0-59）
+- `app/utils/time_utils.py`：新增 `_parse_pause_range()` 解析 HH:MM-HH:MM 格式字符串；`is_in_pause_period()` 签名改为 `(now, ranges)` 纯函数；新增 `is_pause_enabled()` 包装 PauseSettings 的便利函数
+- `app/network/decision.py`：`check_pause()` 改用 `is_pause_enabled()`
+- `app/utils/__init__.py`：导出 `is_pause_enabled`
+- `tests/test_utils/test_utils.py`：新增 `TestParsePauseRange`（4 个用例）、`TestIsPausePeriod`（10 个用例含分钟精度边界测试）、`TestIsPauseEnabled`（10 个用例含分钟委托验证）
+- `tests/test_core/test_network_probes.py`：mock 路径同步更新
+
+### fix: Windows SSID 编码回退链增加 UTF-8/UTF-16 优先尝试
+
+- `app/network/detect.py`：`_detect_ssid_windows()` 编码回退链重构为 UTF-8 → UTF-16-LE → locale 编码 → GBK，增加编码去重和 `isprintable()` 解码校验（防止 UTF-16-LE 误解码 GBK 字节产生不可打印字符）；`locale.getpreferredencoding()` 移入函数内部便于测试 mock
+- `tests/test_network/test_detect.py`：新增 `TestDetectSsidWindowsEncodingFallback` 测试类，覆盖 UTF-8/UTF-16-LE/GBK/locale 编码、回退链顺序、null 字节清理、hex 编码 SSID、空 SSID 等场景
+
+### fix: macOS 14+ SSID 检测增加 system_profiler 回退
+
+- `app/network/detect.py`：新增 `_get_ssid_macos_modern()` 函数，使用 `system_profiler SPAirPortDataType -json` 获取 SSID；`_detect_ssid_darwin()` 回退顺序调整为 airport → networksetup → system_profiler
+- `tests/test_network/test_detect.py`：新增 10 个测试用例（JSON 解析、错误处理、回退顺序验证）
+
+### fix: 移除 decision.py 中 parse_host_port 的死代码 try/except
+
+- `app/network/decision.py`：移除 `is_network_available()` 中对 `parse_host_port()` 的 `try/except ValueError` 包裹，该异常已不会被抛出（`parse_host_port` 内部已处理无效条目）
+
+### fix: 网络决策层使用独立 executor，避免嵌套提交导致线程池饥饿
+
+- `app/network/decision.py`：新增 `_decision_executor`（3-worker 独立线程池），`is_network_available()` 改用该池调度外层决策任务，与 `probes.py` 的 8-worker 内层探测池分离；新增 `shutdown_decision_executor()` 函数
+- `app/container.py`：`ServiceContainer.shutdown()` 中注册 `_decision_executor` 关闭
+- `tests/test_network/test_decision.py`：新增 12 个测试（executor 隔离性、饥饿模拟、关闭行为、check_network_status 联动）
+- `tests/test_config/test_container.py`：新增 autouse fixture mock `shutdown_decision_executor`，避免测试污染模块级 executor
+- `tests/test_app/test_application_fix.py`：新增 autouse fixture mock `shutdown_decision_executor`
+
+### fix: IPv6 地址解析改用标准库 ipaddress
+
+- `app/network/parsers.py`：新增 `_looks_like_ipv6()` 函数，使用 `ipaddress.IPv6Address` 替代冒号计数法判断 IPv6 地址；`parse_ping_targets()` 中调用该函数替换原有 `colon_count >= 2` 逻辑
+- `tests/test_network/test_parsers.py`：新增 TestLooksLikeIPv6（10 个用例）和 TestParsePingTargetsIPv6（5 个用例）
+
+### perf: Windows 网关检测优先使用 route print，减少 PowerShell 冷启动
+
+- `app/network/detect.py`：新增 `_parse_windows_route_print()` 解析 route print 输出；新增 `_get_windows_gateway_route_print()` 调用 route print 命令；`_detect_gateway_windows()` 重构为三层回退：route print → PowerShell → ipconfig
+- `tests/test_network/test_detect.py`：新增 15 个测试用例（解析逻辑、子进程调用、集成回退流程）
+- `tests/test_core/test_network_detect_internals.py`：更新现有测试以适配新的三层回退顺序；新增 route print 成功测试
+
+### fix: 登录去重命中时回调 on_complete，避免手动登录挂起
+
+- `app/services/engine.py`：LoginBridge.submit_login 去重分支（handle.future in _registered_futures）补调 on_complete(False, msg)
+- `tests/test_services/test_engine.py`：新增 TestLoginBridgeDuplicateCallback 测试类（2 个用例）
+
+### fix: script_runner 跨平台解释器名解析改用 os.path 与正则
+
+- `app/workers/script_runner.py`：移除 `import ntpath`，新增 `import re`；新增 `_EXEC_NAME_RE` 正则（匹配字母前缀 + 可选版本号）和 `_get_interpreter_name()`、`_get_temp_extension()` 辅助函数；`_build_cmd()` 和 `_content_temp_file()` 中的 `ntpath.splitext(ntpath.basename(...))` 替换为 `os.path` + 正则提取
+- `tests/test_services/test_script_runner.py`：新增 TestExecNameRe（14 个用例）、TestGetInterpreterName（8 个用例）、TestGetTempExtension（7 个用例）
+
+### fix: IPv4 解析增加 0-255 范围校验
+
+- `app/network/parsers.py`：`parse_ping_targets()` 中 IPv4 检测逻辑增加段值 0-255 范围校验，避免如 `999.999.999.999` 被错误识别为 IPv4 地址
+- `tests/test_network/test_parsers.py`：新增 TestParsePingTargetsIPv4Range 测试类（11 个用例），覆盖边界值、超范围、混合输入等场景
+
+### fix: 网络探测模块显式生命周期管理，确保 in-flight 请求完成后再关闭
+
+- `app/network/probes.py`：新增 `_shutdown_event`（threading.Event）和 `shutdown_probes()` 函数，替代原来的 `atexit.register` 注册；三个探测函数（`is_network_available_socket`、`is_network_available_url`、`is_network_available_http`）增加 shutdown guard，关闭后拒绝新任务
+- `app/container.py`：`ServiceContainer.shutdown()` 中在 engine 关闭后调用 `shutdown_probes()`，确保关闭顺序可控
+- `tests/test_network/test_probes.py`：新增 11 个测试（shutdown_probes 可调用性、event 设置、in-flight 等待、新任务拒绝、客户端关闭、三个探测函数 guard 行为、atexit 移除验证）
+
+### fix: Linux 网关解析增加字段长度与 IPv4 有效性校验
+
+- `app/network/detect.py`：新增 `_hex_to_ipv4()` 辅助函数和 `_parse_linux_gateway()` 解析函数，增加字段数（>=3）、字段长度（>=8）、目标地址（`00000000`）和 `_is_valid_ipv4()` 四重校验；`_detect_gateway_linux()` 重构为调用 `_parse_linux_gateway()`
+- `tests/test_network/test_detect.py`：新增 TestHexToIpv4（4 个用例）和 TestParseLinuxGateway（9 个用例）
+
+### docs: 澄清 _page 与 _debug_page 的别名语义
+
+- `app/workers/playwright_worker.py`：`_handle_debug_start()` 方法中 `self._debug_page = self._page` 处的注释从"保存调试页面引用"改为说明别名关系（_debug_page 与 _page 共享同一 page 对象，调试会话结束后由 _cleanup_debug_session 置 None）；方法 docstring 补充别名说明
+
+## 2026-07-02
+
+### docs: 文档目录重构与索引补全
+
+**目录重构：**
+- `docs/api-doc.md` → `docs/dev/api-reference.md`
+- `docs/code-style-guide.md` → `docs/dev/code-style-guide.md`
+- `docs/task-manual.md` → `docs/dev/architecture.md`
+- `docs/custom-script-guide.md` → `docs/guides/custom-script-guide.md`
+- `docs/task-writing-guide.md` → `docs/guides/task-writing-guide.md`
+- `docs/update_log.md` → `docs/changelog.md`
+- `docs/superpowers/specs/*` → `docs/designs/specs/*`
+- `docs/superpowers/plans/*` → `docs/designs/archive/*`
+- `dev/claude-code-hooks-guide.md` → `docs/dev/tools/claude-code-hooks.md`
+- `CONTRIBUTING.md` 复制到 `docs/dev/contributing.md`
+
+**新增索引文档：**
+- `docs/README.md` — 文档总索引
+- `docs/guides/README.md` — 用户文档导航
+- `docs/dev/README.md` — 开发者文档导航
+- `docs/designs/README.md` — 设计文档与归档导航
+
+**链接更新：**
+- `README.md`：更新所有 docs 引用路径
+- `CONTRIBUTING.md`：更新 code-style-guide 引用路径
+- `app/api/tools.py`：更新文档服务路径
+- `docs/dev/architecture.md`：更新 task-writing-guide 和 api-reference 引用
+- `docs/guides/custom-script-guide.md`：更新交叉引用
+- `docs/dev/contributing.md`：更新 code-style-guide 引用
+
+### docs: 修复 README 项目结构与实际不符
+
+- 删除不存在的 `app/ui/system_tray.py` 引用，改为 `app/system_tray.py`
+- 删除不存在的 `app/services/task_service.py`、`config_service.py`、`runtime_config.py` 引用
+- 删除不存在的 `app/utils/login.py` 引用
+- 补充遗漏的 `login_orchestrator.py`、`login_handler.py`、`login_runner.py`、`config_builder.py`、`scheduler_service.py`、`retry_policy.py`、`launcher.py` 等
+- 补充遗漏的 API 路由文件：`browsers.py`、`install_playwright.py`、`icons.py`、`ws.py`
+- 补充 `app/tasks/` 下的 `manager.py`、`browser_runner.py`、`step_handlers.py`、`validator.py`
+- 更新"主要模块说明"部分
+
+### docs: 创建 CLAUDE.md
+
+- 新增项目级 CLAUDE.md，包含技术栈、开发命令、代码规范、项目结构、架构要点、测试规范、Git 规范、常见陷阱
+
+### refactor: 消除模块间不当耦合
+
+- `VALID_LOG_LEVELS` 从 `app/utils/logging.py` 移至 `app/constants.py`，解除 `schemas → utils/logging` 依赖
+- `URL_PATTERN` 从 `app/schemas.py` 移至 `app/constants.py`，消除私有符号跨模块导入
+- `app/utils/config_utils.py` 改为从 `app.constants` 导入 `URL_PATTERN`
+- `_runtime_config_to_worker_dict` 改为公开函数 `runtime_config_to_worker_dict`，消除私有函数导入
+- 清理 `app/workers/manager/` 空目录残留
+
+### docs: 添加系统架构文档
+
+- `docs/architecture.md`：新增系统架构图、启动流程、数据流、线程模型、设计模式说明
+
+### refactor: 迁移 background 目录到 resources
+
+- `frontend/background/` → `resources/background/`：移动背景图片存储目录
+- `app/api/tools.py`：更新 `BG_DIR` 路径为 `PROJECT_ROOT / "resources" / "background"`
+- `.gitignore`：更新忽略路径为 `resources/background/`
+
+### fix: 移除 detect.py 中不可达的 KeyError 捕获，补充测试中对 mock_run 调用链的断言
+
+- `app/network/detect.py`：从 `_get_ssid_macos_modern()` 的 except 元组中移除 `KeyError`（所有 `.get()` 调用已提供默认值，该异常不可达）
+- `tests/test_network/test_detect.py`：`test_system_profiler_fallback` 新增 `mock_run.call_count == 2` 断言及 `assert_any_call` 验证 airport 和 networksetup 的调用参数
+
+## 2026-06-29
+
+### refactor: 移动 DecryptionError 到 crypto.py 作为 _DecryptionError + 内联 safe_decrypt()
+
+- `app/utils/crypto.py`：新增 `_DecryptionError` 私有异常类，移除 `DecryptionError` 导入；删除 `safe_decrypt()` 函数，其逻辑内联到 `decrypt_password_field()`
+- `app/utils/exceptions.py`：删除 `DecryptionError` 类
+- `tests/test_utils/test_crypto.py`：更新导入为 `_DecryptionError`（从 `app.utils.crypto`）
+- `tests/test_utils/test_utils.py`：移除 `DecryptionError` 导入和相关测试
+- `tests/test_config/test_config_schemas.py`：移除 `safe_decrypt` 导入和 `TestSafeDecrypt` 测试类
+
+### refactor: 删除前端死函数 — getBrowser/getBrowserIcon/isBrowserInstalled/getOtherBrowsers/formatFileSize/togglePureMode/fetchPureMode + _notifyCategoryLabel 改常量
+
+- `frontend/js/methods/ui.js`：删除 `getBrowser`、`getBrowserIcon`、`isBrowserInstalled`、`getOtherBrowsers` 四个未调用方法；将 `_notifyCategoryLabel` 方法转换为模块级常量 `NOTIFY_CATEGORY_LABELS`
+- `frontend/js/methods/formatters.js`：删除未调用的 `formatFileSize` 方法
+- `frontend/js/api-service.js`：删除未调用的 `togglePureMode`、`fetchPureMode`（实际调用走 editor.js 直接请求）
+
+### refactor: ConfigBuilder 类改为 build_runtime_config() 函数
+
+- `app/services/config_builder.py`：移除 `ConfigBuilder` 类，`build()` 静态方法改为顶层函数 `build_runtime_config()`
+- `app/services/profile_service.py`：更新导入和调用（`ConfigBuilder.build(...)` → `build_runtime_config(...)`）
+- `tests/test_services/test_config_builder.py`：更新导入和所有调用
+- `tests/test_app/test_backend_services.py`：更新导入和所有调用
+- `tests/test_services/test_config_service.py`：更新导入和所有调用
+
+### test: 删除 test_engine_fix.py — 已被 test_engine.py 全面覆盖
+
+- 删除 `tests/test_services/test_engine_fix.py`（183 行，6 个测试）
+- 6 个测试已由 `test_engine.py` 全面覆盖（135 passed，含 TestDoAsyncLogin + TestNetworkCheckBackoff）
+
+### refactor: 测试套件瘦身 — 删除死代码、合并重复 fixture
+
+- `tests/test_config/test_constants.py`：删除（常量存在性测试，已在 `test_ws_broadcaster.py` 和 `test_login.py` 中覆盖）
+- `tests/test_integration/__init__.py`：删除（空文件）
+- `tests/test_utils/test_shell_policy_fix.py`：删除空测试类 `TestReturncodeNoneBug`
+- `tests/test_services/test_task_executor_fix.py`：删除未使用的 `_slow_return` 工具函数
+- `tests/test_integration/conftest.py`：合并 `full_stack` 到 `integration_stack`（返回 5-tuple 含 `task_registry`），删除 `full_stack` fixture
+- `tests/test_integration/test_full_mode.py`：改用 `integration_stack`，更新解构
+- `tests/test_integration/test_lightweight_mode.py`：更新解构适配 5-tuple
+- `tests/test_integration/test_login_connection.py`：更新解构适配 5-tuple
+- `tests/test_integration/test_login_integration_extended.py`：更新解构适配 5-tuple
+- `tests/test_integration/test_network_connection.py`：更新解构适配 5-tuple
+- `tests/test_integration/test_profile_connection.py`：更新解构适配 5-tuple
+
+### refactor: 合并 WsBroadcaster 到 WebSocketManager，删除 NullWebSocketManager
+
+- `app/services/ws_broadcaster.py`：已删除，广播队列功能合入 `WebSocketManager`
+- `app/services/websocket_manager.py`：新增 `_broadcast_queue`、`_drain_event`、`set_dashboard_sink`、`broadcast_queue`、`enqueue_status`、`_notify_drain`、`ws_drain_loop`、`_drain_queue` 方法；删除 `NullWebSocketManager` 类
+- `app/services/engine.py`：删除 `ws_broadcaster` 参数，`set_ws_broadcaster` 改名为 `set_ws_manager`；`WS_DRAIN_INTERVAL_SECONDS` re-export 改从 `websocket_manager` 导入
+- `app/services/engine_status.py`：`ws_broadcaster` 参数改名为 `ws_manager`
+- `app/container.py`：删除 `WsBroadcaster` 和 `NullWebSocketManager` 引用，统一使用 `WebSocketManager`
+- `app/utils/logging.py`：更新 `set_drain_notifier` 注释
+- `tests/test_services/test_ws_broadcaster.py`：重写为测试 `WebSocketManager` 广播队列功能
+- `tests/test_services/test_websocket_manager.py`：删除 `NullWebSocketManager` 测试
+- `tests/test_services/conftest.py`：`_ws_broadcaster` 改为 `_ws_manager`
+- `tests/test_services/test_engine.py`：更新 `ws_broadcaster` 引用为 `ws_manager`
+- `tests/test_config/test_container.py`：删除 `WsBroadcaster` 和 `NullWebSocketManager` 相关 patch 和断言
+- `tests/test_config/test_constants.py`：更新 `WS_DRAIN_INTERVAL_SECONDS` 导入路径
+
+### refactor: 合并 engine_status.py 和 engine_login_bridge.py 回 engine.py
+
+- `app/services/engine_status.py`：已删除，`StatusSnapshot` 和 `StatusManager` 合并入 `engine.py`
+- `app/services/engine_login_bridge.py`：已删除，`LoginBridge` 合并入 `engine.py`
+- `app/services/engine.py`：新增 `StatusSnapshot`、`StatusManager`、`LoginBridge` 三个类，删除对旧模块的导入和延迟导入
+- `tests/test_services/conftest.py`：更新导入路径
+- `tests/test_services/test_engine.py`：更新导入路径
+- `tests/test_services/test_engine_login_bridge.py`：更新导入路径
+- `tests/test_services/test_engine_fix.py`：更新导入路径
+- `tests/test_services/test_monitor_service.py`：更新导入路径
+- `tests/test_integration/test_login_flow.py`：更新导入路径
+- `StatusManager` 适配 `ws_manager`/`WebSocketManager` 接口（替代原 `ws_broadcaster`/`WsBroadcaster`）
+
+### refactor: 用 check_network_status 简化 _network_detection_check
+
+- `app/tasks/browser_runner.py`：
+  - `_network_detection_check` 方法从约 60 行简化为约 25 行
+  - 移除手动解包 `MonitorSettings`、调用 `parse_ping_targets`、`parse_url_checks`、`is_network_available` 的冗余逻辑
+  - 改为直接调用 `check_network_status(monitor)`，该函数已封装全部检测逻辑
+  - 保留 `post_login_delay` 等待逻辑和 `MonitorSettings` 默认值填充
+
+### chore: 删除散落的死函数
+
+- `app/utils/crypto.py`：删除 `mask_password` 函数（零生产调用）
+- `app/utils/__init__.py`：移除 `mask_password` 导入和 `__all__` 条目
+- `app/utils/shutdown.py`：删除 `request_graceful_exit` 函数和 `signal` 导入（零生产调用）
+- `app/utils/process.py`：删除 `normalize_proc_name` 函数和 `__all__` 条目（零生产调用）
+- `app/services/debug_service.py`：删除 `DebugSessionManager.get_status` 方法（零生产调用）
+- `app/services/task_registry.py`：删除 `TaskRegistry.get_tasks_dir` 方法（零生产调用）
+- 测试同步更新：
+  - `tests/test_utils/test_crypto.py`：删除 `TestMaskPassword` 测试类
+  - `tests/test_utils/test_utils.py`：删除 `mask_password` 导入和 `TestMaskPassword` 测试类
+  - `tests/test_utils/test_shutdown.py`：删除 `TestRequestGracefulExit` 测试类和 `os` 导入
+  - `tests/test_app/test_main.py`：删除 `TestNormalizeProcName` 测试类
+  - `tests/test_utils/test_process.py`：删除 `normalize_proc_name` 导入和 `TestNormalizeProcName` 测试类
+  - `tests/test_services/test_debug_session_manager.py`：删除 `TestDebugSessionManagerGetStatus` 测试类
+  - `tests/test_services/test_task_executor_fix.py`：删除 `TestTaskRegistryGetTasksDir` 测试类
+
+### chore: 删除 engine.py 测试专用死属性
+
+- `app/services/engine.py`：
+  - 删除 `login_in_progress` property（委托 `_task_executor.is_login_running()`，零生产调用）
+  - 删除 `scheduler_running` property（委托 `_scheduler.running`，零生产调用）
+  - 删除 `has_enabled_tasks()` method（委托 `_scheduler.has_enabled_tasks()`，零生产调用）
+- 测试同步更新：
+  - `tests/test_services/test_engine.py`：
+    - `test_init_defaults`：`svc.scheduler_running` → `svc._scheduler.running`（加 None 守卫）
+    - 删除 `TestProperties.test_login_in_progress_property`、`test_scheduler_running_property`
+    - 删除 `TestSchedulerControl.test_has_enabled_tasks`
+  - `tests/test_integration/test_login_flow.py`：
+    - `test_login_in_progress_property`：改用 `svc._task_executor.is_login_running()` 直接断言
+    - `test_retry_not_triggered_during_login`：改用 `svc._task_executor.is_login_running()` 直接断言
+  - `tests/test_services/test_monitor_service.py`：删除 `TestLoginInProgress` 整个测试类
+
+## 2026-06-28
+
+### refactor: 代码质量优化 — 清理死代码和冗余抽象
+
+**任务组 1: schemas.py + deps.py**
+- `app/schemas.py`：
+  - 删除 `ActionResponse = ApiResponse` 死别名（零引用）
+  - 删除 `LaunchSource.UNKNOWN` 枚举值（零引用）
+  - 删除 `AppConfig.config_version` 死字段（零读取）
+  - 删除 `_parse_url_check` 函数内冗余 `import re`（模块顶层已导入）
+- `app/deps.py`：
+  - 删除 `get_services` 函数（零 API 端点使用）
+  - 删除未使用的 `ServiceContainer` 导入
+- `tests/test_config/test_deps.py`：同步删除 `get_services` 测试和导入
+
+**任务组 2: repo.py + tools.py + config.py**
+- `app/api/repo.py`：
+  - 删除两个端点未使用的 `ProfileService` 注入参数
+  - 删除未使用的 `get_profile_service` 和 `ProfileService` 导入
+- `app/api/tools.py`：
+  - 提取 `_serve_doc(relative_path, media_type, filename)` 辅助函数
+  - 提取 `_save_background(content, ext)` 辅助函数
+  - `download_task_writing_guide` 和 `download_task_manual` 改用 `_serve_doc`
+  - `upload_background` 和 `fetch_background_url` 改用 `_save_background`
+- `app/api/config.py`：
+  - 提取 `_handle_config_error` 上下文管理器统一错误处理
+  - `save_config` 和 `patch_config` 改用 `_handle_config_error`（保留差异：`log_warning` 参数）
+  - 删除 `_flatten_dict` 无用 `sep` 参数，硬编码 "."
+
+**任务组 3: tasks/ 模块**
+- `app/tasks/step_handlers.py`：删除 `StepExecutorRegistry` 类（`register()` 从未调用）
+- `app/tasks/browser_runner.py`：
+  - `self.registry = StepExecutorRegistry()` → `self.registry = dict(DEFAULT_HANDLERS)`
+  - 更新导入
+- `app/tasks/__init__.py`：
+  - 从导入和 `__all__` 中删除 `StepExecutorRegistry`
+  - 删除 `TaskExecutor = BrowserTaskRunner` 向后兼容别名
+- `app/tasks/manager.py`：
+  - 提取 `_with_task_id_validation` 装饰器，三个验证方法改用装饰器
+  - 删除 `_find_task_type` 中单元素循环 `for ext in (".json",):`
+  - 删除 `_is_script_file` 静态方法，内联为条件表达式
+  - 删除 `get_script_path_public` 委托方法
+- `app/services/login_handler.py`：`TaskExecutor` → `BrowserTaskRunner`
+- `app/api/scripts.py`：`get_script_path_public` → `_safe_task_path`
+- 测试文件同步更新
+
+**任务组 4: workers/ + 工具文件**
+- `app/workers/playwright_worker.py`：删除 `submit_nowait` 方法（零生产调用）
+- `app/workers/playwright_bootstrap.py`：从 `VALID_CHANNELS` 删除 `msedge`/`chrome`/`custom`（L135 提前 return 后不可达）
+- `app/utils/browser.py`：删除 `self._worker_managed` 属性（零读取）
+- `app/utils/browser_registry.py`：
+  - 删除 `_has_playwright_chromium()` 空壳函数
+  - 调用处改为直接调用 `has_playwright_chromium()`
+- 测试文件同步更新
+
+**任务组 5: shell_policy.py**
+- `app/utils/shell_policy.py`：
+  - 删除 `async run()` 方法（零生产调用，仅 `run_sync` 被使用）
+  - 删除 `async _kill_process_tree()` 方法（仅被 async run 调用）
+  - 删除 `audit_hook` 参数及相关代码（两个生产调用方均未传入）
+
+**任务组 6: logging.py**
+- `app/utils/logging.py`：
+  - 删除 `LogConfigCenter.get_logger()` 类方法（零生产调用，模块级 `get_logger` 函数才是被广泛使用的）
+  - 删除 `LogConfigCenter.is_initialized()` 方法（仅测试调用）
+  - 删除 `LogConfigCenter.remove_source_level()` 方法（零调用）
+
+**任务组 7: platform.py + retry.py**
+- `app/utils/platform.py`：
+  - 删除 `_WINDOWS_UA`、`_MACOS_UA`、`_LINUX_UA` 三个 UA 常量
+  - 删除 `get_default_ua()` 函数（仅测试使用，Chrome 125 已过时）
+  - 从 `__all__` 中移除 `"get_default_ua"`
+- 删除 `app/utils/retry.py` 整个文件（`get_retry_intervals` 零生产调用者）
+
+**任务组 8: engine.py + task_executor.py**
+- `app/services/engine.py`：删除 `_runtime_snapshot` 死字段（仅写入，零读取）
+- `app/services/task_executor.py`：删除 `force_clear_login_slot` 方法（与 `cancel_login` 完全相同，零调用）
+
+**任务组 9: login_handler.py + engine_login_bridge.py**
+- `app/services/login_handler.py`：
+  - 合并 `_perform_login_with_auth_class` 中间层到 `attempt_login`
+  - 调用链从 3 层简化为 2 层：`attempt_login` → `_perform_login_with_active_task`
+- `app/services/engine_login_bridge.py` + `app/services/engine.py`：
+  - LoginBridge 回调从猴子补丁改为构造函数参数注入
+  - 新增 `on_retry_scheduled`、`on_login_success`、`on_retry_exhausted` 可选参数
+
+**任务组 10: network_tester.py + debug_session.py + uninstall.py**
+- `app/services/network_tester.py`：`NetworkTester` 类改为模块级函数 `test_network(config)`
+- `app/services/debug_session.py`：删除 `empty_debug_session()` 工厂函数，调用处改为 `DebugSession()`
+- `app/services/uninstall.py`：删除 `_reset_autostart_service()` 函数（仅测试使用）
+
+### test: 修复因删除死方法导致的测试引用
+
+- `tests/test_core/test_monitor.py`：`_perform_login_with_auth_class` → `_perform_login_with_active_task`
+- `tests/test_utils/test_login.py`：
+  - `TestAttemptLogin` 改 patch `_perform_login_with_active_task`
+  - `TestPerformLoginWithAuthClass` 合并到 `TestAttemptLogin`
+  - `app.tasks.TaskExecutor` → `app.tasks.BrowserTaskRunner`（5 处）
+- `tests/test_utils/test_utils.py`：删除 `test_is_initialized_default_false`（方法已不存在）
+
+### test: 修复预存测试失败
+
+- `tests/test_core/test_network_probes.py`：
+  - 添加 `_fresh_executor` autouse fixture，解决模块级 `ThreadPoolExecutor` 被 atexit 关闭后后续测试全部失败的问题
+  - fixture 检测 executor 是否已关闭，关闭时替换为新实例并在测试后恢复
+- `tests/test_integration/test_network_connection.py`：
+  - `test_need_login` 和 `test_network_ok` 添加 `check_pause` mock，避免凌晨时段测试因暂停时段检查而失败
+- `tests/test_integration/test_login_once_mode.py`：
+  - `mock_history.record` → `mock_history.add`（`LoginHistoryService` 方法名已从 `record` 改为 `add`）
+- `tests/test_integration/test_full_mode.py`：
+  - 删除 `engine._start_scheduler()` 调用（调度器已随监控一起启动）
+  - 删除 `engine._run_schedule_tick()` 调用（已不存在），改为直接调用 `engine._scheduler.tick(now)`
+  - 添加 `check_pause` mock 避免时段依赖
+- `tests/test_services/test_script_runner.py`：
+  - `test_cmd_binary_on_windows` 断言从 `"call" in cmd[2]` 改为 `str(script) in cmd[2]`（代码已不加 "call"）
+
+### test: 修复 os._exit 杀死 pytest 进程
+
+- `tests/test_app/test_boot_engine_flag.py`：TestRunFullNoDirectBoot 调用 `launcher.launch_full`，其 `finally` 块调用 `force_exit(0)` 即 `os._exit(0)`
+  - 添加 `patch("app.services.launcher.force_exit")` 到 `test_run_full_does_not_call_boot_directly` 和 `test_run_full_passes_boot_engine_false`
+  - 修复前全量测试在 ~13% 处被 `os._exit(0)` 杀死
+
+### test: 修复 Task 5 测试 — 更新 patch 目标和 asyncio 兼容性
+
+- `tests/test_services/test_launcher.py`：替换已废弃的 `asyncio.coroutine()` 为 `async def` helper
+- `tests/test_app/test_main.py`：更新 patch 目标到实际源模块
+  - TestRunServer / TestSignalHandler：`main.is_service_running` → `app.services.launcher.is_service_running`
+  - TestRunLoginThenExit：`main.create_profile_service` → `app.services.profile_service.create_profile_service`
+  - TestRunLoginThenExit：`main.cleanup_orphan_browsers` → `app.workers.playwright_worker.cleanup_orphan_browsers`
+  - TestLoginOnceRetryInterval：`main.AUTH_DATA_DIR` → `app.constants.AUTH_DATA_DIR`
+  - TestSignalHandler：`main.cleanup_pid` → `app.services.launcher.cleanup_pid`
+- `tests/test_integration/test_login_integration_extended.py`：已使用正确的 patch 目标，无需修改
+
+### refactor: 从 main.py 提取 launcher + login_runner
+
+- `app/services/launcher.py`：新建启动器模块，从 main.py 迁移 12 个函数
+  - `shutdown_container`：统一关闭容器（幂等安全）
+  - `open_browser`：浏览器控制
+  - `create_tray`：系统托盘创建
+  - `handle_startup_action`：启动动作状态机
+  - `handle_existing_instance`：已运行实例检测
+  - `launch_lightweight`：轻量模式（闭包改为参数传递）
+  - `launch_full`：完整模式（signal handler 保留内嵌 nonlocal）
+  - `launch_server`：主启动流程
+  - `_start_web_server` / `_open_console`：闭包辅助函数改为顶层函数+参数传递
+  - `_terminate_process` / `_wait_for_exit`：进程管理内部辅助
+- `app/services/login_runner.py`：新建自动登录执行器，从 main.py 迁移 3 个函数
+  - `load_login_config`：加载登录配置
+  - `execute_login_with_retries`：执行登录含重试
+  - `run_login_then_exit`：自动登录成功后退出
+- `main.py`：从 ~787 行精简至 ~275 行，保留 CLI 命令、`_build_app_config`、`_setup_exception_hooks`、`main()` 入口；添加向后兼容 re-export
+- `tests/test_services/test_launcher.py`：新增 6 个基础测试（shutdown_container 幂等性 + open_browser 行为）
+- `tests/test_app/test_main.py`：更新 5 个 _run_server 测试的 patch 目标（main → app.services.launcher）
+- `tests/test_app/test_main_fix.py`：更新 TestOpenBrowser（4 个）和 TestOnExitLambda（2 个）的 patch/inspect 目标
+- `tests/test_app/test_boot_engine_flag.py`：更新 2 个 _run_full 测试的 patch 目标和 mock 设置
+- `tests/test_integration/test_login_once_mode.py`：更新 5 个测试的 patch 目标（main → login_runner/launcher）
+- `tests/test_integration/test_login_integration_extended.py`：更新 3 个测试的 cleanup_orphan_browsers patch 目标
+
+### refactor: 添加 shutdown 工具函数，替换 os._exit 为 force_exit
+
+- `app/utils/shutdown.py`：新增退出工具模块，提供 `force_exit`（atexit 钩子 + os._exit）和 `request_graceful_exit`（SIGTERM）
+- `main.py`：4 处 `os._exit` 替换为 `force_exit`（轻量 finally、uvicorn 未就绪、完整 finally），1 处双击 Ctrl+C 保留 `os._exit(1)` 并加注释
+- `app/application.py`：1 处 `os._exit(0)` 替换为 `force_exit(0)`
+- `tests/test_utils/test_shutdown.py`：新增 5 个测试覆盖 force_exit 和 request_graceful_exit
+
+### fix: 加固 ws disconnect 异常处理 + parse_url_check 兼容逗号分隔
+
+- `app/api/ws.py`：disconnect 异常处理加 try-except 保护 `ws_manager.disconnect()`，防止连接已关闭时二次异常导致 handler 崩溃
+- `app/schemas.py`：`_parse_url_check` 分隔符从仅换行 `\n` 改为 `re.split(r'[,\n]', raw)`，同时支持逗号和换行分隔
+
+### test: 更新 engine 测试适配 SchedulerService 委托模式
+
+- `tests/test_services/conftest.py`：raw 工厂将 `_scheduler_running`/`_next_schedule_tick` 替换为 `_scheduler` MagicMock（`.running`、`.next_tick_time`、`.has_enabled_tasks()`）
+- `tests/test_services/test_engine.py`：17 个测试适配新委托模式 — `_start_scheduler()`/`_stop_scheduler()` 改为 `scheduler.start()`/`scheduler.stop()`，`_run_schedule_tick()` 改为 `SchedulerService.tick()`，`_scheduler_running` 改为 `scheduler.running`
+- `tests/test_services/test_monitor_service.py`：`test_shutdown_sends_stop_through_queue` 适配 `_scheduler` 替代 `_scheduler_running`
+
+### refactor: 从 ScheduleEngine 提取 SchedulerService
+
+- `app/services/scheduler_service.py`：新增独立的定时任务调度器组件，包含 start/stop/tick/sync_state 等完整生命周期管理
+- `app/services/engine.py`：移除 `_scheduler_running`、`_next_schedule_tick` 字段及 `_run_schedule_tick`、`_start_scheduler`、`_stop_scheduler` 方法，改为委托 `SchedulerService`；`__init__` 新增 `scheduler` 参数
+- `app/container.py`：创建 `SchedulerService` 实例并注入 `ScheduleEngine`
+- `tests/test_services/test_scheduler_service_new.py`：新增 13 个单元测试覆盖生命周期、tick 调度、状态同步
+
+### refactor: 修复封装 — 添加 set_executor/login_executor 公共 API
+
+- `app/services/login_orchestrator.py`：新增 `set_executor()` 方法，绑定外部 executor 并关闭自建 fallback pool
+- `app/services/task_executor.py`：新增 `login_executor` 只读 property，暴露登录专用 BoundedExecutor
+- `app/container.py`：将 `_executor` 私有属性直接访问替换为 `set_executor()`/`login_executor` 公共 API
+- `tests/test_services/test_login_orchestrator.py`：新增 `TestSetExecutor`（2 个用例）和 `TestTaskExecutorLoginExecutor`（1 个用例）
+
+## 2026-06-27
+
+### docs: 修正 API 文档术语并补充错误类型说明
+
+- `docs/api-doc.md`：`ActionResponse` 替换为 `ApiResponse`（表格行、关键原则 2 处）
+- `docs/api-doc.md`：表格和"关键原则"之间补充"区分说明"段落（业务失败 vs 程序异常）
+
+### docs: 合并 API 错误响应规范到接口文档，删除独立文件
+
+- `docs/api-doc.md`：在标题和描述之后、目录之前插入 API 错误响应规范（错误场景表格 + 关键原则 + 前端处理说明）
+- `docs/api-conventions.md`：删除（内容已合并到 api-doc.md）
+
+### docs: 修正贡献指南中 pre-commit 安装命令
+
+- `CONTRIBUTING.md`：`pre-commit install` 改为 `uvx pre-commit install`，因 pre-commit 不在 dev 依赖中，直接调用会失败
+
+### docs: 添加 Bug 反馈和功能请求 Issue 模板
+
+- 新建 `.github/ISSUE_TEMPLATE/bug_report.md`：GitHub Bug 反馈标准化模板
+  - 问题描述、复现步骤、期望行为、实际行为、环境信息、日志/截图
+- 新建 `.github/ISSUE_TEMPLATE/feature_request.md`：GitHub 功能请求标准化模板
+  - 功能描述、使用场景、建议实现方式、补充信息
+
+### docs: 补充 PR 模板变更类型多选提示
+
+- `.github/PULL_REQUEST_TEMPLATE.md`：在「变更类型」标题下方添加 `<!-- 选择所有适用的类型 -->` HTML 注释，明确告知提交者可多选
+
+### docs: 添加 PR 模板
+
+- 新建 `.github/PULL_REQUEST_TEMPLATE.md`：GitHub Pull Request 标准化模板
+  - 变更说明、变更类型（8 种复选框）、关联 Issue、测试情况、补充信息
+
+### docs: 完善目录约定和测试配套规则
+
+- `docs/code-style-guide.md`：
+  - 4.1 后端模块放置表格下方新增注释，补充说明 `app/network/`（网络检测）、`app/workers/`（Playwright 工作进程）、`app/core/`（核心模块）、`app/ui/`（系统托盘界面）等模块
+  - 4.2 测试配套新增通用命名规则说明：`app/<模块名>/<文件>.py` → `tests/test_<模块名>/test_<文件>.py`，补充 `app/network/detector.py` 示例
+
+## 2026-06-27 (Task 4 - 前端 API 服务层)
+
+### refactor(frontend): 引入 apiService 集中管理 API 调用
+
+- 新建 `frontend/js/api-service.js`：封装所有 API 调用，集中管理路径和响应解包
+  - 按功能域分组：config / monitor / actions / system / profiles / autostart / ocr / history / uninstall / debug
+  - 使用 constants.js 导出的 `api` 实例，所有方法返回解包后的 `r.data`
+  - `config.save` / `config.patch` 支持 `opts` 参数透传 AbortController signal
+- `frontend/js/app-options.js`：import apiService，mounted 中注入 `this.$apiService = apiService`
+- `frontend/js/methods/config.js`：12 处 API 调用迁移至 apiService（fetchConfig/saveConfig/resetConfig/fetchShells/loadDefaultStealthScript/fetchOcrStatus/installOcr+uninstallOcr/fetchAutostart/_toggleAutostart/setAutostartMode/fetchLogLevels/setSourceLevel）
+- `frontend/js/methods/actions.js`：8 处 API 调用迁移至 apiService（openUninstall/confirmUninstall/toggleMonitor/manualLogin/cancelLogin/testNetwork/fetchLoginHistory/clearLoginHistory）
+- `frontend/js/methods/profiles.js`：7 处 API 调用迁移至 apiService（fetchProfiles/showProfileEditor/saveProfile/deleteProfile/setActiveProfile/_detectNetwork/toggleAutoSwitch）
+- `frontend/js/methods/lifecycle.js`：7 处 API 调用迁移至 apiService（autoCheckUpdateOnStartup/checkInitStatus/fetchAppVersion/checkUpdate/finishWizard/fetchStatus/fetchLogs）
+- `frontend/js/methods/ui.js`：quitApp 迁移至 apiService.system.shutdown()
+- `frontend/js/tasks/debug.js`：5 处 API 调用迁移至 apiService（startDebug/debugNextStep/debugRunAll/debugStop + _debugAction 重构为接受 apiCall 函数）
+- 保留 `this.$api`（原始 axios 实例）不删除，供未迁移的模块继续使用（tasks/scripts/scheduled_tasks/appearance/drag）
+
+## 2026-06-27 (Task 8 - 修复测试)
+
+### refactor(frontend): 适配 config/profiles 方法的 ApiResponse 信封格式
+
+- `frontend/js/methods/config.js`：`setSourceLevel` 解构 `{ data }`，新增 `data.success` 检查，成功时从 `data.message` 取提示文案，失败时 warn 日志 + toast 提示
+- `frontend/js/methods/profiles.js`：`toggleAutoSwitch` 中 `data.active_profile` 改为 `data.data?.active_profile`（ApiResponse 信封包裹后附加数据在 data.data 中）
+
+## 2026-06-27 (Task 14)
+
+### feat(api): 补全 debug/tools/autostart/tasks 遗漏端点的响应模型
+
+- `app/schemas.py`：新增 4 个模型
+  - `DebugStepResult`：调试步骤执行结果（step_index/success/message/screenshot）
+  - `DebugSessionResponse`：调试会话状态响应，start/next/run-all/stop 共用（running/task_id/current_step/total_steps/steps/results/screenshot_url/message）
+  - `AutostartEnableRequest`：POST /api/autostart/enable|mode 请求体（lightweight）
+  - `TaskOrderRequest`：POST /api/tasks/order 请求体（order: list[str]）
+- `app/api/debug.py`：4 个端点（start/next/run-all/stop）改用 `DebugSessionResponse` 作为 response_model，返回类型从 `dict[str, object]` 改为 `DebugSessionResponse`
+- `app/api/tools.py`：`delete_background` 端点改用 `ApiResponse` 作为 response_model，返回类型从 `dict` 改为 `ApiResponse`
+- `app/api/autostart.py`：删除私有 `_EnableBody` 类，改用 `schemas.AutostartEnableRequest`；`list_shells` 改用 `ShellListResponse` 作为 response_model
+- `app/api/tasks.py`：`save_task_order` 参数类型从 `dict` 改为 `TaskOrderRequest`
+
+## 2026-06-27 (Task 11)
+
+### fix: submit() 用 Condition 替换哨兵，修复并发 dispatch 和 preemption 竞态
+
+- `app/services/login_orchestrator.py`：
+  - `_slot_lock` 从 `threading.RLock()` 改为 `threading.Condition(threading.Lock())`
+  - `submit()` 去重逻辑新增 `while self._slot is _DISPATCHING: self._slot_lock.wait()` 循环，后到线程等待 dispatch 完成再走正常去重/抢占逻辑，修复并发 auto submit 重复 dispatch、manual 无法抢占 dispatch 中的 auto 的竞态
+  - `_dispatch` 调用包裹 `try/except`：dispatch 异常时清除哨兵（`self._slot = None`）并 `notify_all()` 唤醒等待者，修复 `_dispatch` 抛异常导致 slot 永久卡在 `_DISPATCHING` 的 Bug
+  - `_dispatch` 成功后 `notify_all()` 唤醒等待者
+  - `_on_done` 回调新增 `notify_all()` 调用，唤醒等待 slot 清除的线程
+- `app/services/engine.py`：
+  - `toggle_pure_mode` 的 `self._profile_service.update(...)` 移入 `with self._reload_lock:` 块内，修复磁盘写入在锁外执行导致 `_reload_config_internal` 可能读到过期数据的竞态
+- `tests/test_services/test_login_orchestrator.py`：
+  - `test_dispatch_called_outside_lock`：从 `CountingRLock` 包装改为 `Condition.acquire(timeout=0.1)` 探测，验证 `_dispatch` 执行时锁未被持有
+  - `test_concurrent_submit_respects_sentinel`：改用 `threading.Barrier` + 慢速 `_dispatch` 模拟并发，验证第二个 auto submit 等待完成后复用 handle（去重生效）
+  - 新增 `test_dispatch_exception_clears_sentinel`：验证 `_dispatch` 抛异常后 `orch._slot` 为 None 而非卡在 `_DISPATCHING`
+
+## 2026-06-27 (Task 10)
+
+### feat(api): 为所有 GET 端点添加 Pydantic response_model
+
+- `app/schemas.py`：新增 7 个 GET 响应模型
+  - `ProfileSummary`：方案列表摘要（name/match_gateway_ip/match_ssid/carrier/carrier_custom/auth_url/active_task）
+  - `ProfileListResponse`：GET /api/profiles 响应（profiles/active_profile/auto_switch）
+  - `ProfileDetailResponse`：GET /api/profiles/{id} 响应（profile_id/settings）
+  - `BrowserInfo`：浏览器信息 Pydantic 模型（channel/name/icon/installed/needs_download/description）
+  - `BrowserListResponse`：GET /api/browsers 响应（browsers/current）
+  - `TaskSummary`：任务列表摘要（id/name/description/type/binary_path）
+  - `LogLevelResponse`：GET /api/config/log-levels 响应（global_level/source_levels）
+- `app/api/profiles.py`：list_profiles 改用 ProfileListResponse，get_profile 改用 ProfileDetailResponse
+- `app/api/browsers.py`：get_browsers 改用 BrowserListResponse + BrowserInfo
+- `app/api/config.py`：get_log_levels 改用 LogLevelResponse
+- `app/api/tasks.py`：list_tasks 添加 response_model=list[TaskSummary]
+- `app/api/scripts.py`：list_scripts 添加 response_model=list[TaskSummary]
+
+## 2026-06-27 (Task 9)
+
+### fix: start_thread 清空残留命令时调用 task_done()，防止 join() 阻塞
+
+- `app/services/engine.py`：`start_thread` 队列清空从 `while not queue.empty()` + `get_nowait()` 改为 `while True` + `get_nowait()` + `task_done()` + `except queue.Empty: break`，消除不可靠的 `empty()` 检查并正确维护 task_done 计数器
+- `tests/test_services/test_engine.py`：新增 `TestStartThreadQueueCleanup` 测试类（1 个测试），验证清空残留命令后 `queue.join()` 不阻塞
+
+## 2026-06-27 (Task 7)
+
+### fix: submit_login 入口清理已完成的 Future 引用，防止残留
+
+- `app/services/engine_login_bridge.py`：`submit_login` 方法开头新增已完成 Future 清理逻辑（`{f for f in self._registered_futures if not f.done()}`），防止极端情况下（如 Future 被取消且 `_on_done` 未被调用）引用残留
+- `tests/test_services/test_engine_login_bridge.py`：新增 `TestRegisteredFuturesCleanup` 测试类（1 个测试），验证已完成的 Future 在下次 submit_login 时被清理
+
+## 2026-06-27 (Task 6)
+
+### perf: 引擎循环改为内循环批量排空命令，减少多次唤醒周期
+
+- `app/services/engine.py`：`_engine_loop` 命令处理从单条 `get_nowait()` + `continue` 改为 `while True` 内循环批量排空命令队列，多条快速入队的命令在单次唤醒中全部处理
+- `tests/test_services/test_engine.py`：新增 `TestEngineLoopBatchCommands` 测试类（1 个测试），验证 3 条 RELOAD + 1 条 SHUTDOWN 在单次迭代中全部处理
+- 验收：138 个 engine 测试全通过
+
+## 2026-06-27 (Task 4)
+
+### perf: WsBroadcaster 改用 asyncio.Event 按需唤醒，消除空闲 50ms 固定轮询
+
+- `app/services/ws_broadcaster.py`：
+  - `__init__` 新增 `_drain_event`（asyncio.Event）和 `_loop`（事件循环引用）
+  - 新增 `set_loop(loop)` 方法：记录事件循环引用
+  - 新增 `_notify_drain()` 方法：线程安全唤醒 drain loop（`loop.call_soon_threadsafe(event.set)` fallback `event.set()`）
+  - `set_dashboard_sink` 新增 `sink.set_drain_notifier(self._notify_drain)` 调用
+  - `enqueue_status` 新增 `self._notify_drain()` 调用
+  - `ws_drain_loop` 从 `asyncio.sleep(0.05)` 固定轮询改为 `await self._drain_event.wait()` 事件驱动
+- `app/utils/logging.py`：
+  - `DashboardSink.__init__` 新增 `_drain_notifier` 字段
+  - 新增 `set_drain_notifier(notifier)` 方法
+  - `write()` 末尾新增 `self._drain_notifier()` 调用（线程安全唤醒 asyncio 循环）
+  - 新增 `from collections.abc import Callable` 导入
+- `tests/test_services/test_ws_broadcaster.py`：新增 12 个测试覆盖事件驱动行为（TestSetLoop / TestNotifyDrain / TestEnqueueStatus.test_enqueue_triggers_drain_event / TestSetDashboardSinkMigration.test_injects_drain_notifier / TestWsDrainLoop 新增 4 个测试）
+
+## 2026-06-27 (Task 8)
+
+### fix: 删除 _pure_mode_lock，统一由 _reload_lock 保护，消除锁嵌套竞态
+
+- `app/services/engine.py`：
+  - `__init__` 删除 `self._pure_mode_lock = threading.Lock()`
+  - `pure_mode` 属性改用 `self._reload_lock` 保护读取
+  - `_reload_config_internal` 移除内层 `with self._pure_mode_lock:` 嵌套，直接在 `_reload_lock` 下写 `_pure_mode`
+  - `toggle_pure_mode` 改为先在 `_reload_lock` 内读写 `_pure_mode`，再在锁外执行 `_profile_service.update()` 持久化（避免持锁做磁盘 I/O）
+- `tests/test_services/test_engine.py`：新增 `TestPureModeLockConsolidation` 测试类，验证 `toggle_pure_mode` 与 `pure_mode` 读取互斥无死锁
+- `tests/test_services/conftest.py`、`tests/test_integration/test_login_flow.py`、`tests/test_services/test_monitor_service.py`：移除测试 mock 中的 `_pure_mode_lock` 初始化
+
+## 2026-06-27 (Task 3)
+
+### fix: submit() 锁范围缩小，_dispatch 移到锁外，哨兵防止并发重复提交
+
+- `app/services/login_orchestrator.py`：
+  - 新增模块级 `_DISPATCHING` 哨兵（`LoginHandle(future=None, source="auto", cancel_event=CompositeCancelEvent())`），用于 `submit()` 锁外 dispatch 期间占位
+  - `submit()` 去重逻辑新增 `existing is not _DISPATCHING` 前置检查，防止哨兵被误判为正常 handle（哨兵 `done()` 返回 True，但 `is not` 在 `not existing.done()` 之前求值）
+  - `submit()` 将 `_dispatch` 调用移到 `_slot_lock` 外：锁内仅做去重判断和哨兵占位，锁外执行 `_dispatch`，再用独立的锁块写回 `self._slot = handle`
+- `tests/test_services/test_login_orchestrator.py`：
+  - 新增 `TestSubmitLockScope` 测试类（2 个测试）
+  - `test_dispatch_called_outside_lock`：用 `CountingRLock` 包装 `_slot_lock`，验证 `_dispatch` 被调用时 acquire/release 差为 0（锁未持有）
+  - `test_concurrent_submit_respects_sentinel`：验证连续两次 auto submit 只触发一次 `pool.submit`（去重生效）
+
+## 2026-06-27 (Task 2)
+
+### fix: _dispatch _on_done 回调清理 CompositeCancelEvent 源列表，防止内存泄漏
+
+- `app/services/login_orchestrator.py`：`_dispatch` 方法的 `_on_done` 回调在清空 `_slot` 后，新增 `handle.cancel_event.clear_sources()` 调用（`isinstance` 检查后），释放去重积累的源引用
+- `tests/test_services/test_login_orchestrator.py`：新增 `TestDispatchClearsCancelSources` 测试类（1 个测试），验证登录完成后 `CompositeCancelEvent._sources` 被清空
+
+## 2026-06-27 (Task 1)
+
+### fix: 测试文件补全 _retry_time_lock，桥接回调测试改用实际注册回调
+
+- `tests/test_services/test_engine_fix.py`：`_make_engine()` 补充 `_retry_time_lock` 初始化，桥接回调加锁保护 `_next_retry_time` 写入
+- `tests/test_integration/test_login_flow.py`：`_make_raw_engine()` 补充 `_retry_time_lock` 初始化，桥接回调加锁保护 `_next_retry_time` 写入
+- `tests/test_services/test_monitor_service.py`：`test_do_async_login_delegates_to_task_executor` 补充 `_retry_time_lock` 初始化，桥接回调从 lambda 改为具名函数 + 加锁保护
+- `tests/test_services/test_engine.py`：`TestRetryTimeLock` 三个桥接回调测试（bridge_retry_scheduled_sets_time / bridge_login_success_clears_time / bridge_retry_exhausted_clears_time）从内联函数直接调用改为通过 `engine._login_bridge` 注册后调用，与 `__init__` 一致
+
+### fix: _next_retry_time 跨线程读写加锁保护，消除 TOCTOU 竞态
+
+- `app/services/engine.py`：
+  - `__init__` 新增 `_retry_time_lock: threading.Lock`（L109）
+  - `_bridge_retry_scheduled` / `_bridge_login_success` / `_bridge_retry_exhausted` 三个桥接回调加锁保护 `_next_retry_time` 写入（L154-163）
+  - `_engine_loop` 重试判断改为锁内原子 check-then-act：读取 → 判断 → 清零全在同一 `with` 块内（L219-228）
+  - `_calculate_wakeup` 锁保护 `_next_retry_time` 读取，移除 `try/except (TypeError, ValueError, AttributeError)` 宽异常捕获，异常自然冒泡到 `_engine_loop` 顶层兜底（L249-252）
+  - `_do_network_check` 网络检测前清零重试定时加锁保护（L306-307）
+  - `_handle_stop` 停止监控时清零重试定时加锁保护（L400-401）
+- `tests/test_services/conftest.py`：`_make_raw()` 新增 `_retry_time_lock` 初始化，桥接回调加锁保护
+- `tests/test_services/test_engine.py`：
+  - `TestCalculateWakeup.test_wakeup_exception_fallback` 重命名为 `test_wakeup_exception_propagates`，断言改为 `pytest.raises((TypeError, ValueError))`
+  - 新增 `TestRetryTimeLock` 测试类（5 个测试）：bridge_retry_scheduled_sets_time、calculate_wakeup_reads_under_lock、bridge_login_success_clears_time、bridge_retry_exhausted_clears_time、concurrent_write_no_data_loss
+- 验收：136 个 engine 测试全通过
+
+## 2026-06-26 (Task 9)
+
+### refactor: MonitorSettings 默认值归一化，引用 constants 常量
+
+- `app/schemas.py`：
+  - 新增 `from app.constants import DEFAULT_HTTP_TARGETS, DEFAULT_NETWORK_TARGETS, DEFAULT_URL_CHECK_URLS` 导入
+  - 新增 `_parse_targets(raw)` 辅助函数：逗号分隔字符串转 list[str]
+  - 新增 `_parse_url_check(raw)` 辅助函数：换行分隔字符串转 list[str]
+  - `MonitorSettings.ping_targets`：`default_factory` 从内联列表改为 `_parse_targets(DEFAULT_NETWORK_TARGETS)`
+  - `MonitorSettings.test_urls`：`default_factory` 从内联列表改为 `_parse_targets(DEFAULT_HTTP_TARGETS)`
+  - `MonitorSettings.url_check_urls`：`default_factory` 从内联列表改为 `_parse_url_check(DEFAULT_URL_CHECK_URLS)`
+- 验收：44 个测试全通过
+
+## 2026-06-27 (Task 8 - 修复测试)
+
+### fix(tests): 适配 API 变更后的 11 个测试失败
+
+- `app/api/system.py`：`check_update` 缓存存储排除 `current` 字段（`model_dump(exclude={"current"})`），修复重建 `UpdateCheckResponse` 时 `current` 重复传参的 TypeError
+- `tests/test_api/test_api_monitor_routes.py`：`test_toggle_pure_mode` 断言适配 ApiResponse 信封（`resp.json()["data"]["enabled"]`）
+- `tests/test_api/test_api_profiles_routes.py`：`test_auto_switch_enable/disable` 从 query params 改为 JSON body（`AutoSwitchRequest`）
+- `tests/test_api/test_api_system_routes.py`：`test_uninstall_perform_invalid_keys` 断言从 400 改为 422（Pydantic 验证）
+- `tests/test_api/test_api_tools_routes.py`：`test_upload_png_success` 适配 ApiResponse 信封；`TestFetchUrlContentLength` 3 个测试改用 `FetchUrlRequest` 对象 + 属性访问
+- `tests/test_api/test_system_update_cache.py`：3 个测试从 dict 下标访问改为 `UpdateCheckResponse` 属性访问（`result.latest`、`result.current`）
+- 验收：181 个 API 测试全通过，2271 个总测试全通过
+
+## 2026-06-27 (Task 12)
+
+### feat(frontend): resetConfig 使用后端默认值 + extractApiError 增强
+
+- `frontend/js/methods/config.js`：`resetConfig` 从硬编码 `structuredClone(DEFAULT_CONFIG)` 改为调用 `GET /api/config/defaults` 获取后端默认值，保留 `credentials`（凭据不重置），添加错误处理和 toast 提示
+- `frontend/js/methods/utils.js`：`extractApiError` 增强 FastAPI 422 验证错误支持，数组格式 `detail` 项为对象时提取 `loc` 最后一段作为字段名前缀（如 `[field_name] msg`），字符串项直接保留
+
+## 2026-06-27 (Task 5)
+
+### refactor(frontend): 前端配置数据模型改为嵌套 app_settings 结构
+
+- `frontend/js/constants.js`：`DEFAULT_CONFIG` 中 10 个扁平 app_settings 字段移入 `app_settings` 子对象
+- `frontend/js/data/config.js`：`cloneConfig` 适配嵌套结构，`app_settings` 内含 `custom_variables` 深拷贝
+- `frontend/js/methods/config.js`：
+  - `fetchConfig` 直接映射后端返回的嵌套 `app_settings` 结构（不再手动展平）
+  - `saveConfig` payload 直接发送嵌套 `app_settings`（不再手动扁平化）
+  - `_validateConfig` 引用路径改为 `config.app_settings.app_port`
+  - `onShellFileSelected` 引用路径改为 `config.app_settings.shell_path`
+- `frontend/js/app-options.js`：`config.shell_path` / `config.startup_action` 改为 `config.app_settings.*`
+- `frontend/js/methods/ui.js`：`config.custom_variables` 改为 `config.app_settings.custom_variables`（全部 12 处）
+- `frontend/partials/pages/settings/settings-monitor.html`：`config.block_proxy` → `config.app_settings.block_proxy`
+- `frontend/partials/pages/settings/settings-system.html`：7 个字段改为 `config.app_settings.*`
+- `frontend/partials/pages/settings/settings-account.html`：`config.custom_variables` → `config.app_settings.custom_variables`
+
+## 2026-06-27 (Task 13)
+
+### feat(api): 补全所有遗漏端点的格式统一 — 类型化响应模型
+
+- `app/schemas.py`：新增 6 个响应模型
+  - `StealthScriptResponse`：GET /api/config/default-stealth-script 响应
+  - `NetworkDetectResponse`：POST /api/profiles/detect 响应
+  - `BinaryInfo`：可执行二进制信息（path/name）
+  - `OcrStatusResponse`：GET /api/ocr/status 响应
+  - `UpdateCheckResponse`：GET /api/check-update 响应（含 cached/error 字段）
+  - `UninstallItem`：可清理项目（key/label/exists/path/size_mb）
+- `app/api/config.py`：`default-stealth-script` 返回 `StealthScriptResponse`
+- `app/api/profiles.py`：`detect` 返回 `NetworkDetectResponse`
+- `app/api/install_playwright.py`：`install-playwright` 返回 `ApiResponse`（原返回 raw dict）
+- `app/api/ocr.py`：`status` 返回 `OcrStatusResponse`
+- `app/api/system.py`：`check-update` 返回 `UpdateCheckResponse`，`uninstall/detect` 返回 `list[UninstallItem]`
+- `app/api/scheduled_tasks.py`：list 和 history 添加 `response_model=list[dict[str, Any]]`
+- `app/api/tools.py`：`background/upload` 返回 `ApiResponse`（原返回 raw dict）
+- `app/api/scripts.py`：`binaries` 返回 `list[BinaryInfo]`
+
+## 2026-06-27 (Task 11)
+
+### feat: 添加全局异常处理中间件，统一错误响应格式
+
+- `app/application.py`：
+  - 模块级新增 `api_logger = get_logger("api", source="backend")`
+  - `create_app` 内新增 `from fastapi.responses import JSONResponse` 导入
+  - CORS 配置之后新增 `global_exception_handler`（捕获所有未处理 Exception，返回 500 + 统一 JSON 格式）
+  - 新增 `value_error_handler`（捕获 ValueError，返回 400 + 错误消息）
+- 前端 `extractApiError` 已兼容 `detail` 为字符串和数组两种格式，无需修改
+- 验收：23 个现有测试全通过，模块导入正常
+
+## 2026-06-27 (Task 9)
+
+### refactor: 合并 ActionResponse → ApiResponse，消除双模型混乱
+
+- `app/schemas.py`：
+  - 删除 `ActionResponse` 类定义（原 125-127 行）
+  - 在 `ApiResponse` 类定义之后新增 `ActionResponse = ApiResponse` 向后兼容别名
+- 9 个 API 文件全局替换：
+  - `app/api/autostart.py`：import + 4 处构造 + 3 处 response_model + 3 处返回类型
+  - `app/api/config.py`：import + 1 处构造 + 1 处 response_model + 1 处返回类型
+  - `app/api/monitor.py`：import + 5 处构造 + 5 处 response_model + 5 处返回类型
+  - `app/api/ocr.py`：import + 10 处构造 + 2 处 response_model + 2 处返回类型
+  - `app/api/profiles.py`：import + 3 处构造 + 3 处 response_model + 3 处返回类型
+  - `app/api/scheduled_tasks.py`：import + 6 处构造 + 5 处 response_model + 5 处返回类型
+  - `app/api/scripts.py`：import + 3 处构造 + 3 处 response_model + 3 处返回类型
+  - `app/api/system.py`：import + 2 处构造 + 2 处 response_model + 2 处返回类型
+  - `app/api/tasks.py`：import + 4 处构造 + 4 处 response_model + 4 处返回类型
+- `tests/test_config/test_config_schemas.py`：import `ApiResponse` 替代 `ActionResponse`，`TestActionResponse` 重命名为 `TestApiResponse`
+- 验收：280 个测试通过（7 个 pre-existing 失败与本次改动无关），schemas.py 中 `ActionResponse` 仅作为别名存在
+
+## 2026-06-27 (Task 4)
+
+### refactor(scheduled-tasks): replace manual validation with Pydantic model
+
+- `app/schemas.py`：新增 `ScheduleTime` 和 `ScheduledTaskConfig` 两个 Pydantic 模型
+  - `ScheduleTime`：hour(0-23) + minute(0-59)
+  - `ScheduledTaskConfig`：name(min_length=1)、type(pattern=script|browser|shell)、schedule、timeout(ge=5,le=3600) 等字段
+  - `model_validator`：shell 类型 command 不能为空、script/browser 类型 target_id 不能为空
+- `app/api/scheduled_tasks.py`：
+  - 删除 `_validate_create_payload` 和 `_validate_update_payload` 两个手写校验函数（约 80 行）
+  - `create_scheduled_task`：参数从 `payload: dict` 改为 `payload: ScheduledTaskConfig`，Pydantic 自动校验，无效输入返回 422
+  - `update_scheduled_task`：保留 `payload: dict`（部分更新），合并后通过 `ScheduledTaskConfig.model_validate(merged)` 校验，无效输入返回 400
+  - 导入新增 `ScheduledTaskConfig`
+- `tests/test_api/test_api_scheduled_tasks_routes.py`：
+  - 5 个 create 校验失败测试断言从 `status_code == 200 + success == False` 改为 `status_code == 422`
+  - 3 个 update 校验失败测试断言从 `status_code == 200 + success == False` 改为 `status_code == 400`
+- 验收：24 个定时任务测试全通过
+
+## 2026-06-27 (Task 3)
+
+### refactor(config): use nested structure, eliminate flat dict conversion
+
+- `app/api/config.py`：
+  - `get_config` 返回嵌套结构（`app_settings` 作为子对象），不再展平到顶层
+  - `save_config` 请求体从 `dict` 改为 `ConfigSaveRequest`（嵌套结构），移除 `_flat_dict_to_dto` 转换
+  - `set_source_level` 请求体从 `dict` 改为 `SourceLevelRequest`，返回 `ApiResponse` 信封
+  - `_log_config_changes` 参数从 `ConfigResponseDTO` 改为 `ConfigSaveRequest`
+  - 删除 `_dto_to_flat_dict`、`_flat_dict_to_dto`、`_APP_SETTINGS_KEYS` 三个扁平转换函数
+  - 新增 `GET /api/config/defaults` 端点，返回所有配置字段默认值
+- `app/services/profile_service.py`：`save_global_and_profile` 参数从 `ConfigResponseDTO` 改为 `ConfigSaveRequest`
+- `tests/test_integration/test_full_mode.py`：`ConfigResponseDTO` 改为 `ConfigSaveRequest`
+- `tests/test_integration/test_login_connection.py`：同上
+- 验收：7 个 config 相关测试全通过
+
+## 2026-06-27 (Task 2)
+
+### refactor(api): 统一写操作端点响应格式为 ApiResponse 信封
+
+- `app/api/profiles.py`：`toggle_auto_switch` 请求体从 `dict = Body(default={})` 改为 `AutoSwitchRequest`，返回 `ApiResponse` 信封；移除未使用的 `Body` 导入
+- `app/api/monitor.py`：`get_pure_mode` 返回 `PureModeResponse`，`toggle_pure_mode` 返回 `ApiResponse` 信封
+- `app/api/history.py`：`clear_login_history` 返回 `ApiResponse` 信封
+- `app/api/system.py`：`health` 返回 `HealthResponse`，`get_init_status` 返回 `InitStatusResponse`，`uninstall_perform` 请求体改为 `UninstallRequest`、返回 `ApiResponse` 信封
+- `app/api/tools.py`：`fetch_background_url` 请求体改为 `FetchUrlRequest`、返回 `ApiResponse` 信封
+- 验收：174 通过、7 失败（均为测试期望旧格式，符合预期）
+
+## 2026-06-27 (Task 1)
+
+### feat(schemas): 新增 ApiResponse 信封和类型化请求/响应模型
+
+- `app/schemas.py`：在 `AppSettings` 之后、`RuntimeConfig` 之前新增 10 个 API 模型
+  - `ApiResponse`：所有写操作的标准响应信封（success/message/data）
+  - `ConfigSaveRequest`：PUT /api/config 请求体，嵌套结构与 RuntimeConfig 对齐
+  - `SourceLevelRequest`：PUT /api/config/source-level 请求体
+  - `AutoSwitchRequest`：POST /api/profiles/auto-switch 请求体
+  - `UninstallRequest`：POST /api/uninstall 请求体
+  - `FetchUrlRequest`：POST /api/background/fetch-url 请求体
+  - `InitStatusResponse`：GET /api/init-status 响应
+  - `HealthResponse`：GET /api/health 响应
+  - `ShellListResponse`：GET /api/shells 响应
+  - `PureModeResponse`：GET/POST /api/pure-mode 响应
+- 注意：新模型放在 `AppSettings` 之后而非 `ActionResponse` 之后，因为 `ConfigSaveRequest` 的 `Field(default_factory=BrowserSettings)` 需要运行时引用已定义的设置类
+- 验收：10 个新模型全部可正常导入
+
+## 2026-06-26 (Task 8)
+
+### refactor: 移除 AuthProfile 别名、monitor_service 属性，修复 uninstall 冗余
+
+- `app/schemas.py`：删除 `AuthProfile = Profile` 向后兼容别名（第 184-185 行）
+- `app/container.py`：删除 `monitor_service` 废弃属性（第 103-108 行），保留 `debug_manager` 属性
+- `app/services/uninstall.py`：`_check_autostart` 和 `_remove_autostart` 各自新建 `AutoStartService` 实例改为共享单例 `_get_autostart_service()`
+- `tests/test_config/test_config_schemas.py`：`TestAuthProfileDefaults` → `TestProfileDefaults`，`TestAuthProfile` → `TestProfile`
+- `tests/test_config/test_container.py`：删除 `assert hasattr(container, "monitor_service")` 断言
+- `tests/test_integration/test_app_startup.py`：所有 `mock_container.monitor_service` 改为 `mock_container.engine`
+- 验收：97 个测试全通过
+
+## 2026-06-26
+
+### refactor: 提取 WebSocket 处理到 app/api/ws.py 独立模块
+
+- 新建 `app/api/ws.py`：从 `application.py` 提取 WebSocket `/ws/logs` 处理逻辑
+  - `websocket_logs_handler(websocket, ws_manager, engine)` — 独立的 WebSocket 处理函数
+  - 包含消息大小预检、ping/pong、前端日志转发、异常处理
+- `app/application.py`：
+  - WebSocket 处理从 40 行内联代码替换为 4 行委托调用
+  - 移除未使用的 `import json`
+  - 移除未使用的 `ws_logger` 定义
+- 验收：所有 WebSocket 相关测试通过
+
+### refactor: LoginHistoryService.record() 解耦，改用 add() 直接传入名称
+
+- `app/services/login_history_service.py`：
+  - 删除 `record()` 方法（原 48-82 行），调用方自行查找 profile/task 名称后直接调用 `add()`
+  - 删除 `TYPE_CHECKING` 块（`ProfileService`/`TaskManager` 仅被 `record()` 使用）
+- `app/services/login_orchestrator.py`：
+  - `_record_history` 方法：从调用 `self._login_history.record()` 改为直接查找 `profile_name` 后调用 `self._login_history.add()`
+  - 逻辑内联：`_profile_service.get_active_profile()` + `getattr(active, "name", "")` 移入 `_record_history`
+- `tests/test_services/test_login_history.py`：
+  - 删除 `TestRecord` 测试类（9 个测试，对应已删除的 `record()` 方法）
+
+### refactor: 合并 config_service 到 profile_service
+- `app/services/profile_service.py`：新增 `SaveResult`、`_rollback_config`、`save_global_and_profile`（从 config_service 迁入）
+- `app/services/config_service.py`：删除（已合并到 profile_service）
+- `app/api/config.py`：导入从 `app.services.config_service` 改为 `app.services.profile_service`
+- `tests/test_services/test_config_service.py`：导入从 `app.services.config_service` 改为 `app.services.profile_service`
+- `tests/test_api/test_api_config_routes.py`：`SaveResult` 导入改为 `app.services.profile_service`
+- `tests/test_integration/test_full_mode.py`：`save_global_and_profile` 导入改为 `app.services.profile_service`
+- `tests/test_integration/test_login_connection.py`：同上
+
+### refactor: 构造器注入替代 setter，消除循环依赖注入
+
+- `app/services/engine.py`：`__init__` 新增 `orchestrator` 参数，删除 `set_orchestrator()` 和 `set_task_executor()` 方法
+- `app/services/login_orchestrator.py`：删除 `set_executor()` 方法
+- `app/services/task_executor.py`：删除 `set_runtime_config_getter()` 方法
+- `app/container.py`：重排服务创建顺序（LoginOrchestrator → TaskExecutor → ScheduleEngine），构造器注入后绑定 `get_runtime_config`
+- `tests/test_integration/conftest.py`：两个 fixture（`integration_stack`/`full_stack`）改用直接属性赋值，补充 `orchestrator._get_runtime_config` 绑定
+- `tests/test_services/test_task_executor_fix.py`：`test_set_runtime_config_getter` 改为直接赋值
+
+### fix: 适配 test_monitor_service.py 到 StatusManager 重构
+
+### fix: 适配 test_monitor_service.py 到 StatusManager 重构
+
+- `tests/test_services/test_monitor_service.py`：
+  - `StatusSnapshot` 导入从 `app.services.engine` 改为 `app.services.engine_status`
+  - `svc._dashboard_sink` 访问改为 `svc._status_manager._dashboard_sink`（4 处）
+  - `svc._status_snapshot` 访问改为 `svc._status_manager._status_snapshot`（10 处）
+  - `TestShutdownSynchronous` 移除 `__new__` 模式下对 `_status_snapshot` 的无效赋值（shutdown 不访问该属性）
+- 验收：41 个测试全通过
+
+### refactor: 提取 StatusManager from ScheduleEngine
+
+- 新建 `app/services/engine_status.py`：`StatusManager` 类，从 `ScheduleEngine` 提取状态快照管理
+  - `StatusSnapshot` 数据类 — 监控状态快照（monitoring/last_network_ok/start_time/network_check_count/login_attempt_count/last_check_time/snapshot_time/status_detail/network_state）
+  - `StatusManager` 类 — 状态快照管理与 WS 广播桥接
+    - `update_snapshot(force)` — 从 monitor_core 读取状态，写入 lock-free StatusSnapshot
+    - `_queue_status_broadcast()` — 将状态广播到 WS 队列
+    - `get_status()` — 返回 MonitorStatusResponse
+    - `list_logs(limit)` — 从 DashboardSink 读取日志
+    - `set_ws_broadcaster(broadcaster)` — 注入 WS 广播器
+    - `set_dashboard_sink(sink)` — 注入 DashboardSink
+- `app/services/engine.py`：
+  - 移除 `StatusSnapshot` 数据类定义（60-72 行），改从 `engine_status` 导入
+  - `__init__` 移除 `_dashboard_sink`、`_last_snapshot_time`、`_snapshot_min_interval`、`_status_snapshot` 字段
+  - `__init__` 新增 `_status_manager` 初始化
+  - `_update_status_snapshot` / `_queue_status_broadcast` / `get_status` / `list_logs` / `set_dashboard_sink` 改为委托 `_status_manager`
+- `app/container.py`：
+  - `start_web_services` 轻量模式唤醒时新增 `engine._status_manager.set_ws_broadcaster(self.ws_broadcaster)` 调用
+- 测试文件同步更新：
+  - `tests/test_services/conftest.py`：`_make_raw()` 移除 `_status_snapshot`/`_snapshot_min_interval`/`_last_snapshot_time`/`_dashboard_sink` 字段，新增 `_status_manager` 初始化
+  - `tests/test_services/test_engine.py`：导入改为从 `engine_status` 导入 `StatusSnapshot`；`_status_snapshot` 访问改为 `_status_manager._status_snapshot`；`_dashboard_sink` 访问改为 `_status_manager._dashboard_sink`
+- 验收：131 个 engine 测试全通过
+
+### refactor: 提取 LoginBridge from ScheduleEngine
+
+- 新建 `app/services/engine_login_bridge.py`：`LoginBridge` 类，从 `ScheduleEngine._do_async_login` 提取登录提交与回调管理
+  - `submit_login(is_manual, config_snapshot)` — 提交登录到 LoginOrchestrator，含前置检查、去重、回调注册
+  - `cancel_login()` — 取消当前登录
+  - `_on_retry_scheduled(delay)` / `_on_login_success()` / `_on_retry_exhausted()` — 可覆盖的回调钩子，由 engine 桥接设置 `_next_retry_time`
+  - 内置 `_registered_futures` + `_futures_lock` 线程安全 future 管理
+- `app/services/engine.py`：
+  - `__init__` 新增 `_login_bridge` 初始化 + 三个桥接回调（`_bridge_retry_scheduled` / `_bridge_login_success` / `_bridge_retry_exhausted`）
+  - `_do_async_login` 从 75 行逻辑缩减为 1 行委托 `self._login_bridge.submit_login()`
+  - `cancel_login` 从 5 行缩减为 1 行委托 `self._login_bridge.cancel_login()`
+  - `_registered_futures` / `_futures_lock` 已从 engine 移除（孤儿清理），实际管理已迁移到 LoginBridge
+- 测试文件同步更新（4 个文件）：
+  - `tests/test_services/conftest.py`：`_make_raw()` 新增 `_login_bridge` 初始化 + 三个桥接回调
+  - `tests/test_services/test_engine_fix.py`：`_make_engine()` 新增 `_login_bridge` 初始化 + 三个桥接回调
+  - `tests/test_services/test_monitor_service.py`：`test_do_async_login_delegates_to_task_executor` 新增 `_login_bridge` 初始化
+  - `tests/test_integration/test_login_flow.py`：`_make_raw_engine()` 新增 `_login_bridge` 初始化 + 三个桥接回调
+- 验收：178 个 engine 相关测试全通过，28 个 login_flow 集成测试全通过
+
+## 2026-06-25 (6)
+
+### refactor: 提取 _shutdown_container 并修复冗余 ProfileService 实例化
+
+- `main.py`：
+  - 新增 `_shutdown_container(container, logger, fallback_shutdown=False)` 辅助函数：统一 `_run_lightweight` 和 `_run_full` 的容器关闭逻辑（约 40 行缩减为 1 处）
+  - `_run_lightweight` finally 块：替换内联 try/except 为 `_shutdown_container(container, logger, fallback_shutdown=True)` 调用
+  - `_run_full` finally 块：替换内联 try/except 为 `_shutdown_container(container, logger)` 调用
+  - `_run_full` 中 `create_profile_service()` 独立实例化改为 `container.profile_service.load()`，复用容器已有实例
+
+## 2026-06-25 (5)
+
+### refactor: 提取 AppSettings 子模型，消除配置透传字段重复
+
+- `app/schemas.py`：
+  - 新增 `AppSettings` frozen 模型：包含 10 个透传字段（block_proxy/shell_path/minimize_to_tray/startup_action/autostart_lightweight/lightweight_tray/auto_open_browser/proxy/app_port/custom_variables）
+  - `RuntimeConfig`：10 个平铺字段替换为 `app_settings: AppSettings`
+  - `GlobalConfig`：10 个平铺字段替换为 `app_settings: AppSettings`
+  - `ConfigResponseDTO`：10 个平铺字段替换为 `app_settings: AppSettings`
+  - `AppConfig.from_runtime_config`：字段访问改为 `config.app_settings.xxx`
+  - `ProfilesData.config_version` 默认值从 4 改为 5
+- `app/services/config_builder.py`：`build()` 10 个逐字段映射替换为 `app_settings=global_config.app_settings`
+- `app/services/config_service.py`：`save_global_and_profile` 10 个逐字段映射替换为 `app_settings=payload.app_settings`
+- `app/api/config.py`：
+  - `get_config` 返回 `ConfigResponseDTO` 改用 `app_settings=cfg.app_settings`
+  - `_log_config_changes` FIELD_NAMES 中平铺字段键名加 `app_settings.` 前缀
+- `app/services/login_orchestrator.py`：`block_proxy`/`shell_path`/`custom_variables` 访问改为 `config.app_settings.xxx`
+- `app/services/monitor_service.py`：`self.config.block_proxy` → `self.config.app_settings.block_proxy`
+- `app/services/task_executor.py`：`config.shell_path` → `config.app_settings.shell_path`
+- `app/services/debug_service.py`：`runtime_config.custom_variables` → `runtime_config.app_settings.custom_variables`
+- `app/api/autostart.py`：`global_config.autostart_lightweight` → `global_config.app_settings.autostart_lightweight`（读写两处）
+- `app/services/profile_service.py`：新增 `migrate_v4_to_v5` 迁移函数（已在前次实现），`_load_unsafe` 链式调用
+- 测试文件同步更新（8 个文件）：所有平铺字段断言改为 `rc.app_settings.xxx`
+
+## 2026-06-25 (4)
+
+### refactor: 统一登录线程池 — LoginOrchestrator 复用 BoundedExecutor
+
+- `app/services/login_orchestrator.py`：
+  - `__init__` 新增 `executor` 参数，支持注入外部 BoundedExecutor
+  - 优先使用外部 `executor`，无注入时 fallback 到自建 `ThreadPoolExecutor`
+  - 新增 `set_executor()` 方法，支持延迟注入（container 中 TaskExecutor 创建后调用）
+  - `_dispatch` 中提交逻辑改为双路径：`executor.submit` 或 `pool.submit`
+  - `shutdown` 改为仅关闭自建池（外部 executor 由调用方管理）
+  - 保留 `_slot` + `_slot_lock` 抢占机制不变
+- `app/services/task_executor.py`：
+  - `__init__` 新增 `_login_executor = BoundedExecutor(max_workers=1, queue_size=1)`
+  - `shutdown` 新增 `self._login_executor.shutdown(wait=wait)`
+- `app/container.py`：
+  - TaskExecutor 创建后，调用 `login_orchestrator.set_executor(task_executor._login_executor)` 注入共享执行器
+
+## 2026-06-25 (3)
+
+### refactor: 提取 WsBroadcaster 和 NetworkTester from ScheduleEngine
+
+- 新建 `app/services/ws_broadcaster.py`：WS 广播队列管理器，从 engine.py 提取
+  - `WsBroadcaster` 类：管理 broadcast_queue、ws_drain_loop、drain_ws_queue、set_dashboard_sink、enqueue_status
+  - `WS_DRAIN_INTERVAL_SECONDS` 常量迁移至此
+- 新建 `app/services/network_tester.py`：手动网络测试封装，从 engine.py 提取
+  - `NetworkTester` 类：封装 `is_network_available` 调用和模式描述日志
+- `app/services/engine.py`：
+  - `__init__` 新增 `ws_broadcaster` 和 `network_tester` 可选参数
+  - `_queue_status_broadcast` 委托 `ws_broadcaster.enqueue_status`
+  - `test_network` 委托 `network_tester.test_network`
+  - `set_dashboard_sink` 简化为仅设置 `_dashboard_sink`（供 list_logs 使用）
+  - 删除 `ws_drain_loop`、`drain_ws_queue`、`ws_broadcast_queue` 属性、`_empty_broadcast_queue` 字段
+  - `WS_DRAIN_INTERVAL_SECONDS` 改为从 ws_broadcaster 模块 re-export（向后兼容）
+  - 移除不再使用的 `json`、`deque`、`is_network_available`、`parse_ping_targets` 导入
+- `app/container.py`：
+  - 新建 `WsBroadcaster` 和 `NetworkTester` 实例，注入到 ScheduleEngine
+  - `start_web_services` 改用 `ws_broadcaster.set_ws_manager`、`ws_broadcaster.set_dashboard_sink`、`ws_broadcaster.ws_drain_loop`
+- 新建 `tests/test_services/test_ws_broadcaster.py`：19 个单元测试覆盖全部 WsBroadcaster 功能
+- 更新 `tests/test_services/test_engine.py`：TestNetwork 改为 mock `_network_tester`，TestQueueStatusBroadcast 改为验证委托，删除 TestWsDrain 和 TestSetDashboardSinkMigration
+- 更新 `tests/test_services/conftest.py`：raw fixture 新增 `_ws_broadcaster` 和 `_network_tester` mock
+- 更新 `tests/test_config/test_container.py`：mock_classes 新增 WsBroadcaster/NetworkTester，fixture 改用 `ws_broadcaster.ws_drain_loop`
+- 更新 `tests/test_config/test_constants.py`：新增 re-export 测试
+- 更新 `tests/test_services/test_engine_fix.py`：NetworkTester 源码检查替代 engine
+
+## 2026-06-25 (2)
+
+### refactor: 消除 TaskService 冗余层 — 合并到 TaskManager
+
+- `app/services/task_service.py`：删除（219 行），逻辑合并到 TaskManager
+- `app/tasks/manager.py`：
+  - 新增 `_DANGEROUS_STEP_TYPES` 常量和 `_check_dangerous_steps()` 函数（从 TaskService 迁移）
+  - 新增 `get_task_detail()` 方法：加载任务详情（含脚本内容读取），统一浏览器/脚本任务返回格式
+  - 新增 `save_task_with_validation()` 方法：保存任务（含危险步骤检查和 ID 校验）
+  - 新增 `_save_script_task_validated()` 方法：保存脚本任务（含内容大小验证）
+  - 新增 `delete_task_with_validation()` 方法：删除任务（含 ID 校验）
+  - 新增 `set_active_task_with_validation()` 方法：设置活动任务（含 ID 和存在性校验）
+  - 新增 `get_script_path_public()` 方法：公开接口封装 `_safe_task_path`
+  - 新增 `save_order_with_validation()` 方法：保存排序配置（含格式验证）
+- `app/container.py`：`TaskService(project_root)` → `TaskManager(project_root / "tasks")`，TaskExecutor 注入 `task_manager`
+- `app/deps.py`：`get_task_service` → `get_task_manager`
+- `app/api/tasks.py`：7 个路由从 `Depends(get_task_service)` 改为 `Depends(get_task_manager)`
+- `app/api/scripts.py`：5 个路由从 `Depends(get_task_service)` 改为 `Depends(get_task_manager)`
+- `app/services/debug_service.py`：`services.task_service.task_manager.load_task()` → `services.task_manager.load_task()`
+- `app/services/task_executor.py`：新增 `task_manager` 参数和 `task_manager` 属性
+- 测试文件同步更新（8 个文件）：所有 `task_service` mock 引用改为 `task_manager`，方法名映射同步更新
+
+## 2026-06-25
+
+### refactor: ProfileService 单例化 — 消除多余实例化点
+
+- `app/services/engine.py`：`ScheduleEngine.__init__` 移除 `profile_service or ProfileService(project_root)` 回退，改为 `profile_service is None` 时抛出 `ValueError`，强制通过 ServiceContainer 注入
+- `app/api/autostart.py`：`_read_autostart_lightweight` 和 `_save_autostart_lightweight` 改为从 `request.app.state.services.profile_service` 获取共享实例，不再每次新建 ProfileService；三个路由函数添加 `request: Request` 参数
+- `tests/test_services/conftest.py`：`engine_factory` 工厂函数显式传入 `profile_service=mock_ps`，适配强制注入变更
+- 背景：原有 5 个独立实例化点导致多个 ProfileService 实例各自持有 `_lock`，并发写 settings.json 时锁不共享可能丢更新
+
 ## 2026-06-24 (4)
 
 ### chore: 版本升级至 v4.1.0
@@ -2927,3 +4496,199 @@
 
 - `config/settings.json`：在 `config` 对象中添加 `lightweight_tray: true` 和 `auto_open_browser: false` 字段，与 `RuntimeConfig` 模型默认值保持一致
 - 注意：`config/` 目录在 `.gitignore` 中，使用 `git add -f` 强制添加
+
+## 2026-06-29 (1)
+
+### chore: 删除 TaskExecutor 死方法并简化守卫
+
+- `app/services/task_executor.py`：
+  - 删除 `execute_login_async()` 方法（死方法，engine 直接调 LoginOrchestrator.submit()）
+  - 删除 `execute_login()` 方法（死方法，engine 直接调 LoginOrchestrator.submit()）
+  - `_execute_script` 删除 `if not self._registry` 不可能守卫（构造函数必填参数）
+  - `_execute_browser` 删除 `cancel_event` 参数（无生产调用者传递此参数）
+- 测试文件同步更新：
+  - `tests/test_services/test_task_executor_fix.py`：删除 `TestTaskExecutorExecuteLogin`、`TestTaskExecutorLoginAsync`、`test_no_registry`、`test_browser_cancel_event_passed`、`test_browser_cancel_event_default_none`
+  - `tests/test_services/test_container_fix.py`：删除 `test_lightweight_execute_login_async_returns_future`
+  - `tests/test_integration/test_login_flow.py`：删除 4 个 execute_login 测试方法
+  - `tests/test_integration/test_scheduled_task.py`：删除 `test_login_cancel_event`、`test_login_async_deduplication`、`test_execute_login_async_returns_future`
+  - `tests/test_integration/test_login_connection.py`：更新为直接调用 `_login_orchestrator.submit()`
+  - `tests/test_integration/test_lightweight_mode.py`：更新为直接调用 `_login_orchestrator.submit()`
+  - `tests/test_integration/test_login_integration_extended.py`：更新为直接调用 `_login_orchestrator.submit()`
+  - `tests/test_services/test_monitor_service.py`：删除无用的 `execute_login_async` mock 设置
+
+## 2026-06-29 (2)
+
+### refactor: 用 psutil.Process.wait() 替换 _wait_for_exit 轮询循环
+
+- `app/services/launcher.py`：
+  - `_wait_for_exit` 改用 `psutil.Process(pid).wait(timeout=max_wait)` 替代逐秒轮询
+  - 处理 `TimeoutExpired`（超时返回 False）和 `NoSuchProcess`（进程已退出返回 True）
+  - 新增 `import psutil`，移除不再使用的 `get_process_name` import
+
+## 2026-06-29 (3)
+
+### refactor: 移除 TaskExecutor CRUD 透传，暴露 registry/history_store 属性
+
+- `app/services/task_executor.py`：
+  - 新增 `registry` 和 `history_store` 只读属性，供 API 路由直接访问底层组件
+  - 删除 5 个 CRUD 透传方法：`list_tasks`、`get_task`、`save_task`、`get_history`、`has_enabled_tasks`
+  - 保留 `delete_task`（协调 registry + history_store 的删除逻辑）
+- `app/api/scheduled_tasks.py`：
+  - 所有 `engine.tasks.list_tasks()` → `engine.tasks.registry.list_tasks()`
+  - 所有 `engine.tasks.get_task()` → `engine.tasks.registry.get_task()`
+  - 所有 `engine.tasks.save_task()` → `engine.tasks.registry.save_task()`
+  - 所有 `engine.tasks.get_history()` → `engine.tasks.history_store.get_history()`
+  - `engine.tasks.delete_task()` 保持不变（仍走 TaskExecutor 协调方法）
+- `app/services/scheduler_service.py`：
+  - `self._task_executor.has_enabled_tasks()` → `self._task_executor.registry.has_enabled_tasks()`
+- 测试文件同步更新：
+  - `tests/test_services/test_task_executor_fix.py`：删除 5 个 CRUD 透传测试，新增 `test_registry_property` 和 `test_history_store_property`
+  - `tests/test_integration/test_full_mode.py`：更新为 `task_executor.registry.*` / `task_executor.history_store.*`
+  - `tests/test_services/test_scheduler_service_new.py`：mock 改为 `executor.registry.has_enabled_tasks`
+  - `tests/test_api/test_api_scheduled_tasks_routes.py`：mock 改为 `mock_tasks.registry.*` / `mock_tasks.history_store.*`
+  - `tests/test_api/test_scheduled_tasks_fix.py`：同上
+
+## 2026-06-29: 移除 container.py 中 debug_manager 的不必要延迟初始化
+
+- `app/container.py`：将 `debug_manager` 从延迟初始化（`@property` + `_debug_manager`）改为 `__init__` 中直接初始化，删除 `@property def debug_manager` 方法，简化 `shutdown` 中的引用
+
+## 2026-06-29: 简化 deps.py 为 Annotated 别名，清理 main.py 向后兼容 re-export
+
+- ：重写为 Annotated 类型别名，用 `_get(attr)` 工厂函数替代 6 个独立的 `get_*` 函数
+- 11 个路由文件：所有 `Depends(get_xxx)` 改为 Annotated 类型别名（如 `MonitorServiceDep`），移除 `Depends` 和服务类型导入
+- `main.py`：删除向后兼容 re-export（`_run_server`, `_open_browser`, `_run_full`, `_run_login_then_exit`, `_execute_login_with_retries`, `LoginResult` 等），仅保留实际使用的导入
+- 测试文件同步更新：所有 `from main import _xxx` 改为从源模块导入（`app.services.launcher`, `app.services.login_runner`, `app.schemas`）
+- `tests/conftest.py`：移除 `monkeypatch.setattr("main.AUTH_DATA_DIR", ...)`（不再在 main 中 re-export）
+- `tests/test_config/test_deps.py`：重写为测试 `_get` 工厂函数
+
+## 2026-06-29: 简化 deps.py 为 Annotated 别名，清理 main.py 向后兼容 re-export
+
+- `app/deps.py`：重写为 Annotated 类型别名，用 `_get(attr)` 工厂函数替代 6 个独立的 `get_*` 函数
+- 11 个路由文件：所有 `Depends(get_xxx)` 改为 Annotated 类型别名（如 `MonitorServiceDep`），移除 `Depends` 和服务类型导入
+- `main.py`：删除向后兼容 re-export（`_run_server`, `_open_browser`, `_run_full`, `_run_login_then_exit`, `_execute_login_with_retries`, `LoginResult` 等），仅保留实际使用的导入
+- 测试文件同步更新：所有 `from main import _xxx` 改为从源模块导入（`app.services.launcher`, `app.services.login_runner`, `app.schemas`）
+- `tests/conftest.py`：移除 `monkeypatch.setattr("main.AUTH_DATA_DIR", ...)`（不再在 main 中 re-export）
+- `tests/test_config/test_deps.py`：重写为测试 `_get` 工厂函数
+
+## 2026-06-29 — Ponytail 全仓库审查 + 实施计划
+
+- 提交：移除 profile_service 中已废弃的 v3→v4→v5 迁移函数（-320 行）
+- 生成全仓库过度工程化审查报告：83 个发现，预估可削减 ~3,600 行
+- 复核修正：4 项"不应执行"（detectPerformance、StepHandler ABC、set_autostart_mode、test_debug_service 直接删）
+- 复核修正：5 项事实错误（文件名搞混、对照对象错、_validateConfig 描述、404 计数、重叠比例）
+- 生成 4 个实施计划（排除问题条目后 ~40 项安全条目）：
+  - 测试套件瘦身（9 tasks）— 删除冗余测试、合并重叠覆盖
+  - 服务层与任务层清理（11 tasks）— 删除死方法、ConfigBuilder 改函数
+  - 工具层与核心层清理（10 tasks）— 删除死常量、内联单调用函数
+  - 前端清理（6 tasks）— 删除死函数、合并 data 工厂文件
+
+## 2026-07-03: 端口检测增加 IPv6 支持 (Task 2.10)
+
+- ： 增加  参数，自动检测 IPv6 地址（包含  时使用 AF_INET6）
+- ：新增 3 个 IPv6 相关测试（IPv6 localhost、自动检测、IPv4 默认 host）
+
+## 2026-07-03: 端口检测增加 IPv6 支持 (Task 2.10)
+
+- app/utils/process.py: is_local_port_in_use 增加 host 参数，自动检测 IPv6 地址（包含 : 时使用 AF_INET6）
+- tests/test_utils/test_process.py: 新增 3 个 IPv6 相关测试（IPv6 localhost、自动检测、IPv4 默认 host）
+
+
+## 2026-07-03: 修复端口检测超时与 IPv6 测试覆盖 (Task 2.10 审查修复)
+
+- app/utils/process.py: is_local_port_in_use 增加 s.settimeout(0.5) 防止异常网络环境下长时间阻塞
+- tests/test_utils/test_process.py: test_ipv6_localhost 改为绑定已用端口并断言 True，新增 test_ipv6_closed_port_returns_false 负向测试
+
+## 2026-07-03: _safe_psutil_call 返回类型一致 (Task 4.1)
+
+- app/api/system.py: _safe_psutil_call 默认参数从 -1 改为 None，异常时返回空列表 [] 而非整数，保持与正常返回值的类型一致
+- tests/test_api/test_system.py: 新增 7 个测试覆盖所有分支（正常调用、三种 psutil 异常、自定义默认值、None 默认值转换、非 psutil 异常传播）
+
+## 2026-07-03: TaskManager 暴露公共 get_script_path (Task 4.3)
+
+- app/tasks/manager.py: 新增 get_script_path(task_id) 公共方法，封装 _safe_task_path(task_id, task_type="scripts")
+- app/api/scripts.py: run_script 路由改用 task_mgr.get_script_path(task_id) 替代对私有方法 _safe_task_path 的直接调用
+- tests/test_tasks/test_manager.py: 新建，8 个测试覆盖 get_script_path（JSON/PY/优先级/不存在/无效ID/仅搜索scripts）及 _safe_task_path
+- tests/test_api/test_api_scripts_routes.py: 3 处 mock 从 _safe_task_path 更新为 get_script_path
+
+## 2026-07-03: WebSocket frontend_log 复用模块级 logger 实例 (Task 4.5)
+
+- app/api/ws.py: 新增模块级 `_fe_logger = get_logger("frontend", source="frontend")`，替代 handler 内每次调用 `get_logger` 的开销
+- tests/test_api/test_ws.py: 新增 8 个 frontend_log 测试（单例验证、默认级别、显式级别、无效级别降级、空消息、缺失 data、消息截断、scope 截断）
+
+## 2026-07-03: WebSocket 未知消息类型记录警告日志 (Task 4.6)
+
+- app/api/ws.py: 在 `websocket_logs_handler` 的 `if/elif` 链末尾新增 `else` 分支，对未知消息类型记录 `warning` 日志
+- tests/test_api/test_ws.py: 新增 4 个测试（未知类型、None 类型、缺少 type 字段、已知类型不触发警告）
+
+## 2026-07-03: set_log_level 同步更新运行时配置 (Task 4.8)
+
+- app/api/config.py: `set_log_level` 在更新 profile_service 后同步更新 `engine._runtime_config` 的 logging.level，使用 `model_copy(update=...)` 确保 frozen 模型的不可变性
+- tests/test_api/test_api_config_routes.py: 新增 `TestSetLogLevel` 测试类（3 个用例：同步运行时配置、无效级别拒绝、更新 profile_service）
+
+## 2026-07-03: retry_policy delay_before 处理 attempt <= 0 越界 (Task 4.14)
+
+- app/services/retry_policy.py: delay_before 增加 attempt <= 0 前置检查，返回 _delays[0] 防止负索引越界
+- tests/test_services/test_retry_policy.py: 新增 test_delay_before_zero（attempt=0）和 test_delay_before_negative（attempt=-1, -100）测试
+
+## 2026-07-03: 检测方式切换守卫改为 watcher (Task 5.1)
+
+- frontend/js/methods/config.js: 移除 `onCheckToggle` 和 `_getActiveCheckCount`，新增 `_ensureAtLeastOneCheckMethod` 直接检查三个检测字段状态
+- frontend/js/app-options.js: 新增三个 watcher 监听 `enable_tcp_check`、`enable_http_check`、`urlCheckEnabled`，触发守卫逻辑
+- frontend/partials/pages/settings/settings-monitor.html: 移除三个 checkbox 的 `@change` 处理器，保留 `v-model` 绑定
+
+## 2026-07-03: URL 检测默认数组使用深拷贝，避免污染 DEFAULT_CONFIG (Task 5.2)
+
+- frontend/js/data/config.js: `defaultUrlCheckUrls` 改为使用 `[...DEFAULT_CONFIG.monitor.url_check_urls]` 创建独立副本，防止数组突变污染全局默认配置
+
+## 2026-07-03: 前端日志批量发送失败时保留缓冲区 (Task 5.8)
+
+- frontend/js/logger.js: `_flushBuffer` 发送失败时将整个批次 `unshift` 回缓冲区，避免日志静默丢失
+
+## 2026-07-03: 状态轮询 Promise rejection 捕获 (Task 5.6)
+
+- frontend/js/methods/lifecycle.js: 状态轮询定时器中 fetchStatus() 增加 .catch() 处理，防止未捕获的 Promise rejection
+
+## 2026-07-03: start.go 透传子进程退出码 (Task 6.2)
+
+- start.go: `runCommand` 函数增加 `*exec.ExitError` 类型断言，子进程非零退出时透传实际退出码而非固定返回 1
+
+## 2026-07-03: ����ģʽע�� SIGINT ������ (Task 6.6)
+
+- app/services/launcher.py:  ����  ע�ᣬʹ Ctrl+C ���������� finally ����·������ֱ����ֹ
+
+## 2026-07-03: 轻量模式注册 SIGINT 处理器 (Task 6.6)
+
+- app/services/launcher.py: launch_lightweight 增加 signal.signal(signal.SIGINT, _signal_handler) 注册，使 Ctrl+C 触发正常的 finally 清理路径而非直接终止
+
+## 2026-07-03: dir_size_mb 返回完整/不完整标记 (Task 7.3)
+
+- `app/utils/files.py`：新增 `DirSizeResult(NamedTuple)` 包含 `size_mb` 和 `complete` 字段，`dir_size_mb` 返回类型从 `float` 改为 `DirSizeResult`，OSError 时标记 `complete=False`
+- `app/api/ocr.py`：`_estimate_pkg_size_mb` 提取 `.size_mb`
+- `app/services/uninstall.py`：`detect()` 提取 `.size_mb`
+- `tests/test_utils/test_files.py`：新增 `TestDirSizeMb` 测试类（7 个用例：不存在路径、空目录、文件路径、目录含文件、嵌套目录、OSError 标记、字符串路径）
+- `tests/test_services/test_system_services.py`：`TestDirSizeMb` 更新为使用 `DirSizeResult` 断言
+
+## 2026-07-03: debug_service Windows 文件占用重试删除 (Task 7.5)
+
+- `app/services/debug_service.py`：新增 `_rm(path: Path)` 函数，Windows 下文件被占用时自动重试删除（最多 5 次，间隔 0.1s），重试耗尽抛出 OSError；`stop()` 方法中 `item.unlink(missing_ok=True)` 替换为 `_rm(item)`
+- `tests/test_services/test_debug_service.py`：新增 `TestRmRetryDelete` 测试类（4 个用例：首次成功、重试后成功、重试耗尽抛 OSError、FileNotFoundError 不重试）
+
+## 2026-07-03: Windows Edge 安装检测 (Task 7.6)
+
+- pp/utils/browser_registry.py：新增 _edge_path() 函数，检查 PROGRAMFILES(X86) 和 PROGRAMFILES 下 msedge.exe 是否存在；_detect_edge() Windows 分支从盲定 installed = True 改为调用 _edge_path() 进行实际文件存在性校验
+- 	ests/test_utils/test_browser_registry.py：新增 4 个测试（_edge_path 优先返回 x86 路径、路径不存在返回 None、Windows 有 Edge 时 installed=True、Windows 无 Edge 时 installed=False）
+
+## 2026-07-03: CompositeCancelEvent 死锁修复 (Task 2: CR-03)
+
+- `app/utils/cancel_token.py`：`is_set()` 方法中将 `super().set()` 移到 `self._lock` 的 with 块之外，用 `should_set` 标志记录结果，消除 `is_set()` 持有 `_lock` 时调用 `super().set()` 获取 `_cond` 与 `wait()` 持有 `_cond` 时调用 `is_set()` 获取 `_lock` 的锁顺序颠倒死锁
+- `tests/test_utils/test_cancel_token.py`：新增 `test_no_deadlock_wait_concurrent_with_is_set` 测试（4 线程并发调用 `wait(timeout=0.5)` 和 `is_set()` 各 100 次，10 秒超时判定死锁）
+
+## 2026-07-03: LoginHandle.result() 捕获 CancelledError (Task 3: CR-04)
+
+- `app/services/login_orchestrator.py`：导入 `CancelledError`，`LoginHandle.result()` 中 `self.future.result()` 调用包裹在 try/except 块中，捕获 `CancelledError` 并返回 `(False, "登录已取消")`
+- `tests/test_services/test_login_orchestrator.py`：新增 `test_result_returns_cancelled_when_future_cancelled` 测试验证 Future 被取消时返回正确结果
+
+## 2026-07-03: stop_web_services 跨事件循环 await Task 修复 (Task 4: CR-02)
+
+- `app/container.py`：`stop_web_services()` 中 await `_ws_drain_task` 前检查 `task.get_loop() is asyncio.get_running_loop()`，不同循环时跳过 await 仅置空引用，避免 Python 3.12+ 跨循环 await 抛 RuntimeError
+- `tests/test_config/test_container.py`：新增 `test_shutdown_handles_cross_loop_ws_drain_task` 测试（独立线程创建事件循环和 task，从当前循环调用 shutdown 验证无 RuntimeError）

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import tomllib
 from pathlib import Path
 
@@ -22,11 +23,16 @@ def get_project_version(project_root: Path | None = None) -> str:
         return "unknown"
 
 
+def _parse_version_segment(seg: str) -> int:
+    """解析版本号片段，去掉预发布后缀（如 3-beta1 → 3）。"""
+    return int(re.split(r"[-+]", seg, maxsplit=1)[0])
+
+
 def compare_versions(a: str, b: str) -> int:
     """比较语义版本号，a > b 返回 1，a < b 返回 -1，相等时返回 0"""
     try:
-        va = [int(x) for x in a.split(".")]
-        vb = [int(x) for x in b.split(".")]
+        va = [_parse_version_segment(x) for x in a.split(".")]
+        vb = [_parse_version_segment(x) for x in b.split(".")]
         # 补齐较短版本号的缺失段为 0
         max_len = max(len(va), len(vb))
         va.extend([0] * (max_len - len(va)))

@@ -7,22 +7,18 @@ test_playwright_bootstrap.py、test_playwright_worker.py。
 
 from __future__ import annotations
 
+import contextlib
 import os
-import subprocess
+
 import threading
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.ui.system_tray import SystemTray
+from app.system_tray import SystemTray
 from app.utils.browser import STEALTH_INIT_SCRIPT, BrowserContextManager
 from app.utils.exceptions import LoginCancelledError
-from app.utils.notify import (
-    _notify_linux,
-    _notify_macos,
-    _notify_windows,
-)
 from app.workers.playwright_bootstrap import (
     _candidate_hosts,
     _has_chromium,
@@ -43,105 +39,6 @@ from app.workers.playwright_worker import (
     WorkerCommand,
     WorkerResponse,
 )
-
-# ─────────────────────────────────────────────────────────────────────
-#  桌面通知 (src/utils/notify.py)
-# ─────────────────────────────────────────────────────────────────────
-
-
-class TestNotifyWindows:
-    @patch("app.utils.notify.subprocess.run")
-    def test_powershell_success(self, mock_run):
-        mock_run.return_value = MagicMock(returncode=0)
-        result = _notify_windows("标题", "消息", 5000)
-        assert result is True
-        mock_run.assert_called_once()
-
-    @patch("app.utils.notify.subprocess.run")
-    def test_powershell_failure_msg_fallback(self, mock_run):
-        mock_run.side_effect = [
-            MagicMock(returncode=1),
-            MagicMock(returncode=0),
-        ]
-        result = _notify_windows("标题", "消息", 5000)
-        assert result is True
-        assert mock_run.call_count == 2
-
-    @patch("app.utils.notify.subprocess.run")
-    def test_both_fail(self, mock_run):
-        mock_run.side_effect = [
-            MagicMock(returncode=1),
-            FileNotFoundError(),
-        ]
-        result = _notify_windows("标题", "消息", 5000)
-        assert result is False
-
-    @patch("app.utils.notify.subprocess.run")
-    def test_special_characters(self, mock_run):
-        mock_run.return_value = MagicMock(returncode=0)
-        result = _notify_windows('标题`${"}$', '消息`${"}$', 5000)
-        assert result is True
-
-    @patch("app.utils.notify.subprocess.run")
-    def test_powershell_timeout(self, mock_run):
-        mock_run.side_effect = [
-            subprocess.TimeoutExpired("powershell", 10),
-            MagicMock(returncode=0),
-        ]
-        result = _notify_windows("标题", "消息", 5000)
-        assert result is True
-
-
-class TestNotifyMacos:
-    @patch("app.utils.notify.subprocess.run")
-    def test_success(self, mock_run):
-        mock_run.return_value = MagicMock(returncode=0)
-        result = _notify_macos("标题", "消息")
-        assert result is True
-
-    @patch("app.utils.notify.subprocess.run")
-    def test_failure(self, mock_run):
-        mock_run.return_value = MagicMock(returncode=1)
-        result = _notify_macos("标题", "消息")
-        assert result is False
-
-    @patch("app.utils.notify.subprocess.run")
-    def test_special_characters(self, mock_run):
-        mock_run.return_value = MagicMock(returncode=0)
-        result = _notify_macos('标题"\\', '消息"\\')
-        assert result is True
-        call_args = mock_run.call_args
-        script = call_args[0][0][2]
-        assert '\\"' in script
-
-
-class TestNotifyLinux:
-    @patch("app.utils.notify.shutil.which", return_value="/usr/bin/notify-send")
-    @patch("app.utils.notify.subprocess.run")
-    def test_success(self, mock_run, mock_which):
-        mock_run.return_value = MagicMock(returncode=0)
-        result = _notify_linux("标题", "消息", 5000)
-        assert result is True
-
-    @patch("app.utils.notify.shutil.which", return_value=None)
-    def test_no_notify_send(self, mock_which):
-        result = _notify_linux("标题", "消息", 5000)
-        assert result is False
-
-    @patch("app.utils.notify.shutil.which", return_value="/usr/bin/notify-send")
-    @patch("app.utils.notify.subprocess.run")
-    def test_failure(self, mock_run, mock_which):
-        mock_run.return_value = MagicMock(returncode=1)
-        result = _notify_linux("标题", "消息", 5000)
-        assert result is False
-
-    @patch("app.utils.notify.shutil.which", return_value="/usr/bin/notify-send")
-    @patch("app.utils.notify.subprocess.run")
-    def test_duration_conversion(self, mock_run, mock_which):
-        mock_run.return_value = MagicMock(returncode=0)
-        _notify_linux("标题", "消息", 5000)
-        call_args = mock_run.call_args[0][0]
-        assert "5000" in call_args
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -176,7 +73,6 @@ class TestBrowserContextManager:
         assert ctx.config == config
         assert ctx.browser_settings == {"headless": True}
         assert ctx.cancel_event is None
-        assert ctx._worker_managed is False
 
     def test_init_with_cancel_event(self):
         event = threading.Event()
@@ -260,10 +156,9 @@ class TestSystemTrayMethods:
 
     def test_create_menu_returns_menu(self):
         tray = SystemTray()
-        # 延迟导入：需要先初始化 _pystray
-        import pystray
-
-        tray._pystray = pystray
+        mock_pystray = MagicMock()
+        mock_pystray.Menu.return_value = MagicMock()
+        tray._pystray = mock_pystray
         menu = tray._create_menu()
         assert menu is not None
 
@@ -279,16 +174,16 @@ class TestSystemTrayMethods:
         tray = SystemTray(on_exit=callback)
         tray.icon = MagicMock()
         tray._quit(None, None)
-        callback.assert_called_once()
+        assert tray._exit_event.is_set()
 
     def test_quit_without_icon(self):
         tray = SystemTray()
         callback = MagicMock()
         tray.on_exit = callback
         tray._quit(None, None)
-        callback.assert_called_once()
+        assert tray._exit_event.is_set()
 
-    @patch("app.ui.system_tray.threading.Thread")
+    @patch("app.system_tray.threading.Thread")
     def test_start(self, mock_thread_cls):
         mock_thread = MagicMock()
         mock_thread_cls.return_value = mock_thread
@@ -306,7 +201,7 @@ class TestSystemTrayMethods:
         mock_thread_cls.assert_called_once()
         mock_thread.start.assert_called_once()
 
-    @patch("app.ui.system_tray.threading.Thread")
+    @patch("app.system_tray.threading.Thread")
     def test_start_already_running(self, mock_thread_cls):
         tray = SystemTray()
         mock_thread = MagicMock()
@@ -446,7 +341,10 @@ class TestEnsurePlaywrightReady:
         pb._BOOTSTRAP_DONE = True
         assert ensure_playwright_ready() is True
 
-    @patch("app.workers.playwright_bootstrap._get_browser_channel", return_value="playwright")
+    @patch(
+        "app.workers.playwright_bootstrap._get_browser_channel",
+        return_value="playwright",
+    )
     @patch("app.workers.playwright_bootstrap._has_chromium", return_value=False)
     @patch("app.workers.playwright_bootstrap._is_enabled", return_value=True)
     def test_no_playwright_package(self, mock_enabled, mock_chromium, mock_channel):
@@ -581,6 +479,7 @@ class TestCleanupOrphanBrowsers:
             "exe": "C:/ms-playwright/chromium-1234/chrome.exe",
             "cmdline": ["chrome.exe", "--headless"],
         }
+        mock_proc.parent.return_value = None  # 孤儿进程，无父进程
 
         with patch("psutil.process_iter", return_value=[mock_proc]):
             cleanup_orphan_browsers()
@@ -662,7 +561,6 @@ class TestBrowserContextManagerInit:
         assert mgr.browser is None
         assert mgr.context is None
         assert mgr.page is None
-        assert mgr._worker_managed is False
 
     def test_empty_config(self):
         """空配置。"""
@@ -714,7 +612,7 @@ class TestBrowserContextManagerAexit:
 
     @pytest.mark.asyncio
     async def test_logs_exception(self):
-        """异常被记录。"""
+        """异常不在此处记录（由调用方记录），__aexit__ 返回 False 让异常传播。"""
         mgr = BrowserContextManager({})
         mgr.logger = MagicMock()
 
@@ -722,8 +620,9 @@ class TestBrowserContextManagerAexit:
         with patch(
             "app.workers.playwright_worker.get_worker", return_value=mock_worker
         ):
-            await mgr.__aexit__(ValueError, ValueError("test error"), None)
-            mgr.logger.error.assert_called()
+            result = await mgr.__aexit__(ValueError, ValueError("test error"), None)
+            assert result is False  # 异常传播，由调用方记录
+            mgr.logger.error.assert_not_called()
 
 
 # ── SystemTray 详细测试 ──
@@ -763,7 +662,7 @@ class TestLoadIcon:
         fake_path.exists.return_value = True
         fake_path.as_uri.return_value = "file:///fake/icon.svg"
 
-        with patch("app.ui.system_tray.Path") as mock_path_cls:
+        with patch("app.system_tray.Path") as mock_path_cls:
             mock_path_cls.return_value.parent.parent.parent.__truediv__ = MagicMock(
                 return_value=fake_path
             )
@@ -794,8 +693,6 @@ class TestCreateMenu:
 
     def test_menu_created(self):
         """菜单创建成功。"""
-        import pystray
-
         mock_menu_instance = MagicMock()
         mock_pystray = MagicMock()
         mock_pystray.Menu.return_value = mock_menu_instance
@@ -814,7 +711,7 @@ class TestQuit:
     """_quit。"""
 
     def test_quit_with_icon_and_callback(self):
-        """有 icon 和 on_exit 时两者都被调用。"""
+        """有 icon 和 on_exit 时 icon 被停止且退出事件被设置。"""
         on_exit = MagicMock()
         tray = SystemTray(on_exit=on_exit)
         tray.icon = MagicMock()
@@ -822,17 +719,17 @@ class TestQuit:
         tray._quit(tray.icon, None)
 
         tray.icon.stop.assert_called_once()
-        on_exit.assert_called_once()
+        assert tray._exit_event.is_set()
 
     def test_quit_without_icon(self):
-        """无 icon 时仅调用 on_exit。"""
+        """无 icon 时仅设置退出事件。"""
         on_exit = MagicMock()
         tray = SystemTray(on_exit=on_exit)
         tray.icon = None
 
         tray._quit(None, None)
 
-        on_exit.assert_called_once()
+        assert tray._exit_event.is_set()
 
     def test_quit_without_callback(self):
         """无 on_exit 时仅调用 icon.stop。"""
@@ -1263,27 +1160,31 @@ class TestIsNormalCloseError:
 
     def test_target_closed(self):
         """'target closed' 被识别为正常关闭。"""
-        assert PlaywrightWorker._is_normal_close_error(
-            RuntimeError("Target closed")
-        ) is True
+        assert (
+            PlaywrightWorker._is_normal_close_error(RuntimeError("Target closed"))
+            is True
+        )
 
     def test_connection_closed(self):
         """'connection closed' 被识别为正常关闭。"""
-        assert PlaywrightWorker._is_normal_close_error(
-            RuntimeError("Connection closed")
-        ) is True
+        assert (
+            PlaywrightWorker._is_normal_close_error(RuntimeError("Connection closed"))
+            is True
+        )
 
     def test_other_error(self):
         """其他错误不被视为正常关闭。"""
-        assert PlaywrightWorker._is_normal_close_error(
-            RuntimeError("Some other error")
-        ) is False
+        assert (
+            PlaywrightWorker._is_normal_close_error(RuntimeError("Some other error"))
+            is False
+        )
 
     def test_case_insensitive(self):
         """匹配不区分大小写。"""
-        assert PlaywrightWorker._is_normal_close_error(
-            RuntimeError("TARGET CLOSED")
-        ) is True
+        assert (
+            PlaywrightWorker._is_normal_close_error(RuntimeError("TARGET CLOSED"))
+            is True
+        )
 
 
 # ── PlaywrightWorker._handle_low_resource_request ──
@@ -1358,27 +1259,33 @@ class TestHandleLowResourceRequest:
         await worker._handle_low_resource_request(mock_route)
 
 
-# ── PlaywrightWorker._wake_async ──
+# ── PlaywrightWorker._cmd_queue 类型 ──
 
 
-class TestWakeAsync:
-    """唤醒事件循环。"""
+class TestCmdQueueType:
+    """_cmd_queue 应为 asyncio.Queue。"""
 
-    @pytest.mark.asyncio
-    async def test_sets_wake_event(self):
-        """设置 _wake_event。"""
+    def test_cmd_queue_is_asyncio_queue(self):
+        """_cmd_queue 应为 asyncio.Queue 实例。"""
+        import asyncio
+
         worker = PlaywrightWorker()
-        event = MagicMock()
-        worker._wake_event = event
-        await worker._wake_async()
-        event.set.assert_called_once()
+        assert isinstance(worker._cmd_queue, asyncio.Queue)
 
-    @pytest.mark.asyncio
-    async def test_no_wake_event(self):
-        """无 _wake_event 时不报错。"""
+    def test_cmd_queue_maxsize_50(self):
+        """队列容量 50。"""
         worker = PlaywrightWorker()
-        worker._wake_event = None
-        await worker._wake_async()  # 不应抛异常
+        assert worker._cmd_queue.maxsize == 50
+
+    def test_no_wake_event_attribute(self):
+        """_wake_event 字段应已移除。"""
+        worker = PlaywrightWorker()
+        assert not hasattr(worker, "_wake_event")
+
+    def test_no_wake_async_method(self):
+        """_wake_async 方法应已移除。"""
+        worker = PlaywrightWorker()
+        assert not hasattr(worker, "_wake_async")
 
 
 # ── PlaywrightWorker 属性访问 ──
@@ -1423,7 +1330,9 @@ class TestCloseResource:
         mock_resource = MagicMock()
         mock_resource.is_closed.return_value = False
         mock_resource.close = AsyncMock()
-        await worker._close_resource(mock_resource, "page", graceful=True, has_check="is_closed")
+        await worker._close_resource(
+            mock_resource, "page", graceful=True, has_check="is_closed"
+        )
         mock_resource.close.assert_awaited_once()
 
     @pytest.mark.asyncio
@@ -1433,7 +1342,9 @@ class TestCloseResource:
         mock_resource = MagicMock()
         mock_resource.is_closed.return_value = True
         mock_resource.close = AsyncMock()
-        await worker._close_resource(mock_resource, "page", graceful=True, has_check="is_closed")
+        await worker._close_resource(
+            mock_resource, "page", graceful=True, has_check="is_closed"
+        )
         mock_resource.close.assert_not_awaited()
 
     @pytest.mark.asyncio
@@ -1510,7 +1421,9 @@ class TestDispatch:
         worker = PlaywrightWorker()
         event = threading.Event()
         cmd = WorkerCommand(type=CMD_LOGIN, response_event=event)
-        with patch.object(worker, "_handle_login", new=AsyncMock(side_effect=RuntimeError("boom"))):
+        with patch.object(
+            worker, "_handle_login", new=AsyncMock(side_effect=RuntimeError("boom"))
+        ):
             await worker._dispatch(cmd)
         assert cmd.response_data.success is False
         assert "boom" in cmd.response_data.error
@@ -1523,13 +1436,70 @@ class TestSubmitQueueFull:
     """submit 队列满时的行为。"""
 
     def test_queue_full_returns_error(self):
-        """队列满时返回错误。"""
+        """队列满时返回错误（call_soon_threadsafe 内部 put_nowait 抛 QueueFull，被吞，调用方靠超时返回）。"""
+        import asyncio
+
         worker = PlaywrightWorker()
         worker._consumer_thread = MagicMock()
         worker._consumer_thread.is_alive.return_value = True
         worker._stop_event.clear()
+        fake_loop = MagicMock()
+        fake_loop.is_running.return_value = True
 
-        with patch.object(worker._cmd_queue, "put", side_effect=__import__("queue").Full):
+        # 模拟 call_soon_threadsafe 内部 put_nowait 抛 QueueFull
+        def fake_call_soon(fn, *args):
+            with contextlib.suppress(asyncio.QueueFull):
+                fn(*args)
+
+        fake_loop.call_soon_threadsafe.side_effect = fake_call_soon
+        worker._loop = fake_loop
+
+        with patch.object(
+            worker._cmd_queue, "put_nowait", side_effect=asyncio.QueueFull
+        ):
+            result = worker.submit("test_cmd", wait=True, timeout=0.1)
+        # QueueFull 被吞 → response_event 未 set → wait 超时返回错误
+        assert result.success is False
+
+    def test_queue_full_wait_false_returns_success(self):
+        """队列满 + wait=False → call_soon_threadsafe 吞 QueueFull，返回 success=True（已接受的 trade-off）。"""
+        import asyncio
+
+        worker = PlaywrightWorker()
+        worker._consumer_thread = MagicMock()
+        worker._consumer_thread.is_alive.return_value = True
+        worker._stop_event.clear()
+        fake_loop = MagicMock()
+        fake_loop.is_running.return_value = True
+
+        # 模拟真实行为：call_soon_threadsafe 不传播回调中的 QueueFull
+        def fake_call_soon(fn, *args):
+            with contextlib.suppress(asyncio.QueueFull):
+                fn(*args)
+
+        fake_loop.call_soon_threadsafe.side_effect = fake_call_soon
+        worker._loop = fake_loop
+
+        with patch.object(
+            worker._cmd_queue, "put_nowait", side_effect=asyncio.QueueFull
+        ):
+            result = worker.submit("test_cmd", wait=False)
+        # call_soon_threadsafe 吞掉 QueueFull → submit 无法同步获知，返回 success=True
+        assert result.success is True
+
+    def test_queue_full_when_loop_none(self):
+        """loop 为 None 时直接 put_nowait，QueueFull 同步捕获。"""
+        import asyncio
+
+        worker = PlaywrightWorker()
+        worker._consumer_thread = MagicMock()
+        worker._consumer_thread.is_alive.return_value = True
+        worker._stop_event.clear()
+        worker._loop = None
+
+        with patch.object(
+            worker._cmd_queue, "put_nowait", side_effect=asyncio.QueueFull
+        ):
             result = worker.submit("test_cmd", wait=False)
         assert result.success is False
         assert "队列已满" in result.error
@@ -1547,16 +1517,14 @@ class TestSubmitTimeout:
         worker._consumer_thread = MagicMock()
         worker._consumer_thread.is_alive.return_value = True
         worker._stop_event.clear()
+        fake_loop = MagicMock()
+        fake_loop.is_running.return_value = True
+        fake_loop.call_soon_threadsafe.side_effect = lambda fn, *args: fn(*args)
+        worker._loop = fake_loop
 
-        cmd = None
-
-        def capture_cmd(cmd_obj, timeout=None):
-            nonlocal cmd
-            cmd = cmd_obj
-
-        with patch.object(worker._cmd_queue, "put"):
-            with patch.object(worker, "_loop", None):
-                result = worker.submit("test_cmd", wait=True, timeout=0.01)
+        # put_nowait 成功，但 response_event 不被 set → 超时
+        with patch.object(worker._cmd_queue, "put_nowait"):
+            result = worker.submit("test_cmd", wait=True, timeout=0.01)
 
         assert result.success is False
         assert "超时" in result.error or "无响应" in result.error
@@ -1575,15 +1543,19 @@ class TestSubmitResponseData:
         worker._consumer_thread.is_alive.return_value = True
         worker._stop_event.clear()
 
-        # 模拟 put 后直接设置 response_data
-        def fake_put(cmd, timeout=None):
+        # 模拟 put_nowait 后直接设置 response_data
+        def fake_put_nowait(cmd):
             cmd.response_data = WorkerResponse(success=True, data="result")
             if cmd.response_event:
                 cmd.response_event.set()
 
-        with patch.object(worker._cmd_queue, "put", side_effect=fake_put):
-            with patch.object(worker, "_loop", None):
-                result = worker.submit("test_cmd", wait=True)
+        fake_loop = MagicMock()
+        fake_loop.is_running.return_value = True
+        fake_loop.call_soon_threadsafe.side_effect = lambda fn, *args: fn(*args)
+        worker._loop = fake_loop
+
+        with patch.object(worker._cmd_queue, "put_nowait", side_effect=fake_put_nowait):
+            result = worker.submit("test_cmd", wait=True)
 
         assert result.success is True
         assert result.data == "result"
@@ -1595,31 +1567,21 @@ class TestSubmitResponseData:
         worker._consumer_thread.is_alive.return_value = True
         worker._stop_event.clear()
 
-        def fake_put(cmd, timeout=None):
+        def fake_put_nowait(cmd):
             cmd.response_data = "plain_value"
             if cmd.response_event:
                 cmd.response_event.set()
 
-        with patch.object(worker._cmd_queue, "put", side_effect=fake_put):
-            with patch.object(worker, "_loop", None):
-                result = worker.submit("test_cmd", wait=True)
+        fake_loop = MagicMock()
+        fake_loop.is_running.return_value = True
+        fake_loop.call_soon_threadsafe.side_effect = lambda fn, *args: fn(*args)
+        worker._loop = fake_loop
+
+        with patch.object(worker._cmd_queue, "put_nowait", side_effect=fake_put_nowait):
+            result = worker.submit("test_cmd", wait=True)
 
         assert result.success is True
         assert result.data == "plain_value"
-
-
-# ── PlaywrightWorker.submit_nowait ──
-
-
-class TestSubmitNowait:
-    """submit_nowait 方法。"""
-
-    def test_puts_command_in_queue(self):
-        """命令被放入队列。"""
-        worker = PlaywrightWorker()
-        worker.submit_nowait(CMD_SHUTDOWN)
-        cmd = worker._cmd_queue.get_nowait()
-        assert cmd.type == CMD_SHUTDOWN
 
 
 # ── PlaywrightWorker._cleanup_browser ──

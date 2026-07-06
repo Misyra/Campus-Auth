@@ -4,12 +4,12 @@
   PlaywrightWorker 采用与 MonitorService 相同的 Actor 模型:
     - 外部调用者通过 submit() 提交 WorkerCommand 到内部队列
     - 常驻守护线程运行独立 asyncio 事件循环
-    - _async_run() 协程轮询队列并派发命令
+    - _async_run() 协程从队列取命令并派发
     - 所有 Playwright 操作限制在 Worker 线程内执行，避免跨线程竞争
 
 命令派发流程:
-  submit() → queue.put(cmd) → run_coroutine_threadsafe(_wake_async())
-  → _async_run() 被唤醒 → get_nowait() 取出命令 → _dispatch() → handler
+  submit() → asyncio.Queue.put_nowait(cmd) → await get() 唤醒
+  → _async_run() 取出命令 → _dispatch() → handler
 
 NOT-TO-DO: 不要拆分此文件。Worker 是浏览器自动化核心，生命周期紧密
 （启动、命令分发、清理），拆分收益不大反而增加复杂度。
@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import queue
 import threading
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -29,8 +28,8 @@ if TYPE_CHECKING:
     from playwright.async_api import Route
 
 from app.constants import (
+    BROWSER_DATA_DIR,
     WORKER_JOIN_TIMEOUT,
-    WORKER_QUEUE_PUT_TIMEOUT,
     WORKER_READY_TIMEOUT,
     WORKER_SUBMIT_TIMEOUT,
 )
@@ -95,7 +94,7 @@ class PlaywrightWorker:
     """
 
     def __init__(self) -> None:
-        self._cmd_queue: queue.Queue[WorkerCommand] = queue.Queue(maxsize=50)
+        self._cmd_queue: asyncio.Queue[WorkerCommand] = asyncio.Queue(maxsize=50)
         self._stop_event = threading.Event()
         self._shutdown_permanent = (
             threading.Event()
@@ -112,12 +111,9 @@ class PlaywrightWorker:
         self._page: Any = None
         self._debug_page: Any = None
         self._debug_executor: Any = (
-            None  # TaskExecutor 实例，调试步骤执行时在 Worker 线程内使用
+            None  # BrowserTaskRunner 实例，调试步骤执行时在 Worker 线程内使用
         )
         self._last_browser_settings: dict | None = None  # 缓存最近一次浏览器设置
-
-        # _wake_event 用于立即唤醒 _async_run 协程处理新命令
-        self._wake_event: asyncio.Event | None = None
 
     # ── 只读属性（供同线程调用者访问，如 BrowserContextManager）──
 
@@ -171,9 +167,9 @@ class PlaywrightWorker:
         # 等待事件循环就绪（最多 5 秒）
         self._worker_ready.wait(timeout=WORKER_READY_TIMEOUT)
         if not self._worker_ready.is_set():
-            logger.warning(
-                "PlaywrightWorker 事件循环启动超时 ({}s)", WORKER_READY_TIMEOUT
-            )
+            logger.warning("Worker 启动失败: 事件循环超时 ({}s)", WORKER_READY_TIMEOUT)
+        else:
+            logger.info("Worker 启动成功")
 
     def stop(self, timeout: float = 5) -> None:
         """发送关闭信号并等待线程结束。
@@ -188,29 +184,37 @@ class PlaywrightWorker:
         self._shutdown_permanent.set()
 
         # 放入 SHUTDOWN 命令确保事件循环能正常退出
-        try:
-            self._cmd_queue.put_nowait(WorkerCommand(type=CMD_SHUTDOWN))
-        except queue.Full:
-            logger.warning(
-                "命令队列已满 (maxsize={})，强制停止 Worker", self._cmd_queue.maxsize
-            )
-            if self._loop is not None and self._loop.is_running():
-                self._loop.call_soon_threadsafe(self._loop.stop)
-            return
-
-        # 通过 run_coroutine_threadsafe 唤醒 Worker 的事件循环
-        # 这是唯一允许的跨线程 asyncio 调用
         loop = self._loop
-        if loop is not None:
-            with contextlib.suppress(RuntimeError):
-                asyncio.run_coroutine_threadsafe(self._wake_async(), loop)
+        shutdown_cmd = WorkerCommand(type=CMD_SHUTDOWN)
+        if loop is not None and loop.is_running():
+
+            def _put_shutdown():
+                try:
+                    self._cmd_queue.put_nowait(shutdown_cmd)
+                except asyncio.QueueFull:
+                    logger.warning("Worker 命令队列已满，强制停止事件循环")
+                    with contextlib.suppress(RuntimeError):
+                        loop.call_soon_threadsafe(loop.stop)
+
+            try:
+                loop.call_soon_threadsafe(_put_shutdown)
+            except RuntimeError:
+                logger.warning("loop 已关闭，无法入队 SHUTDOWN 命令")
+        else:
+            try:
+                self._cmd_queue.put_nowait(shutdown_cmd)
+            except asyncio.QueueFull:
+                logger.warning("Worker 命令队列已满，强制停止事件循环")
+                if loop is not None:
+                    with contextlib.suppress(RuntimeError):
+                        loop.call_soon_threadsafe(loop.stop)
 
         # 等待消费者线程正常退出
         if self._consumer_thread:
             self._consumer_thread.join(timeout=timeout)
             # 超时后强制停止事件循环
             if self._consumer_thread.is_alive():
-                logger.warning("Worker 线程未在 {}s 内退出，强制停止", timeout)
+                logger.warning("Worker 线程退出超时 ({}s)，强制停止", timeout)
                 loop = self._loop
                 if loop is not None:
                     loop.call_soon_threadsafe(loop.stop)
@@ -220,7 +224,7 @@ class PlaywrightWorker:
         while True:
             try:
                 pending = self._cmd_queue.get_nowait()
-            except queue.Empty:
+            except asyncio.QueueEmpty:
                 break
             if pending.response_event is not None:
                 pending.response_data = WorkerResponse(
@@ -241,8 +245,8 @@ class PlaywrightWorker:
     ) -> WorkerResponse:
         """提交命令到 Worker 队列。
 
-        创建 WorkerCommand 放入内部队列，通过 run_coroutine_threadsafe
-        唤醒 Worker 的事件循环。若 wait=True 则阻塞等待命令执行完成。
+        创建 WorkerCommand 放入内部 asyncio.Queue。
+        若 wait=True 则阻塞等待命令执行完成。
 
         参数:
             cmd_type: 命令类型（CMD_* 常量）
@@ -266,11 +270,11 @@ class PlaywrightWorker:
                     and not self._stop_event.is_set()
                     and not self._shutdown_permanent.is_set()
                 ):
-                    logger.warning("检测到消费者线程已死亡，尝试重启")
+                    logger.warning("Worker 消费者线程已死亡，尝试重启")
                     try:
                         self.start()
-                    except Exception:
-                        logger.exception("重启消费者线程失败")
+                    except Exception as e:
+                        logger.exception("重启消费者线程异常: {}", e)
                         return WorkerResponse(
                             success=False, error="消费者线程已死亡且重启失败"
                         )
@@ -280,17 +284,24 @@ class PlaywrightWorker:
             data=data or {},
             response_event=threading.Event() if wait else None,
         )
-        try:
-            self._cmd_queue.put(cmd, timeout=WORKER_QUEUE_PUT_TIMEOUT)
-        except queue.Full:
-            return WorkerResponse(success=False, error="命令队列已满，提交超时")
-
-        # 通过 run_coroutine_threadsafe 唤醒 Worker 的事件循环，
-        # 使 _async_run 立即处理新放入的命令
         loop = self._loop
-        if loop is not None:
-            with contextlib.suppress(RuntimeError):
-                asyncio.run_coroutine_threadsafe(self._wake_async(), loop)
+        if loop is not None and loop.is_running():
+            # QueueFull 在 loop 线程内被吞，wait=True 靠 response_event.wait(timeout) 超时返回
+            # wait=False 无法同步获知队列满，但 maxsize=50 几乎不会满
+            try:
+                loop.call_soon_threadsafe(self._cmd_queue.put_nowait, cmd)
+            except RuntimeError:
+                # loop 关闭瞬间，回退直接 put_nowait
+                try:
+                    self._cmd_queue.put_nowait(cmd)
+                except asyncio.QueueFull:
+                    return WorkerResponse(success=False, error="命令队列已满，提交超时")
+        else:
+            # loop 未运行，直接 put_nowait（同步方法，无需 loop）
+            try:
+                self._cmd_queue.put_nowait(cmd)
+            except asyncio.QueueFull:
+                return WorkerResponse(success=False, error="命令队列已满，提交超时")
 
         if not wait:
             return WorkerResponse(success=True)
@@ -304,20 +315,6 @@ class PlaywrightWorker:
         if isinstance(cmd.response_data, WorkerResponse):
             return cmd.response_data
         return WorkerResponse(success=True, data=cmd.response_data)
-
-    def submit_nowait(self, cmd_type: str, data: dict | None = None) -> None:
-        """提交命令但不等待响应（fire-and-forget）。"""
-        try:
-            self._cmd_queue.put_nowait(WorkerCommand(type=cmd_type, data=data or {}))
-        except queue.Full:
-            logger.warning("submit_nowait 队列已满 (maxsize={})，丢弃命令 {}", self._cmd_queue.maxsize, cmd_type)
-            return
-
-        # 唤醒 Worker 事件循环处理新命令
-        loop = self._loop
-        if loop is not None:
-            with contextlib.suppress(RuntimeError):
-                asyncio.run_coroutine_threadsafe(self._wake_async(), loop)
 
     # ── Worker 线程入口 ──
 
@@ -342,49 +339,32 @@ class PlaywrightWorker:
             if not loop.is_closed():
                 try:
                     loop.run_until_complete(self._force_cleanup())
-                except Exception:
-                    logger.exception("Worker 清理时出现异常")
+                except Exception as e:
+                    logger.exception("Worker 清理异常: {}", e)
                 try:
                     loop.close()
                 except Exception:
-                    logger.debug("关闭事件循环失败", exc_info=True)
+                    logger.warning("关闭事件循环失败", exc_info=True)
             self._loop = None
-            logger.info("PlaywrightWorker 事件循环已关闭")
+            logger.info("Worker 事件循环已关闭")
 
     async def _async_run(self) -> None:
-        """异步主循环 — 从队列获取命令并派发。
+        """异步主循环 — 从 asyncio.Queue 获取命令并派发。
 
-        使用 asyncio.Event 实现高效唤醒:
-        - 空闲时 await wake_event.wait() 等待信号
-        - submit() 通过 run_coroutine_threadsafe 设置 wake_event
-        - 同时使用 0.5s 超时兜底，防止漏掉信号
-        - 收到 CMD_SHUTDOWN 后退出循环，触发事件循环停止
+        使用 asyncio.Queue.get() 原生阻塞，零延迟、零轮询。
+        外部 submit()/stop() 通过 put_nowait(cmd) 直接入队，asyncio.Queue.get() 自动唤醒。
+        收到 CMD_SHUTDOWN 后退出循环，触发事件循环停止。
         """
-        wake_event = asyncio.Event()
-        self._wake_event = wake_event
-
         try:
             while not self._stop_event.is_set():
-                wake_event.clear()
+                cmd = await self._cmd_queue.get()
+                await self._dispatch(cmd)
+                self._cmd_queue.task_done()
 
-                # 排干队列中所有待处理命令
-                while True:
-                    try:
-                        cmd = self._cmd_queue.get_nowait()
-                    except queue.Empty:
-                        break
-
-                    await self._dispatch(cmd)
-                    self._cmd_queue.task_done()
-
-                    # SHUTDOWN 命令：退出主循环
-                    if cmd.type == CMD_SHUTDOWN:
-                        logger.info("Worker 收到关闭命令，退出主循环")
-                        return
-
-                # 等待唤醒信号或超时
-                with contextlib.suppress(TimeoutError):
-                    await asyncio.wait_for(wake_event.wait(), timeout=0.5)
+                # SHUTDOWN 命令：退出主循环
+                if cmd.type == CMD_SHUTDOWN:
+                    logger.debug("Worker 收到关闭命令，退出主循环")
+                    return
         finally:
             # 停止事件循环，使 _worker_entry() 中的 run_forever() 返回
             if self._loop and not self._loop.is_closed():
@@ -439,25 +419,42 @@ class PlaywrightWorker:
     # ── 命令处理函数 ──
 
     async def _handle_login(self, data: dict) -> WorkerResponse:
-        """处理登录命令。
+        """处理登录命令 — 委托给 LoginSession。
 
-        创建 LoginAttemptHandler 执行完整登录流程。
-        LoginAttemptHandler 内部管理浏览器生命周期（创建/关闭）。
+        LoginSession 在单次 Worker 调用内复用浏览器并管理重试循环，
+        所有终态（成功/失败/取消/耗尽）都关闭浏览器。
         """
-        from app.utils.login import LoginAttemptHandler
+        from app.services.login_models import AttemptOutcomeType
+        from app.services.login_session import LoginSession
 
         config = data.get("config", {})
         cancel_event: threading.Event | None = data.get("cancel_event")
 
-        try:
-            handler = LoginAttemptHandler(
-                config=config,
-                cancel_event=cancel_event,
+        if cancel_event is None:
+            # 防御性：Worker 不应收到无 cancel_event 的登录命令
+            logger.error(
+                "登录命令缺少 cancel_event: task_id={}",
+                config.get("task_id", "unknown"),
             )
-            success, message = await handler.attempt_login()
-            return WorkerResponse(success=success, data=message)
+            return WorkerResponse(success=False, error="cancel_event 缺失")
+
+        try:
+            session = LoginSession(config, cancel_event)
+            outcome = await session.run()
+            return WorkerResponse(
+                success=outcome.type == AttemptOutcomeType.SUCCESS,
+                data=outcome.message
+                if outcome.type == AttemptOutcomeType.SUCCESS
+                else None,
+                error=outcome.message
+                if outcome.type != AttemptOutcomeType.SUCCESS
+                else None,
+            )
         except Exception as e:
-            logger.exception("登录执行异常")
+            # 程序异常（Attempt 未捕获的）在此兜底，与现有行为一致
+            logger.exception(
+                "登录执行异常: task_id={}", config.get("task_id", "unknown")
+            )
             return WorkerResponse(success=False, error=str(e))
 
     async def _cleanup_debug_session(self):
@@ -468,8 +465,9 @@ class PlaywrightWorker:
                 if not self._debug_page.is_closed():
                     await self._debug_page.close()
             except Exception as e:
-                logger.warning("关闭旧调试页面异常: {}", e)
+                logger.warning("关闭旧调试页面失败: {}", e)
             self._debug_page = None
+        self._page = None
 
     async def _handle_debug_start(self, data: dict) -> WorkerResponse:
         """启动调试会话。
@@ -477,11 +475,14 @@ class PlaywrightWorker:
         在 Worker 线程内管理浏览器生命周期：
         1. 健康检查 → 不健康则重建浏览器
         2. 导航到任务 URL
-        3. 创建 TaskExecutor（线程安全 — 所有 Playwright 操作在 Worker 线程内执行）
+        3. 创建 BrowserTaskRunner（线程安全 — 所有 Playwright 操作在 Worker 线程内执行）
         4. 初始截图并返回 URL
+
+        注意：_debug_page 与 _page 共享同一 page 对象引用（别名），
+        调试会话结束后 _cleanup_debug_session 会将 _debug_page 置 None。
         """
         from app.constants import DEFAULT_STEP_TIMEOUT_MS
-        from app.tasks import TaskConfig, TaskExecutor
+        from app.tasks import BrowserTaskRunner, TaskConfig
 
         config = data.get("config", {})
         task_url = data.get("task_url", "")
@@ -490,12 +491,12 @@ class PlaywrightWorker:
         screenshot_dir = data.get("screenshot_dir", "")
         default_timeout = data.get("default_timeout", DEFAULT_STEP_TIMEOUT_MS)
         navigation_timeout = data.get(
-            "navigation_timeout", TaskExecutor.DEFAULT_NAVIGATION_TIMEOUT
+            "navigation_timeout", BrowserTaskRunner.DEFAULT_NAVIGATION_TIMEOUT
         )
 
         # 守卫：若已有调试会话，先清理
         if self._debug_page is not None:
-            logger.info("检测到残留调试会话，自动清理")
+            logger.debug("检测到残留调试会话，自动清理")
             await self._cleanup_debug_session()
 
         # 检查浏览器健康状态，不健康则重建
@@ -503,10 +504,23 @@ class PlaywrightWorker:
             await self._close_browser()
             await self._start_browser(config)
 
-        if self._page is None:
-            return WorkerResponse(success=False, error="浏览器页面初始化失败")
+        if self._page is None or self._page.is_closed():
+            if self._context is None:
+                return WorkerResponse(success=False, error="浏览器页面初始化失败")
+            try:
+                self._page = await self._context.new_page()
+            except Exception as e:
+                logger.warning(
+                    "调试页面重建失败 (task_id={}): {}",
+                    task_data.get("task_id", "unknown")
+                    if isinstance(task_data, dict)
+                    else "unknown",
+                    e,
+                )
+                return WorkerResponse(success=False, error=f"浏览器页面初始化失败: {e}")
 
-        # 保存调试页面引用
+        # _debug_page 是当前调试会话的页面；_page 保持为普通任务页面，二者不应混用
+        # 此处共享同一底层 page 对象引用，调试会话结束后由 _cleanup_debug_session 置 None
         self._debug_page = self._page
         self._debug_executor = None
 
@@ -517,14 +531,20 @@ class PlaywrightWorker:
                     task_url, wait_until="domcontentloaded", timeout=navigation_timeout
                 )
             except Exception as e:
-                logger.warning("调试页面加载失败: {}", e)
+                logger.warning(
+                    "调试页面加载失败 (task_id={}): {}",
+                    task_data.get("task_id", "unknown")
+                    if isinstance(task_data, dict)
+                    else "unknown",
+                    e,
+                )
                 return WorkerResponse(success=False, error=f"调试页面加载失败: {e}")
 
-        # 创建 TaskExecutor（在 Worker 线程内，page 对象安全）
+        # 创建 BrowserTaskRunner（在 Worker 线程内，page 对象安全）
         if task_data:
             try:
                 task_config = TaskConfig.from_dict(task_data)
-                executor = TaskExecutor(
+                executor = BrowserTaskRunner(
                     task_config,
                     template_vars,
                     screenshot_dir=Path(screenshot_dir) if screenshot_dir else None,
@@ -533,7 +553,7 @@ class PlaywrightWorker:
                 )
                 self._debug_executor = executor
             except Exception as e:
-                logger.error("创建 TaskExecutor 失败: {}", e)
+                logger.exception("创建 BrowserTaskRunner 异常: {}", e)
                 return WorkerResponse(success=False, error=f"创建任务执行器失败: {e}")
 
         # 初始截图
@@ -558,11 +578,15 @@ class PlaywrightWorker:
 
                 try:
                     rel = ss_dir.relative_to(TEMP_DIR)
-                    screenshot_url = f"/temp/{rel}/{filename}" if str(rel) != "." else f"/temp/{filename}"
+                    screenshot_url = (
+                        f"/temp/{rel.as_posix()}/{filename}"
+                        if str(rel) != "."
+                        else f"/temp/{filename}"
+                    )
                 except ValueError:
                     screenshot_url = f"/temp/{filename}"
             except Exception as e:
-                logger.warning("初始截图失败: {}", e)
+                logger.warning("初始截图失败 (task_id={}): {}", task_id, e)
 
         return WorkerResponse(
             success=True,
@@ -572,7 +596,7 @@ class PlaywrightWorker:
     async def _handle_debug_step(self, data: dict) -> WorkerResponse:
         """执行调试下一步。
 
-        在 Worker 线程内调用 TaskExecutor.execute_step_at()，
+        在 Worker 线程内调用 BrowserTaskRunner.execute_step_at()，
         page 对象仅在 Worker 线程内访问，避免跨线程竞争。
         """
         if self._debug_page is None:
@@ -586,10 +610,10 @@ class PlaywrightWorker:
             )
 
         step_index = data.get("step_index", 0)
-        logger.info("调试下一步: step_index={}", step_index)
+        logger.debug("调试下一步: step_index={}", step_index)
 
         try:
-            # TaskExecutor.execute_step_at 在 Worker 线程内执行，
+            # BrowserTaskRunner.execute_step_at 在 Worker 线程内执行，
             # page 对象安全访问，无需额外同步
             result = await self._debug_executor.execute_step_at(
                 self._debug_page, step_index
@@ -612,7 +636,7 @@ class PlaywrightWorker:
         # 关闭整个浏览器（用户点击"停止并关闭"期望完全关闭）
         await self._close_browser()
 
-        logger.info("调试会话已停止，Worker 内部状态已清理")
+        logger.info("停止调试会话成功")
         return WorkerResponse(success=True, data="调试会话已停止")
 
     async def _handle_health_check(self) -> WorkerResponse:
@@ -648,29 +672,62 @@ class PlaywrightWorker:
 
         此方法供同线程调用者使用（如 BrowserContextManager），
         外部调用应使用 CMD_BROWSER_ACQUIRE 命令通过 submit 队列派发。
-        每次调用都会关闭旧浏览器并启动新浏览器，不复用。
+        复用已存在的浏览器实例，仅在未就绪或配置变更时重建。
         """
+        browser_settings = config.get("browser_settings", {})
+        has_browser = self._browser is not None or self._context is not None
+        if (
+            has_browser
+            and await self._health_check()
+            and self._last_browser_settings == browser_settings
+        ):
+            return
         await self._close_browser()
         await self._start_browser(config)
 
     # ── 浏览器生命周期管理 ──
 
     _CHROMIUM_ONLY_FLAGS = {
-        "--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu",
-        "--memory-pressure-off", "--disable-web-security",
+        "--no-sandbox",
+        "--disable-dev-shm-usage",
+        "--disable-gpu",
+        "--memory-pressure-off",
+        "--disable-web-security",
     }
 
-    def _build_launch_args(self, browser_settings: dict, channel: str = "playwright") -> list[str]:
+    # 安全敏感参数黑名单：用户自定义 browser_args 中不允许出现
+    _BLOCKED_BROWSER_ARGS = {
+        "--remote-debugging-port",
+        "--remote-debugging-address",
+        "--user-data-dir",
+        "--load-extension",
+        "--disable-extensions-except",
+        "--enable-automation",
+        "--remote-allow-origins",
+        "--proxy-server",
+        "--proxy-bypass-list",
+    }
+
+    @staticmethod
+    def _get_user_data_dir(channel: str) -> Path:
+        """获取持久化上下文的用户数据目录（按浏览器 channel 隔离）。"""
+        return BROWSER_DATA_DIR / channel
+
+    def _build_launch_args(
+        self, browser_settings: dict, channel: str = "playwright"
+    ) -> list[str]:
         """构建浏览器启动参数。"""
         args = []
 
         if channel != "firefox":
-            args.extend([
-                "--no-sandbox",
-                "--disable-dev-shm-usage",
-                "--disable-gpu",
-                "--memory-pressure-off",
-            ])
+            args.extend(
+                [
+                    "--no-sandbox",
+                    "--disable-dev-shm-usage",
+                    "--disable-gpu",
+                    "--memory-pressure-off",
+                ]
+            )
             if browser_settings.get("disable_web_security", False):
                 args.append("--disable-web-security")
             if browser_settings.get("low_resource_mode", False):
@@ -684,6 +741,11 @@ class PlaywrightWorker:
                 if not flag or flag.startswith("#"):
                     continue
                 if channel == "firefox" and flag in self._CHROMIUM_ONLY_FLAGS:
+                    continue
+                # 检查安全敏感参数黑名单（匹配 flag 名称部分，忽略 = 后的值）
+                flag_name = flag.split("=", 1)[0]
+                if flag_name in self._BLOCKED_BROWSER_ARGS:
+                    logger.warning("已过滤安全敏感浏览器参数: {}", flag_name)
                     continue
                 if flag not in args:
                     args.append(flag)
@@ -712,6 +774,10 @@ class PlaywrightWorker:
         extra_headers = self._get_extra_http_headers(browser_settings)
         if extra_headers:
             ctx_opts["extra_http_headers"] = extra_headers
+
+        # 网卡绑定代理（SOCKS5 Forwarder）
+        if browser_settings.get("bind_proxy"):
+            ctx_opts["proxy"] = {"server": browser_settings["bind_proxy"]}
 
         return ctx_opts
 
@@ -750,12 +816,43 @@ class PlaywrightWorker:
         channel = browser_settings.get("browser_channel", "playwright")
         custom_path = browser_settings.get("browser_custom_path", "")
 
-        logger.info("启动浏览器 (headless={}, pure_mode={}, channel={})", headless, pure_mode, channel)
+        logger.debug(
+            "启动浏览器 (headless={}, pure_mode={}, channel={})",
+            headless,
+            pure_mode,
+            channel,
+        )
 
         self._playwright = await async_playwright().start()
+        persistent = browser_settings.get("persistent_context", False)
 
         try:
-            if pure_mode:
+            if persistent:
+                # 持久化上下文：使用独立用户数据目录，保留 cookies
+                user_data_dir = self._get_user_data_dir(channel)
+                user_data_dir.mkdir(parents=True, exist_ok=True)
+                launch_args = (
+                    []
+                    if pure_mode
+                    else self._build_launch_args(browser_settings, channel)
+                )
+                ctx_opts = self._build_context_options(browser_settings)
+                logger.debug("使用持久化上下文: {}", user_data_dir)
+                self._context = await self._launch_persistent_context(
+                    self._playwright,
+                    channel,
+                    custom_path,
+                    headless,
+                    launch_args,
+                    str(user_data_dir),
+                    ctx_opts,
+                )
+                # launch_persistent_context 直接返回 context，无独立 browser 对象
+                self._browser = None
+                # 非纯净模式下应用反检测和路由拦截
+                if not pure_mode:
+                    await self._apply_stealth_and_routes(browser_settings)
+            elif pure_mode:
                 # 纯净模式：无扩展无自定义参数
                 self._browser = await self._launch_browser(
                     self._playwright, channel, custom_path, headless, []
@@ -779,59 +876,102 @@ class PlaywrightWorker:
             self._page = await self._context.new_page()
             # 纯净模式不注入反检测脚本——设计意图
         except Exception:
-            logger.warning("浏览器启动中间步骤失败，回滚已创建的资源", exc_info=True)
+            logger.warning("浏览器启动失败，回滚资源", exc_info=True)
             await self._close_browser()
             raise
 
-        logger.info("浏览器启动完成")
+        logger.info("浏览器启动成功")
 
-    async def _launch_browser(self, playwright, channel: str, custom_path: str, headless: bool, launch_args: list):
-        """根据 channel 启动对应的浏览器。"""
+    def _resolve_launcher(self, playwright, channel: str, custom_path: str):
+        """根据 channel 解析对应的 launcher 对象。"""
         if channel == "custom" and custom_path:
             if not Path(custom_path).exists():
                 raise FileNotFoundError(f"自定义浏览器路径不存在: {custom_path}")
-            custom_engine = (self._last_browser_settings or {}).get("custom_browser_engine", "auto")
+            custom_engine = (self._last_browser_settings or {}).get(
+                "custom_browser_engine", "auto"
+            )
             if custom_engine == "firefox":
                 engine = "firefox"
             elif custom_engine == "webkit":
                 engine = "webkit"
             else:
                 engine = "chromium"
-            logger.info("使用自定义浏览器: {} (engine={})", custom_path, engine)
-            launcher = getattr(playwright, engine)
-            return await launcher.launch(
-                executable_path=custom_path, headless=headless, args=launch_args
-            )
+            logger.debug("使用自定义浏览器: {} (engine={})", custom_path, engine)
+            return getattr(playwright, engine), custom_path
         elif channel == "firefox":
-            # Firefox 使用 firefox.launch()
-            logger.info("使用 Firefox 浏览器")
-            return await playwright.firefox.launch(headless=headless, args=launch_args)
+            logger.debug("使用 Firefox 浏览器")
+            return playwright.firefox, None
         elif channel == "playwright":
-            # Playwright 自带 Chromium
-            logger.info("使用 Playwright Chromium")
-            return await playwright.chromium.launch(headless=headless, args=launch_args)
+            logger.debug("使用 Playwright Chromium")
+            return playwright.chromium, None
         else:
-            # msedge 或 chrome，使用 channel 参数
-            logger.info("使用系统浏览器: {}", channel)
-            return await playwright.chromium.launch(
-                channel=channel, headless=headless, args=launch_args
-            )
+            logger.debug("使用系统浏览器: {}", channel)
+            return playwright.chromium, None
+
+    async def _launch_browser(
+        self,
+        playwright,
+        channel: str,
+        custom_path: str,
+        headless: bool,
+        launch_args: list,
+    ):
+        """根据 channel 启动对应的浏览器（非持久化模式）。"""
+        launcher, resolved_path = self._resolve_launcher(
+            playwright, channel, custom_path
+        )
+        kwargs = {"headless": headless, "args": launch_args}
+        if resolved_path:
+            kwargs["executable_path"] = resolved_path
+        elif channel not in ("firefox", "playwright"):
+            kwargs["channel"] = channel
+        return await launcher.launch(**kwargs)
+
+    async def _launch_persistent_context(
+        self,
+        playwright,
+        channel: str,
+        custom_path: str,
+        headless: bool,
+        launch_args: list,
+        user_data_dir: str,
+        ctx_opts: dict,
+    ):
+        """使用持久化上下文启动浏览器（保留 cookies）。"""
+        launcher, resolved_path = self._resolve_launcher(
+            playwright, channel, custom_path
+        )
+        kwargs = {"headless": headless, "args": launch_args, **ctx_opts}
+        if resolved_path:
+            kwargs["executable_path"] = resolved_path
+        elif channel not in ("firefox", "playwright"):
+            kwargs["channel"] = channel
+        return await launcher.launch_persistent_context(user_data_dir, **kwargs)
 
     async def _health_check(self) -> bool:
         """检查浏览器健康状态。
 
-        调用 browser.is_connected() 判断浏览器实例是否仍存活。
-        适用于命令执行前的预检查，避免使用已崩溃的浏览器。
+        持久化上下文模式下尝试访问 pages 检测存活；
+        非持久化模式调用 browser.is_connected()。
 
         返回:
             bool: True 表示浏览器存活且可用，False 表示需要重建
         """
+        # 持久化上下文模式：browser 为 None，通过 context.pages 检测
         if self._browser is None:
-            return False
+            if self._context is None:
+                return False
+            try:
+                # 访问 pages 属性会抛出异常如果底层浏览器已崩溃
+                _ = self._context.pages
+                return True
+            except Exception:
+                logger.debug("持久化上下文健康检查失败，浏览器可能已崩溃")
+                return False
         try:
             return self._browser.is_connected()
         except Exception:
-            logger.warning("浏览器健康检查异常", exc_info=True)
+            logger.exception("浏览器健康检查异常")
             return False
 
     @staticmethod
@@ -863,7 +1003,7 @@ class PlaywrightWorker:
         except Exception as e:
             if graceful:
                 if self._is_normal_close_error(e):
-                    logger.warning("关闭 {} 时连接已断开（正常）: {}", name, e)
+                    logger.debug("关闭 {} 时连接已断开（正常）", name)
                 else:
                     logger.error("关闭 {} 异常: {}", name, e)
 
@@ -877,7 +1017,7 @@ class PlaywrightWorker:
                       False 时异常全部静默（用于崩溃恢复等场景）。
         """
         if not graceful:
-            logger.info("开始强制清理浏览器资源...")
+            logger.debug("开始强制清理浏览器资源")
 
         # 清除调试执行器
         self._debug_executor = None
@@ -918,15 +1058,15 @@ class PlaywrightWorker:
             except Exception as e:
                 if graceful:
                     if self._is_normal_close_error(e):
-                        logger.warning("停止 Playwright 时连接已断开（正常）: {}", e)
+                        logger.debug("停止 Playwright 时连接已断开（正常）")
                     else:
                         logger.error("停止 Playwright 异常: {}", e)
         self._playwright = None
 
         if graceful:
-            logger.info("浏览器资源已清理")
+            logger.info("浏览器资源清理成功")
         else:
-            logger.warning("浏览器资源强制清理完成")
+            logger.info("浏览器资源强制清理成功")
 
     async def _close_browser(self) -> None:
         """关闭浏览器并释放所有资源（优雅模式）。
@@ -945,15 +1085,6 @@ class PlaywrightWorker:
         await self._cleanup_browser(graceful=False)
 
     # ── 辅助方法 ──
-
-    async def _wake_async(self) -> None:
-        """唤醒事件循环。
-
-        通过 run_coroutine_threadsafe 在 Worker 的事件循环上调度此协程，
-        设置 _wake_event 使 _async_run 立即处理队列中的命令。
-        """
-        if self._wake_event is not None:
-            self._wake_event.set()
 
     def _get_extra_http_headers(self, browser_settings: dict) -> dict[str, str]:
         """解析自定义 HTTP 请求头。
@@ -975,14 +1106,16 @@ class PlaywrightWorker:
                         continue
                     k_str, v_str = str(k), str(v)
                     if len(k_str) > 256 or len(v_str) > 4096:
-                        logger.warning("Header 过长已跳过: {} ({}B)", k_str[:32], len(k_str))
+                        logger.warning(
+                            "请求头过长，已跳过: {} ({}B)", k_str[:32], len(k_str)
+                        )
                         continue
                     if "\r" in k_str or "\n" in k_str:
-                        logger.warning("Header key 含换行符已跳过: {}", k_str[:32])
+                        logger.warning("请求头 key 含换行符，已跳过: {}", k_str[:32])
                         continue
                     result[k_str] = v_str
                 return result
-            logger.warning("自定义请求头必须是 JSON 对象，已忽略")
+            logger.warning("自定义请求头格式无效: 应为 JSON 对象，已忽略")
         except Exception as exc:
             logger.warning("解析自定义请求头失败: {}", exc)
         return {}
@@ -1001,7 +1134,7 @@ class PlaywrightWorker:
             await route.continue_()
         except Exception as e:
             # 页面/上下文已关闭时 route 操作会抛异常
-            logger.debug("route 异常已忽略: {}", e)
+            logger.debug("路由异常已忽略: {}", e)
 
 
 # ── 模块级单例 ──
@@ -1051,6 +1184,7 @@ def cleanup_orphan_browsers() -> None:
     扫描并杀掉由 Campus-Auth 启动但已失去 Python 父进程的浏览器实例。
     仅清理 Playwright 管理的浏览器（可执行路径或命令行包含 "ms-playwright"），
     不会误杀用户自行安装的 Chrome/Edge/Brave 等浏览器。
+    同时验证父进程存活状态，避免误杀仍在运行的浏览器进程。
     """
     import psutil
 
@@ -1061,20 +1195,23 @@ def cleanup_orphan_browsers() -> None:
             exe = (info.get("exe") or "").lower()
             cmdline = " ".join(info.get("cmdline") or []).lower()
             is_playwright_managed = "ms-playwright" in exe or "ms-playwright" in cmdline
-            is_browser = any(
-                kw in exe or kw in cmdline
-                for kw in ("chrom", "firefox")
-            )
-            if is_playwright_managed and is_browser:
+            is_browser = any(kw in exe or kw in cmdline for kw in ("chrom", "firefox"))
+            is_orphan = False
+            try:
+                parent = proc.parent()
+                is_orphan = parent is None or not parent.is_running()
+            except psutil.NoSuchProcess:
+                is_orphan = True
+            if is_playwright_managed and is_browser and is_orphan:
                 proc.kill()
                 killed += 1
                 logger.debug("已终止孤儿浏览器进程 PID={}", info["pid"])
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             pass
-        except Exception:
-            logger.debug("终止进程异常", exc_info=True)
+        except Exception as e:
+            logger.warning("终止进程失败: {}", e, exc_info=True)
 
     if killed:
-        logger.info("已终止 {} 个孤儿浏览器进程", killed)
+        logger.info("终止孤儿浏览器进程成功: {} 个", killed)
     else:
         logger.debug("未发现孤儿 Playwright 浏览器进程")

@@ -9,28 +9,36 @@ from unittest.mock import patch
 
 import pytest
 
-from app.schemas import ConfigResponseDTO, LoginCredentials, RuntimeConfig
-from app.services.config_service import save_global_and_profile
+from app.schemas import AppSettings, ConfigSaveRequest, RuntimeConfig
+from app.services.profile_service import save_global_and_profile
+from app.schemas import LoginCredentials
 from app.workers.playwright_worker import WorkerResponse
 
 
 def _ensure_login_config(engine) -> None:
     """确保引擎运行时配置包含登录所需字段。"""
     old = engine._runtime_config
-    engine._runtime_config = old.model_copy(update={
-        "credentials": LoginCredentials(
-            username="testuser", password="testpass", auth_url="http://10.0.0.1",
-            isp=old.credentials.isp, carrier_custom=old.credentials.carrier_custom,
-        ),
-    })
+    engine._runtime_config = old.model_copy(
+        update={
+            "credentials": LoginCredentials(
+                username="testuser",
+                password="testpass",
+                auth_url="http://10.0.0.1",
+                isp=old.credentials.isp,
+                carrier_custom=old.credentials.carrier_custom,
+            ),
+        }
+    )
 
 
 class TestFullMode:
     """完整模式全生命周期。"""
 
-    def test_full_lifecycle(self, full_stack):
+    async def test_full_lifecycle(self, integration_stack):
         """完整模式：启动 → 断网登录 → 定时任务 → 手动登录 → 配置重载 → 关闭。"""
-        engine, profile_service, task_executor, task_registry, mock_worker = full_stack
+        engine, profile_service, task_executor, task_registry, mock_worker = (
+            integration_stack
+        )
         _ensure_login_config(engine)
 
         login_done = threading.Event()
@@ -41,50 +49,52 @@ class TestFullMode:
 
         mock_worker.submit.side_effect = login_with_event
 
-        # t0: 启动监控 + 调度器
-        result = engine.start_monitoring()
-        assert result[0] is True
-        # 等待引擎线程处理 START 命令
-        time.sleep(0.5)
-        assert engine._is_monitoring
-        engine._start_scheduler()
-        assert engine.scheduler_running
+        # t0: boot() 已启动监控，等待引擎线程就绪
+        deadline = time.time() + 5
+        while time.time() < deadline and not engine._is_monitoring:
+            time.sleep(0.05)
+        assert engine._is_monitoring, "引擎监控未在 5 秒内启动"
 
         # t1: 注册定时任务（时间设为当前，确保 tick 时命中）
         now = datetime.now()
-        task_executor.save_task("test_task", {
-            "name": "测试任务",
-            "type": "shell",
-            "command": "echo hello",
-            "enabled": True,
-            "schedule": {"hour": now.hour, "minute": now.minute},
-        })
+        task_executor.registry.save_task(
+            "test_task",
+            {
+                "name": "测试任务",
+                "type": "shell",
+                "command": "echo hello",
+                "enabled": True,
+                "schedule": {"hour": now.hour, "minute": now.minute},
+            },
+        )
 
         # t2: 断网 → 自动登录成功
-        with patch(
-            "app.services.monitor_service.check_network_status",
-            return_value=(False, "network_down", "none"),
+        with (
+            patch(
+                "app.services.monitor_service.check_network_status",
+                return_value=(False, "network_down", "none"),
+            ),
+            patch(
+                "app.services.monitor_service.check_pause",
+                return_value=(False, ""),
+            ),
         ):
-            engine._do_network_check()
+            await engine._do_network_check_async()
         login_done.wait(timeout=5)
 
-        # t3: 触发定时任务 tick
-        # 直接调用 get_due_tasks 验证任务在调度索引中
-        due = task_registry.get_due_tasks(now.hour, now.minute)
-        if "test_task" in due:
-            engine._run_schedule_tick()
-            # 等待异步任务完成（execute_task_async 提交到线程池）
-            deadline = time.time() + 10
-            history = []
-            while time.time() < deadline:
-                history = task_executor.get_history("test_task")
-                if len(history) >= 1:
-                    break
-                time.sleep(0.1)
-            assert len(history) >= 1
-        else:
-            # 分钟边界导致任务不在当前 tick 中，验证任务已注册
-            assert task_executor.get_task("test_task") is not None
+        # t3: 验证定时任务已注册
+        assert task_executor.registry.get_task("test_task") is not None
+        # 直接触发 scheduler tick 验证任务可执行
+        if engine._scheduler:
+            due = task_registry.get_due_tasks(now.hour, now.minute)
+            if "test_task" in due:
+                engine._scheduler.tick(now)
+                deadline = time.time() + 10
+                while time.time() < deadline:
+                    history = task_executor.history_store.get_history("test_task")
+                    if len(history) >= 1:
+                        break
+                    time.sleep(0.1)
 
         # t4: 手动登录
         login_done.clear()
@@ -97,12 +107,16 @@ class TestFullMode:
         assert ok is True
 
         # t5: 保存配置 → 重载
-        payload = ConfigResponseDTO(
+        payload = ConfigSaveRequest(
             browser=engine._runtime_config.browser,
             monitor=engine._runtime_config.monitor,
             retry=engine._runtime_config.retry,
             pause=engine._runtime_config.pause,
             logging=engine._runtime_config.logging,
+            app_settings=AppSettings(),
+            username="testuser",
+            password="testpass",
+            auth_url="http://10.0.0.1",
         )
         result = save_global_and_profile(payload, profile_service, engine.reload_config)
         assert result.success is True

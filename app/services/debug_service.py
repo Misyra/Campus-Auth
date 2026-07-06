@@ -15,19 +15,30 @@ from typing import TYPE_CHECKING, Any
 
 from app.utils.env import build_login_template_vars
 from app.utils.logging import get_logger
-from app.services.login_orchestrator import _runtime_config_to_worker_dict
+from app.services.login_orchestrator import runtime_config_to_worker_dict
 
 if TYPE_CHECKING:
     from starlette.requests import Request
 
 from .debug_session import (
+    DebugSession,
     _current_gen,
     _next_debug_gen,
     debug_to_response,
-    empty_debug_session,
 )
 
-debug_logger = get_logger("debug_manager", source="debug")
+debug_logger = get_logger("debug_manager", source="backend")
+
+
+def _rm(path: Path) -> None:
+    """删除文件，Windows 下文件被占用时自动重试。"""
+    for _ in range(5):
+        try:
+            path.unlink()
+            return
+        except PermissionError:
+            time.sleep(0.1)
+    raise OSError(f"无法删除被占用文件: {path}")
 
 
 class DebugSessionManager:
@@ -36,12 +47,9 @@ class DebugSessionManager:
     def __init__(self, project_root: Path):
         self._project_root = project_root
         self._temp_dir = project_root / "temp" / "debug"
-        self._session = empty_debug_session()
+        self._session = DebugSession()
         self._lock = asyncio.Lock()
         self._exec_sem = asyncio.Semaphore(1)
-
-    def _debug_response(self) -> dict:
-        return debug_to_response(self._session)
 
     async def _cancel_debug_timer(self) -> None:
         """取消调试会话的超时定时器（如存在）。"""
@@ -65,7 +73,7 @@ class DebugSessionManager:
         try:
             await asyncio.to_thread(lambda: get_worker().submit(CMD_DEBUG_STOP))
         except Exception:
-            debug_logger.debug("关闭调试会话 Worker 提交失败", exc_info=True)
+            debug_logger.warning("关闭调试会话失败: Worker 提交失败", exc_info=True)
         self._session._browser_active = False
 
     async def _debug_timeout_watcher(
@@ -83,15 +91,15 @@ class DebugSessionManager:
                         time.monotonic() - self._session._last_activity
                         > timeout_seconds
                     ):
-                        debug_logger.info(
-                            "调试会话超时（{}s 无操作），正在关闭浏览器",
+                        debug_logger.debug(
+                            "调试会话超时 ({}s 无操作)，关闭浏览器",
                             timeout_seconds,
                         )
                         try:
                             if self._session._browser_active:
                                 await self._close_debug_browser()
                         finally:
-                            self._session = empty_debug_session()
+                            self._session = DebugSession()
                         return  # 超时后退出，不再空转
                     # 未超时时释放锁，下一轮 sleep 后重新检查
         except asyncio.CancelledError:
@@ -108,21 +116,24 @@ class DebugSessionManager:
         if not task_id:
             raise HTTPException(status_code=400, detail="缺少 task_id")
 
-        task_svc = request.app.state.services.task_service
-        task = task_svc.task_manager.load_task(task_id)
+        task_mgr = request.app.state.services.task_manager
+        task = task_mgr.load_task(task_id)
         if not task:
             raise HTTPException(status_code=404, detail="任务不存在")
 
-        # 构建模板变量（复用 service 的运行时配置）
-        runtime_config = monitor_service.get_runtime_config()
-        template_vars = build_login_template_vars(
-            auth_url=runtime_config.credentials.auth_url,
-            username=runtime_config.credentials.username,
-            password=runtime_config.credentials.password,
-            isp=runtime_config.credentials.isp,
-            task_url=task.url,
-            custom_variables=runtime_config.custom_variables,
-        )
+        # 构建模板变量（复用 service 的运行时配置）— 通过 to_thread 避免磁盘 I/O 与加密操作阻塞事件循环
+        def _build_template_vars():
+            rc = monitor_service.get_runtime_config()
+            tv = build_login_template_vars(
+                auth_url=rc.credentials.auth_url,
+                username=rc.credentials.username,
+                password=rc.credentials.password,
+                isp=rc.credentials.isp,
+                task_url=task.url,
+            )
+            return rc, tv
+
+        runtime_config, template_vars = await asyncio.to_thread(_build_template_vars)
 
         # 解析任务 URL
         url = task.url or ""
@@ -134,7 +145,7 @@ class DebugSessionManager:
 
         # 构建 Worker 启动数据
         worker_data = {
-            "config": _runtime_config_to_worker_dict(runtime_config),
+            "config": runtime_config_to_worker_dict(runtime_config),
             "task_url": url if url else "",
             "task_data": task.to_dict(),
             "template_vars": template_vars,
@@ -159,7 +170,7 @@ class DebugSessionManager:
             ]
 
             gen = _next_debug_gen()
-            self._session = empty_debug_session()
+            self._session = DebugSession()
             self._session._browser_active = True
             self._session.task_id = task_id
             self._session.steps = steps_info
@@ -177,20 +188,27 @@ class DebugSessionManager:
             )
         except Exception:
             async with self._lock:
+                await self._cancel_debug_timer()
                 await self._close_debug_browser()
+                self._session = DebugSession()
             raise
 
         if not response.success:
             async with self._lock:
+                await self._cancel_debug_timer()
                 await self._close_debug_browser()
+                self._session = DebugSession()
+            debug_logger.warning(
+                "调试会话启动失败: task={}, {}", task_id, response.error
+            )
             raise RuntimeError(f"调试会话启动失败: {response.error}")
 
         if isinstance(response.data, dict):
             async with self._lock:
                 self._session.screenshot_url = response.data.get("screenshot_url")
 
-        debug_logger.info("调试会话已启动，任务: {}", task_id)
-        return self._debug_response()
+        debug_logger.info("启动调试会话成功: task={}", task_id)
+        return debug_to_response(self._session)
 
     async def next_step(self) -> dict:
         """执行下一步。"""
@@ -203,7 +221,10 @@ class DebugSessionManager:
                 idx = session.current_step
 
                 if idx >= len(session.steps):
-                    return {**self._debug_response(), "message": "所有步骤已执行完毕"}
+                    return {
+                        **debug_to_response(self._session),
+                        "message": "所有步骤已执行完毕",
+                    }
 
             response = await asyncio.to_thread(
                 lambda: get_worker().submit(CMD_DEBUG_STEP, data={"step_index": idx})
@@ -211,7 +232,7 @@ class DebugSessionManager:
             if not response.success:
                 async with self._lock:
                     if self._session is not session:
-                        return self._debug_response()
+                        return debug_to_response(self._session)
                     session.results.append(
                         {
                             "step_index": idx,
@@ -222,22 +243,24 @@ class DebugSessionManager:
                     )
                     session.current_step = idx + 1
                     session._last_activity = time.monotonic()
-                    return self._debug_response()
+                    return debug_to_response(self._session)
 
             result = response.data
 
             async with self._lock:
                 if self._session is not session:
-                    return self._debug_response()
+                    return debug_to_response(self._session)
                 session.results.append(result)
                 session.screenshot_url = result.get("screenshot_url")
                 session.current_step = idx + 1
                 session._last_activity = time.monotonic()
-                return self._debug_response()
+                return debug_to_response(self._session)
 
     async def run_all(self) -> dict:
         """执行所有步骤。"""
         from app.workers.playwright_worker import CMD_DEBUG_STEP, get_worker
+
+        debug_logger.debug("调试运行所有步骤: task={}", self._session.task_id)
 
         async with self._lock:
             self._require_debug_session()
@@ -245,7 +268,10 @@ class DebugSessionManager:
             from_idx = session.current_step
 
             if from_idx >= len(session.steps):
-                return {**self._debug_response(), "message": "所有步骤已执行完毕"}
+                return {
+                    **debug_to_response(self._session),
+                    "message": "所有步骤已执行完毕",
+                }
 
         # 一次性获取信号量，持有到整个批量执行完成，防止 next_step 插入
         async with self._exec_sem:
@@ -292,7 +318,7 @@ class DebugSessionManager:
 
         async with self._lock:
             if self._session is not session:
-                return self._debug_response()
+                return debug_to_response(self._session)
             session.results.extend(results)
             session.current_step = (
                 len(session.steps) if all_success else from_idx + len(results)
@@ -300,7 +326,7 @@ class DebugSessionManager:
             session._last_activity = time.monotonic()
             if results:
                 session.screenshot_url = results[-1].get("screenshot_url")
-            return self._debug_response()
+            return debug_to_response(self._session)
 
     async def stop(self) -> dict:
         """停止调试会话。"""
@@ -308,21 +334,21 @@ class DebugSessionManager:
             await self._cancel_debug_timer()
             if self._session._browser_active:
                 await self._close_debug_browser()
-            self._session = empty_debug_session()
+            self._session = DebugSession()
         # 清理临时调试截图（仅删除调试专用子目录中的文件）
         try:
             if self._temp_dir.exists():
                 for item in self._temp_dir.iterdir():
                     if item.is_file():
-                        item.unlink(missing_ok=True)
+                        _rm(item)
+        except FileNotFoundError:
+            pass
         except Exception:
-            debug_logger.warning("调试临时目录清理失败", exc_info=True)
-        debug_logger.info("调试会话已停止")
+            debug_logger.warning(
+                "调试临时目录清理失败: {}", self._temp_dir, exc_info=True
+            )
+        debug_logger.info("停止调试会话成功")
         return {"running": False, "message": "调试会话已关闭"}
-
-    def get_status(self) -> dict:
-        """获取会话状态。"""
-        return self._debug_response()
 
     async def close(self):
         """关闭调试会话（用于 lifespan 清理）。"""
@@ -332,4 +358,4 @@ class DebugSessionManager:
                 if self._session._browser_active:
                     await self._close_debug_browser()
             finally:
-                self._session = empty_debug_session()
+                self._session = DebugSession()

@@ -13,7 +13,7 @@ from __future__ import annotations
 import threading
 import time
 from collections.abc import Callable
-from concurrent.futures import Future, ThreadPoolExecutor
+from concurrent.futures import CancelledError, Future
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal
 
@@ -30,7 +30,9 @@ logger = get_logger("login_orchestrator", source="backend")
 LoginSource = Literal["auto", "manual", "login_once", "browser"]
 
 
-def _runtime_config_to_worker_dict(config: RuntimeConfig) -> dict:
+def runtime_config_to_worker_dict(
+    config: RuntimeConfig, bind_proxy: str | None = None
+) -> dict:
     """将 RuntimeConfig 转换为 Worker 进程期望的 dict 格式。
 
     Worker 是独立进程，通过 dict 通信。
@@ -47,15 +49,18 @@ def _runtime_config_to_worker_dict(config: RuntimeConfig) -> dict:
     d["pause_login"] = config.pause.model_dump()
     d["monitor"] = config.monitor.model_dump()
     d["logging"] = {"level": config.logging.level}
-    d["frontend_logging"] = {"level": config.logging.frontend_level}
     d["login_timeout"] = config.browser.login_timeout
     d["retry_settings"] = config.retry.model_dump()
     d["active_task"] = config.active_task
-    d["custom_variables"] = config.custom_variables
-    d["block_proxy"] = config.block_proxy
-    d["shell_path"] = config.shell_path
+    d["block_proxy"] = config.app_settings.block_proxy
+    d["shell_path"] = config.app_settings.shell_path
     d["access_log"] = config.logging.access_log
     d["log_retention_days"] = config.logging.log_retention_days
+
+    # 注入网卡绑定代理（如果有）
+    if bind_proxy:
+        d["browser_settings"]["bind_proxy"] = bind_proxy
+
     return d
 
 
@@ -109,11 +114,22 @@ class LoginHandle:
             return False, self.rejected_reason
         if self.future is None:
             return False, "登录未提交"
-        return self.future.result(timeout=timeout)
+        try:
+            return self.future.result(timeout=timeout)
+        except CancelledError:
+            return False, "登录已取消"
 
     def cancel(self) -> None:
         """取消此次登录。"""
         self.cancel_event.set()
+
+
+# ── 哨兵 ──
+
+# submit() 锁外 dispatch 时的占位哨兵，防止并发重复提交
+_DISPATCHING = LoginHandle(
+    future=None, source="auto", cancel_event=CompositeCancelEvent()
+)
 
 
 # ── 编排器 ──
@@ -140,23 +156,30 @@ class LoginOrchestrator:
         login_history: LoginHistoryService | None = None,
         profile_service: ProfileService | None = None,
         get_runtime_config: Callable[[], RuntimeConfig] | None = None,
-        pool: ThreadPoolExecutor | None = None,
+        executor=None,
     ) -> None:
+        if executor is None:
+            raise TypeError("executor 必传，不再支持自建 fallback pool")
         self._worker_getter = worker_getter
         self._login_history = login_history
         self._profile_service = profile_service
         self._get_runtime_config = get_runtime_config
+        self._executor = executor
 
         # 去重槽（替代 task_executor._login_future + _login_cancel_event）
-        self._slot_lock = threading.RLock()
+        self._slot_lock = threading.Condition(threading.Lock())
         self._slot: LoginHandle | None = None
 
-        # 线程池：自行创建单线程池
-        self._pool: ThreadPoolExecutor = pool or ThreadPoolExecutor(
-            max_workers=1,
-            thread_name_prefix="login-exec",
-        )
+        # 网卡绑定代理 URL（由引擎在监控启动时通过 set_bind_proxy 设置）
+        self._bind_proxy_url: str | None = None
 
+    def bind_runtime_config(self, getter: Callable[[], RuntimeConfig]) -> None:
+        """延迟绑定运行时配置获取器（用于解决 Engine 循环依赖）。"""
+        self._get_runtime_config = getter
+
+    def set_bind_proxy(self, bind_proxy_url: str | None) -> None:
+        """设置网卡绑定代理 URL（由引擎在监控启动时调用）。"""
+        self._bind_proxy_url = bind_proxy_url
 
     # ── 公共 API ──
 
@@ -199,7 +222,7 @@ class LoginOrchestrator:
         if source != "browser":
             err = validate_login_config(cfg)
             if err is not None:
-                logger.warning("跳过登录(source={}): {}", source, err)
+                logger.warning("跳过登录: {} (source={})", err, source)
                 return LoginHandle(
                     future=None,
                     source=source,
@@ -214,45 +237,65 @@ class LoginOrchestrator:
             wrapper.add_source(cancel_event)
             cancel_event = wrapper
 
-        # 2. 去重与抢占
+        # 2. 去重与抢占（Condition 保护）
         with self._slot_lock:
+            # 等待 dispatch 完成（_slot 不再是 _DISPATCHING）
+            while self._slot is _DISPATCHING:
+                self._slot_lock.wait()
+
             existing = self._slot
             if existing is not None and not existing.done():
-                # login_once 一次性任务，不复用
                 if source == "login_once":
-                    logger.info("login_once 取消旧任务(source={})", existing.source)
+                    logger.warning("取消旧登录任务 (source={})", existing.source)
                     existing.cancel()
-                # manual 抢占 auto：取消旧的，提交新的
                 elif source == "manual" and existing.source == "auto":
-                    logger.info("手动登录抢占自动登录(source={})", existing.source)
+                    logger.debug("手动登录抢占自动登录 (source={})", existing.source)
                     existing.cancel()
-                    # 不立即 return，落到下方提交新 handle
+                elif source == "browser":
+                    logger.debug("浏览器任务取消现有登录 (source={})", existing.source)
+                    existing.cancel()
                 else:
-                    # 复用旧 handle（auto→auto, auto→manual 同源, manual→*）
-                    # 联动新 cancel_event 到旧任务
-                    self._link_cancel(cancel_event, existing.cancel_event)
+                    existing.cancel_event.add_source(cancel_event)
                     return existing
 
-            # 3. 提交新登录
-            handle = self._dispatch(cfg, source, cancel_event, timeout=timeout)
-            self._slot = handle
+            # 哨兵占位
+            self._slot = _DISPATCHING
 
+        # 3. 锁外提交新登录
+        try:
+            handle = self._dispatch(cfg, source, cancel_event, timeout=timeout)
+        except Exception:
+            # dispatch 失败，清除哨兵并唤醒等待者
+            with self._slot_lock:
+                self._slot = None
+                self._slot_lock.notify_all()
+            raise
+
+        with self._slot_lock:
+            self._slot = handle
+            self._slot_lock.notify_all()
+
+        logger.debug("登录已提交 (source={})", source)
         return handle
 
     def cancel_running(self) -> None:
         """取消当前正在运行的登录（供外部主动取消）。"""
         with self._slot_lock:
             if self._slot is not None and not self._slot.done():
+                logger.warning("取消正在运行的登录任务")
                 self._slot.cancel()
 
     def shutdown(self, wait: bool = True) -> None:
-        """关闭编排器，清理线程池。"""
-        self._pool.shutdown(wait=wait)
+        """关闭编排器。executor 由调用方管理，此处不关闭。"""
+        logger.info("登录调度器已关闭")
 
     # ── 内部 ──
 
     def _dispatch(
-        self, config: RuntimeConfig, source: LoginSource, cancel_event: threading.Event,
+        self,
+        config: RuntimeConfig,
+        source: LoginSource,
+        cancel_event: threading.Event,
         timeout: int | None = None,
     ) -> LoginHandle:
         """提交到 Worker，注册历史/状态回调。"""
@@ -260,8 +303,11 @@ class LoginOrchestrator:
         from app.workers.playwright_worker import CMD_LOGIN
 
         # Build compatible dict for Worker process (Worker is separate process, communicates via dict)
-        worker_config = _runtime_config_to_worker_dict(config)
-        worker_timeout = timeout if timeout is not None else resolve_worker_timeout(config)  # F09 单一来源
+        bind_proxy = self._bind_proxy_url
+        worker_config = runtime_config_to_worker_dict(config, bind_proxy=bind_proxy)
+        worker_timeout = (
+            timeout if timeout is not None else resolve_worker_timeout(config)
+        )  # F09 单一来源
 
         def _run() -> tuple[bool, str]:
             start = time.perf_counter()
@@ -295,13 +341,27 @@ class LoginOrchestrator:
                 return False, "登录需要额外依赖，请检查 Playwright 安装状态"
             except Exception as exc:
                 duration_ms = int((time.perf_counter() - start) * 1000)
+                # 超时场景：给 Worker 短暂时间响应 cancel_event
+                if "超时" in str(exc) or "timed out" in str(exc).lower():
+                    cancel_event.set()
+                    time.sleep(0.5)
                 if source != "browser":
                     self._record_history(False, duration_ms, error=str(exc))
-                logger.error("登录执行异常: {}", exc, exc_info=True)
+                logger.exception("登录执行异常: {}", exc)
                 return False, f"登录执行异常: {exc}"
 
-        # 提交到登录线程池
-        future = self._pool.submit(_run)
+        # 提交到登录执行器（由调用方注入，不再有 fallback pool）
+        try:
+            future = self._executor.submit(_run)
+        except RuntimeError as exc:
+            # BoundedExecutor 队列满时抛出 RuntimeError，转为 rejected handle
+            logger.warning("登录提交被拒绝: {} (source={})", exc, source)
+            return LoginHandle(
+                future=None,
+                source=source,
+                cancel_event=cancel_event,
+                rejected_reason="登录队列已满，请稍后重试",
+            )
         handle = LoginHandle(future=future, source=source, cancel_event=cancel_event)
 
         # 清理槽位（替代 task_executor._on_login_done）
@@ -309,34 +369,37 @@ class LoginOrchestrator:
             with self._slot_lock:
                 if self._slot is handle:
                     self._slot = None
+                self._slot_lock.notify_all()
+            # 释放 CompositeCancelEvent 的源引用，防止内存泄漏
+            if isinstance(handle.cancel_event, CompositeCancelEvent):
+                handle.cancel_event.clear_sources()
 
         future.add_done_callback(_on_done)
         return handle
 
-    def _record_history(
-        self, success: bool, duration_ms: int, error: str = ""
-    ) -> None:
-        """记录登录历史（原 F02：login_once 路径此前不记录）。"""
+    def _record_history(self, success: bool, duration_ms: int, error: str = "") -> None:
+        """记录登录历史（使用 add() 直接传入名称）。"""
         if self._login_history is None:
             return
         try:
-            self._login_history.record(
+            profile_name = ""
+            if self._profile_service is not None:
+                try:
+                    active = self._profile_service.get_active_profile()
+                    if active:
+                        profile_name = getattr(active, "name", "")
+                except Exception:
+                    pass
+
+            self._login_history.add(
                 success=success,
                 duration_ms=duration_ms,
-                profile_service=self._profile_service,
+                profile_name=profile_name,
                 error=error,
             )
         except Exception:
-            logger.debug("记录登录历史失败", exc_info=True)
+            logger.warning("记录登录历史失败", exc_info=True)
 
     def _runtime_config(self) -> RuntimeConfig:
         """获取运行时配置。"""
-        if self._get_runtime_config is None:
-            return RuntimeConfig()
         return self._get_runtime_config()
-
-    def _link_cancel(
-        self, new_event: threading.Event, target_event: CompositeCancelEvent
-    ) -> None:
-        """将新 cancel_event 添加为源（无线程，惰性扫描）。"""
-        target_event.add_source(new_event)

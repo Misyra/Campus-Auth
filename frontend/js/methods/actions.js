@@ -8,7 +8,7 @@ export const actionMethods = {
     this.uninstall.results = null;
     this.uninstall.items = [];
     try {
-      const { data } = await this.$api.get('/api/uninstall/detect');
+      const data = await this.$apiService.uninstall.detect();
       this.uninstall.items = data.map(it => ({ ...it, checked: it.exists }));
     } catch (error) {
       const msg = extractApiError(error, '检测失败');
@@ -29,7 +29,7 @@ export const actionMethods = {
     if (!confirm(`确定要清理以下 ${keys.length} 个项目吗？此操作不可撤销。`)) return;
     this.busy.uninstall = true;
     try {
-      const { data } = await this.$api.post('/api/uninstall', { keys });
+      const data = await this.$apiService.uninstall.perform(keys);
       this.uninstall.results = data.results || [];
       this.toastOnly(data.success, data.success ? '清理完成' : '部分项目清理失败');
     } catch (error) {
@@ -42,9 +42,8 @@ export const actionMethods = {
   async toggleMonitor() {
     this.busy.monitor = true;
     try {
-      const url = this.status.monitoring ? '/api/monitor/stop' : '/api/monitor/start';
-      this.frontendLogger.info('monitor', `POST ${url}`);
-      const { data } = await this.$api.post(url);
+      this.frontendLogger.info('monitor', `${this.status.monitoring ? 'stop' : 'start'} monitor`);
+      const data = await (this.status.monitoring ? this.$apiService.monitor.stop() : this.$apiService.monitor.start());
       this.frontendLogger.info('monitor', '监控状态切换: ' + data.message);
       this.toastOnly(data.success, data.message);
       await this.fetchStatus();
@@ -63,7 +62,7 @@ export const actionMethods = {
     try {
       this.frontendLogger.info('action', '手动登录请求');
       const loginTimeoutMs = (this.config.browser.login_timeout || 90) * 1000;
-      const { data } = await this.$api.post('/api/actions/login', null, { timeout: loginTimeoutMs });
+      const data = await this.$apiService.actions.login(loginTimeoutMs);
       this.notify(data.success, this.stripScreenshotHint(data.message), 'login');
       // 登录完成后刷新登录历史
       this.fetchLoginHistory();
@@ -75,14 +74,15 @@ export const actionMethods = {
       this.busy.login = false;
       // 3 秒防抖：API 返回后继续锁定按钮，防止短时间内重复点击
       this.busy.loginCooldown = true;
-      setTimeout(() => { this.busy.loginCooldown = false; }, 3000);
+      if (this._loginCooldownTimer) clearTimeout(this._loginCooldownTimer);
+      this._loginCooldownTimer = setTimeout(() => { this.busy.loginCooldown = false; }, 3000);
       this.busy.action = false;
     }
   },
   async cancelLogin() {
     try {
       this.frontendLogger.info('action', '取消登录请求');
-      const { data } = await this.$api.post('/api/actions/cancel-login');
+      const data = await this.$apiService.actions.cancelLogin();
       this.toastOnly(data.success, data.message);
     } catch (error) {
       const msg = extractApiError(error, '取消登录失败');
@@ -94,7 +94,7 @@ export const actionMethods = {
     this.busy.action = true;
     try {
       this.frontendLogger.info('action', '手动网络测试');
-      const { data } = await this.$api.post('/api/actions/test-network', null, { timeout: 5000 });
+      const data = await this.$apiService.actions.testNetwork();
       // 网络测试结果只显示 toast，不记录通知历史
       this.toastOnly(data.success, data.message);
     } catch (error) {
@@ -107,7 +107,7 @@ export const actionMethods = {
   },
   async fetchLoginHistory() {
     try {
-      const { data } = await this.$api.get('/api/login-history', { params: { limit: 30 } });
+      const data = await this.$apiService.history.fetch(30);
       this.loginHistory = data;
     } catch (error) {
       this.frontendLogger.error('history', '获取登录历史失败', error);
@@ -117,7 +117,7 @@ export const actionMethods = {
     if (!this.loginHistory.length) return;
     if (!confirm(`确定要清空所有 ${this.loginHistory.length} 条登录记录吗？此操作不可撤销。`)) return;
     try {
-      const { data } = await this.$api.delete('/api/login-history');
+      const data = await this.$apiService.history.clear();
       this.loginHistory = [];
       this.toastOnly(data.success, data.message);
     } catch (error) {

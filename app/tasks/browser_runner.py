@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import threading
 import time
 from dataclasses import replace
@@ -11,18 +10,20 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from playwright.sync_api import TimeoutError as PlaywrightTimeout
+
 from app.constants import DEFAULT_STEP_TIMEOUT_MS, DEFAULT_TASK_TIMEOUT_MS
 from app.utils.logging import get_logger
 
 from .models import StepConfig, StepType, TaskConfig
-from .step_handlers import StepExecutorRegistry
+from .step_handlers import DEFAULT_HANDLERS
 from .variable_resolver import VariableResolver
 
-logger = get_logger("task_executor", source="task")
+logger = get_logger("task_executor", source="backend")
 
 
-class TaskExecutor:
-    """任务执行器"""
+class BrowserTaskRunner:
+    """浏览器任务执行器。"""
 
     DEFAULT_NAVIGATION_TIMEOUT = 15000
 
@@ -47,7 +48,7 @@ class TaskExecutor:
             else self.DEFAULT_NAVIGATION_TIMEOUT
         )
         self.resolver = VariableResolver(config, self.template_vars)
-        self.registry = StepExecutorRegistry()
+        self.registry = dict(DEFAULT_HANDLERS)
         self._step_results: list[dict[str, Any]] = []
         self._screenshot_dir = Path(screenshot_dir) if screenshot_dir else None
         self.monitor_config = monitor_config
@@ -66,8 +67,8 @@ class TaskExecutor:
             else DEFAULT_TASK_TIMEOUT_MS
         )
         task_deadline = task_start + task_timeout_ms / 1000
-        logger.info(
-            "任务开始 [{}], {} 个步骤, 超时 {}ms",
+        logger.debug(
+            "任务开始: {}, 步骤数={}, 超时={}ms",
             self.config.name,
             len(self.config.steps),
             task_timeout_ms,
@@ -77,10 +78,22 @@ class TaskExecutor:
         try:
             await self._auto_navigate(page)
 
-            # 等待表单元素出现（最长 5s），覆盖 SPA 门户延迟渲染的场景
-            # 如果页面没有表单元素，静默跳过，不阻塞流程
-            with contextlib.suppress(TimeoutError):
-                await page.wait_for_selector("input,textarea", timeout=5000)
+            # 等待页面就绪（最长 5s），覆盖 SPA 门户延迟渲染的场景
+            # 步骤在 iframe 中 → 等待 iframe 加载；否则 → 等待主页面表单元素
+            frames = {s.frame for s in self.config.steps if s.frame}
+            if frames:
+                for frame_selector in frames:
+                    try:
+                        await page.wait_for_selector(frame_selector, timeout=5000)
+                    except PlaywrightTimeout:
+                        logger.warning(
+                            "预热等待超时: {} (5s)，继续执行", frame_selector
+                        )
+            else:
+                try:
+                    await page.wait_for_selector("input,textarea", timeout=5000)
+                except PlaywrightTimeout:
+                    logger.warning("预热等待超时: input/textarea (5s)，继续执行")
 
             # reveal_hidden: 强制显示所有隐藏输入框，让后续 fill() 可以直接操作
             if self.config.reveal_hidden and any(
@@ -105,8 +118,8 @@ class TaskExecutor:
                 success, message = await self._execute_step(page, step, task_deadline)
                 step_elapsed = (time.perf_counter() - step_start) * 1000
                 status = "OK" if success else "FAIL"
-                logger.info(
-                    "  步骤[{}/{}] {} ({}) -> {} ({:.0f}ms){}",
+                logger.debug(
+                    "步骤[{}/{}] {} ({}) 完成: {} ({:.0f}ms){}",
                     i + 1,
                     len(self.config.steps),
                     step.id,
@@ -132,20 +145,26 @@ class TaskExecutor:
 
             total_elapsed = (time.perf_counter() - task_start) * 1000
             logger.info(
-                "任务成功 [{}] 总耗时 {:.0f}ms", self.config.name, total_elapsed
+                "任务执行成功: {} (耗时 {:.0f}ms)", self.config.name, total_elapsed
             )
             return await self._handle_success(page)
 
-        except (TimeoutError, OSError) as e:
+        except (PlaywrightTimeout, OSError) as e:
             total_elapsed = (time.perf_counter() - task_start) * 1000
-            logger.error(
-                "任务异常 [{}] 耗时 {:.0f}ms: {}", self.config.name, total_elapsed, e
+            logger.exception(
+                "任务执行异常: {} (耗时 {:.0f}ms): {}",
+                self.config.name,
+                total_elapsed,
+                e,
             )
             return await self._handle_failure(page, None, str(e))
         except Exception as e:
             total_elapsed = (time.perf_counter() - task_start) * 1000
             logger.exception(
-                "任务未知异常 [{}] 耗时 {:.0f}ms", self.config.name, total_elapsed
+                "任务执行异常: {} (耗时 {:.0f}ms): {}",
+                self.config.name,
+                total_elapsed,
+                e,
             )
             try:
                 return await self._handle_failure(page, None, f"内部错误: {e}")
@@ -163,13 +182,11 @@ class TaskExecutor:
         if not url:
             url = self.template_vars.get("LOGIN_URL", "").strip()
         if url:
-            logger.info(
-                "自动导航到任务URL: {} (超时 {}ms)", url, self.navigation_timeout
-            )
+            logger.debug("自动导航: {} (超时={}ms)", url, self.navigation_timeout)
             await page.goto(url, wait_until="load", timeout=self.navigation_timeout)
             await self._wait_url_stable(page)
             if self.config.navigation_wait > 0:
-                logger.info("等待页面 AJAX 初始化: {}s", self.config.navigation_wait)
+                logger.debug("等待页面 AJAX 初始化: {}s", self.config.navigation_wait)
                 await asyncio.sleep(self.config.navigation_wait)
 
     async def _wait_url_stable(self, page, timeout_ms: int = 3000):
@@ -183,16 +200,15 @@ class TaskExecutor:
             await asyncio.sleep(0.5)
             current = page.url
             if current != last_url:
-                logger.info("URL 重定向: {} -> {}", last_url, current)
+                logger.debug("URL 重定向: {} 至 {}", last_url, current)
                 last_url = current
                 redirects += 1
-                deadline = max(deadline, time.perf_counter() + timeout_ms / 1000)
 
     async def _reveal_hidden_inputs(self, page) -> int:
         """强制显示所有隐藏的表单输入框（含同源 iframe）。
         通过 JS 将 display:none / visibility:hidden / opacity:0 的 input 变为可见，
         后续 fill()/click() 可直接操作，无需 force 降级。覆盖 text/password/checkbox/radio 等。"""
-        logger.info("[reveal] 强制显示隐藏输入框")
+        logger.debug("[reveal] 强制显示隐藏输入框")
         reveal_js = """
             () => {
                 const inputs = document.querySelectorAll('input,textarea');
@@ -224,7 +240,7 @@ class TaskExecutor:
                 total += await frame.evaluate(reveal_js)
             except Exception:
                 logger.debug("[reveal] 跨域 frame 执行失败，跳过", exc_info=True)
-        logger.info("[reveal] 已强制显示 {} 个隐藏输入框", total)
+        logger.debug("[reveal] 已强制显示 {} 个隐藏输入框", total)
         return total
 
     async def _execute_step(
@@ -271,7 +287,7 @@ class TaskExecutor:
         try:
             return await handler.execute(page, effective_step, self.resolver)
         except Exception as e:
-            logger.exception("步骤 [{}/{}] 执行失败", step.id, step.type)
+            logger.exception("步骤执行异常 [{}/{}]: {}", step.id, step.type, e)
             return False, str(e)
 
     async def execute_step_at(self, page, step_index: int) -> dict[str, Any]:
@@ -308,60 +324,32 @@ class TaskExecutor:
     async def _network_detection_check(self) -> bool:
         """任务步骤全部通过后，验证网络是否已恢复连通。"""
         try:
-            from app.network.decision import is_network_available
+            from app.network.decision import check_network_status
             from app.schemas import MonitorSettings
 
             cfg = self.monitor_config
-            # 使用 MonitorSettings 填充默认值，确保未配置的字段有合理的默认行为
-            # 仅过滤 None 和空容器，保留 False、0 等合法值
-            monitor = MonitorSettings(**{
-                k: v for k, v in cfg.items()
-                if k in MonitorSettings.model_fields
-                and v is not None
-                and not (isinstance(v, (list, str, dict)) and not v)
-            })
+            monitor = MonitorSettings(
+                **{
+                    k: v
+                    for k, v in cfg.items()
+                    if k in MonitorSettings.model_fields
+                    and v is not None
+                    and not (isinstance(v, (list, str, dict)) and not v)
+                }
+            )
 
             # 等待网址响应处理认证请求
-            post_delay = cfg.get("post_login_delay")
-            if post_delay is None:
-                post_delay = 5
-            await asyncio.sleep(post_delay)
-            enable_tcp = monitor.enable_tcp_check
-            enable_http = monitor.enable_http_check
-            timeout = monitor.network_check_timeout
+            delay = cfg.get("post_login_delay")
+            await asyncio.sleep(delay if delay is not None else 5)
 
-            # 解析检测参数（parse_url/parse_ping 内部处理 str/list/None）
-            from app.utils.network import parse_ping_targets, parse_url_checks
+            ok, status, method = await check_network_status(monitor)
 
-            url_checks = parse_url_checks(monitor.url_check_urls) or None
-            test_sites = parse_ping_targets(monitor.ping_targets) or None
-
-            logger.info(
-                "验证网络连通性 (网络检测方式: TCP={}, HTTP={}, 网址响应={}, 超时={}s)",
-                "开" if enable_tcp else "关",
-                "开" if enable_http else "关",
-                "开" if bool(url_checks) else "关",
-                timeout,
-            )
-
-            test_urls = monitor.test_urls or None
-
-            result = await asyncio.to_thread(
-                is_network_available,
-                test_sites=test_sites,
-                test_urls=test_urls,
-                timeout=timeout,
-                enable_tcp=enable_tcp,
-                enable_http=enable_http,
-                url_checks=url_checks,
-            )
-
-            if result:
-                logger.info("网络已恢复，登录认证生效")
+            if ok:
+                logger.info("网络已恢复，登录认证生效 (检测方式={})", method)
             else:
-                logger.warning("网络仍不可达，登录认证未生效")
+                logger.warning("网络仍不可达 (状态={})", status)
 
-            return result
+            return ok
 
         except Exception as e:
             logger.exception("网络验证异常: {}", e)
@@ -370,7 +358,6 @@ class TaskExecutor:
     async def _handle_success(self, page) -> tuple[bool, str]:
         """处理成功情况"""
         message = self.config.on_success.get("message", "任务执行成功")
-        logger.info("任务执行成功: {}", message)
         return True, message
 
     async def _handle_failure(
@@ -389,8 +376,6 @@ class TaskExecutor:
         if screenshot_url:
             message += f" 截图: {screenshot_url}"
 
-        # 日志只输出不含截图 URL 的部分，避免上层重复打印时出现两张截图
-        logger.error("任务执行失败: {}: {}", base_message, reason)
         return False, message
 
     async def _capture_screenshot(self, page) -> str | None:
@@ -404,7 +389,9 @@ class TaskExecutor:
                 # 计算相对于 TEMP_DIR 的子目录路径，确保 URL 与实际存储路径一致
                 try:
                     rel = self._screenshot_dir.relative_to(TEMP_DIR)
-                    url_prefix = f"/temp/{rel}" if str(rel) != "." else "/temp"
+                    url_prefix = (
+                        f"/temp/{rel.as_posix()}" if str(rel) != "." else "/temp"
+                    )
                 except ValueError:
                     url_prefix = "/temp"
             else:
@@ -421,9 +408,13 @@ class TaskExecutor:
                 filename = Path(local_path).name
                 return f"{url_prefix}/{filename}"
             return None
-        except TimeoutError:
-            logger.warning("截图超时（5s），已跳过")
+        except PlaywrightTimeout:
+            logger.warning("截图失败: 超时 (5s)，已跳过")
             return None
         except Exception as e:
-            logger.warning("截图失败: {}", e)
+            logger.warning(
+                "截图失败 [{}]: {}",
+                self.config.task_id or self.config.name or "unknown",
+                e,
+            )
             return None

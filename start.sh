@@ -60,6 +60,8 @@ _download_uv() {
     local github_url="https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/${filename}"
 
     mkdir -p "$UV_DIR"
+    # 清理旧二进制与版本标记，避免残留文件干扰
+    rm -f "$UV_DIR/uv" "$UV_DIR/version.txt"
     local archive="$UV_DIR/uv.tar.gz"
     local success=0
 
@@ -80,13 +82,8 @@ _download_uv() {
         if ! curl -fsSL --connect-timeout 10 --max-time 120 -o "$archive" "$url" 2>&1; then
             continue
         fi
-        if ! tar -tzf "$archive" &>/dev/null; then
-            echo "  [!] 文件无效，尝试下一个源..." >&2
-            rm -f "$archive"
-            continue
-        fi
 
-        # SHA256 校验
+        # SHA256 校验（先验证完整性再检查 tar 格式，避免浪费时间解压损坏的文件）
         echo -n "  校验 SHA256..." >&2
         local actual
         if command -v sha256sum &>/dev/null; then
@@ -100,6 +97,12 @@ _download_uv() {
             continue
         fi
         echo " 通过" >&2
+
+        if ! tar -tzf "$archive" &>/dev/null; then
+            echo "  [!] 文件无效，尝试下一个源..." >&2
+            rm -f "$archive"
+            continue
+        fi
 
         success=1
         break
@@ -118,7 +121,7 @@ _download_uv() {
     # uv 解压后可能在子目录，找到并移到 UV_DIR
     if [[ ! -f "$UV_DIR/uv" ]]; then
         local found
-        found=$(find "$UV_DIR" -name "uv" -type f | head -1)
+        found=$(find "$UV_DIR" -maxdepth 2 -name "uv" -type f -perm -u+x | head -1)
         if [[ -n "$found" ]]; then
             mv "$found" "$UV_DIR/uv"
         fi
@@ -154,15 +157,21 @@ echo "使用 uv: $UV_CMD"
 cd "$PROJECT_ROOT"
 
 echo "[1/2] 安装依赖..."
-$UV_CMD sync
+"$UV_CMD" sync
 
-# 检查 --install-only 参数
-for arg in "$@"; do
-    if [[ "$arg" == "--install-only" ]]; then
-        echo "[OK] 环境准备完成"
-        exit 0
+# --install-only: 仅安装环境，不启动应用
+if [[ " $* " == *" --install-only "* ]]; then
+    echo "[OK] 环境准备完成"
+    exit 0
+fi
+
+# 过滤 --install-only 参数，不传递给 main.py
+EXTRA_ARGS=("$@")
+for i in "${!EXTRA_ARGS[@]}"; do
+    if [[ "${EXTRA_ARGS[$i]}" == "--install-only" ]]; then
+        unset 'EXTRA_ARGS[$i]'
     fi
 done
 
 echo "[2/2] 启动 Campus-Auth..."
-exec "$UV_CMD" run main.py --browser "$@"
+exec "$UV_CMD" run main.py --browser "${EXTRA_ARGS[@]}"

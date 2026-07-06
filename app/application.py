@@ -2,7 +2,6 @@
 
 import asyncio
 import contextlib
-import json
 import mimetypes
 import os
 import signal
@@ -30,7 +29,7 @@ from app.utils.ports import resolve_port
 
 http_logger = get_logger("http", source="backend")
 startup_logger = get_logger("startup", source="backend")
-ws_logger = get_logger("ws", source="backend")
+api_logger = get_logger("api", source="backend")
 
 # temp 目录中截图的最大保留天数
 _TEMP_SCREENSHOT_MAX_AGE_DAYS = 7
@@ -55,9 +54,7 @@ def _cleanup_screenshots() -> None:
                     f.unlink()
                     removed_temp += 1
             if removed_temp:
-                startup_logger.info(
-                    "启动时清理 temp 截图: 删除 {} 个过期文件", removed_temp
-                )
+                startup_logger.debug("清理 temp 截图: 删除 {} 个过期文件", removed_temp)
     except Exception as exc:
         startup_logger.warning("清理 temp 截图失败: {}", exc)
 
@@ -74,11 +71,9 @@ def _cleanup_screenshots() -> None:
                     shutil.rmtree(d, ignore_errors=True)
                     removed_dirs += 1
             if removed_dirs:
-                startup_logger.info(
-                    "启动时清理旧截图: 删除 {} 个日期目录", removed_dirs
-                )
+                startup_logger.debug("清理旧截图: 删除 {} 个日期目录", removed_dirs)
     except Exception as exc:
-        startup_logger.warning("清理旧截图失败: {}".format(exc))
+        startup_logger.warning("清理旧截图失败: {}", exc)
 
 
 _access_log_event = threading.Event()  # 默认未 set（即关闭）
@@ -105,16 +100,20 @@ def _create_lifespan(existing_container, boot_engine=False):
     async def lifespan(app_instance):
         """应用生命周期管理"""
         start = time.perf_counter()
-        startup_logger.info("FastAPI 启动: 创建 shutdown_event")
+        startup_logger.debug("FastAPI 启动: 创建 shutdown_event")
 
         # 创建 shutdown_event 用于优雅关闭
         shutdown_event = asyncio.Event()
         app_instance.state.shutdown_event = shutdown_event
 
-        startup_logger.info("FastAPI 启动: 开始设置服务引导")
+        startup_logger.debug("FastAPI 启动: 开始设置服务引导")
 
         if existing_container is not None:
             services = existing_container
+            # 升级路径同样清理上一次崩溃残留的浏览器进程
+            from app.workers.playwright_worker import cleanup_orphan_browsers
+
+            cleanup_orphan_browsers()
             services.start_web_services()
             # 引擎线程必须始终运行（处理配置保存等命令），监控按需启动
             services.engine.start_thread()
@@ -137,8 +136,8 @@ def _create_lifespan(existing_container, boot_engine=False):
             settings_path.exists(),
             settings_path.stat().st_size if settings_path.exists() else 0,
         )
-        cfg = services.engine.get_config()
-        startup_logger.info(
+        cfg = services.engine.get_runtime_config()
+        startup_logger.debug(
             "当前配置: 用户={}, 密码={}, 认证={}, 运营商={}, 间隔={}min",
             f"'{cfg.credentials.username}'" if cfg.credentials.username else "(空)",
             "已设置" if cfg.credentials.password else "(空)",
@@ -152,15 +151,14 @@ def _create_lifespan(existing_container, boot_engine=False):
             import cryptography  # noqa: F401
         except ImportError:
             startup_logger.warning(
-                "cryptography 库未安装，密码仅使用 Base64 编码存储（非加密），"
-                "建议安装: pip install cryptography"
+                "cryptography 库未安装，密码将以明文存储（非加密），建议安装 cryptography"
             )
 
         # 启动时清理截图文件
         _cleanup_screenshots()
 
         startup_logger.info(
-            "FastAPI 启动: 完成，耗时 {:.3f}s",
+            "FastAPI 启动成功 (耗时 {:.3f}s)",
             time.perf_counter() - start,
         )
 
@@ -173,11 +171,17 @@ def _create_lifespan(existing_container, boot_engine=False):
             if _server is not None:
                 _server.should_exit = True
             else:
-                # 回退：发送 SIGTERM（仅在无法获取 server 引用时）
-                if hasattr(signal, "SIGTERM"):
-                    os.kill(os.getpid(), signal.SIGTERM)
-                else:
-                    os._exit(0)
+                # 回退：无法获取 server 引用。
+                # Windows 上 os.kill(pid, SIGTERM) 实为 TerminateProcess 硬终止，
+                # 会跳过 lifespan yield 之后的 services.shutdown() 清理逻辑。
+                # 因此先同步执行 services.shutdown()，再 force_exit。
+                try:
+                    await app_instance.state.services.shutdown()
+                except Exception as e:
+                    startup_logger.exception("回退关闭异常: {}", e)
+                from app.utils.shutdown import force_exit
+
+                force_exit(0)
 
         shutdown_waiter = asyncio.create_task(_wait_shutdown())
 
@@ -188,9 +192,9 @@ def _create_lifespan(existing_container, boot_engine=False):
         with contextlib.suppress(asyncio.CancelledError):
             await shutdown_waiter
 
-        startup_logger.info("FastAPI 关闭: 正在停止服务...")
+        startup_logger.debug("FastAPI 关闭: 开始停止服务")
         await services.shutdown()
-        startup_logger.info("FastAPI 关闭: 完成")
+        startup_logger.info("FastAPI 关闭完成")
 
     return lifespan
 
@@ -271,6 +275,7 @@ def create_app(existing_container=None, boot_engine=False):
     """
     from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
     from fastapi.middleware.cors import CORSMiddleware
+    from fastapi.responses import JSONResponse
 
     from app.version import get_project_version
 
@@ -294,9 +299,30 @@ def create_app(existing_container=None, boot_engine=False):
             f"http://localhost:{_cors_port}",
         ],
         allow_credentials=True,
-        allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Content-Type"],
     )
+
+    # ==================== 全局异常处理 ====================
+
+    @_app.exception_handler(Exception)
+    async def global_exception_handler(request: Request, exc: Exception):
+        """捕获所有未处理异常，返回统一 JSON 格式。"""
+        api_logger.error(
+            "未处理异常: {} {}", request.method, request.url.path, exc_info=True
+        )
+        return JSONResponse(
+            status_code=500,
+            content={"detail": f"服务器内部错误: {type(exc).__name__}"},
+        )
+
+    @_app.exception_handler(ValueError)
+    async def value_error_handler(request: Request, exc: ValueError):
+        """业务逻辑校验错误统一返回 400。"""
+        return JSONResponse(
+            status_code=400,
+            content={"detail": str(exc)},
+        )
 
     # ==================== 中间件 ====================
 
@@ -307,7 +333,7 @@ def create_app(existing_container=None, boot_engine=False):
             response = await call_next(request)
             if _access_log_event.is_set():
                 duration_ms = (time.perf_counter() - start) * 1000
-                http_logger.info(
+                http_logger.debug(
                     "{} {} -> {} ({:.1f}ms)",
                     request.method,
                     request.url.path,
@@ -317,11 +343,19 @@ def create_app(existing_container=None, boot_engine=False):
             return response
         except Exception:
             duration_ms = (time.perf_counter() - start) * 1000
-            http_logger.exception(
-                "{} {} -> EXCEPTION ({:.1f}ms)",
+            if _access_log_event.is_set():
+                http_logger.warning(
+                    "{} {} 异常 ({:.1f}ms)",
+                    request.method,
+                    request.url.path,
+                    duration_ms,
+                )
+            http_logger.debug(
+                "{} {} 异常 ({:.1f}ms)",
                 request.method,
                 request.url.path,
                 duration_ms,
+                exc_info=True,
             )
             raise
 
@@ -329,46 +363,10 @@ def create_app(existing_container=None, boot_engine=False):
 
     @_app.websocket("/ws/logs")
     async def websocket_logs(websocket: WebSocket):
-        services = _app.state.services
-        ws_mgr = services.ws_manager
-        monitor_svc = services.engine
+        from app.api.ws import websocket_logs_handler
 
-        await ws_mgr.connect(websocket)
-        try:
-            while True:
-                raw = await websocket.receive_text()
-                # WebSocket 消息大小预检，防止超大消息导致内存问题
-                if len(raw) > 65536:
-                    ws_logger.warning(
-                        "WebSocket 消息过大 ({} bytes)，断开连接", len(raw)
-                    )
-                    await ws_mgr.disconnect(websocket)
-                    return
-                try:
-                    msg = json.loads(raw)
-                    msg_type = msg.get("type")
-                    if msg_type == "ping":
-                        # 应用层 ping/pong，防止代理切断空闲连接
-                        await websocket.send_text('{"type":"pong"}')
-                    elif msg_type == "frontend_log":
-                        d = msg.get("data", {})
-                        message_text = str(d.get("message", ""))[:10000]
-                        scope = str(d.get("scope", "?"))[:200]
-                        if message_text:
-                            monitor_svc.record_log(
-                                message=f"[{scope}] {message_text}",
-                                level=str(d.get("level", "INFO"))[:20],
-                                source="frontend",
-                            )
-                except json.JSONDecodeError:
-                    ws_logger.debug("WebSocket 消息解析失败", exc_info=True)
-                except Exception:
-                    ws_logger.debug("WebSocket 消息处理异常", exc_info=True)
-        except WebSocketDisconnect:
-            await ws_mgr.disconnect(websocket)
-        except Exception:
-            ws_logger.exception("WebSocket 通信异常")
-            await ws_mgr.disconnect(websocket)
+        services = _app.state.services
+        await websocket_logs_handler(websocket, services.ws_manager)
 
     # ==================== 路由 + 静态文件 ====================
 
@@ -400,29 +398,35 @@ def run(
     import uvicorn
 
     # 使用调用方传入的日志配置，或从 settings.json 读取
-    if logging_settings is None and (access_log_enabled is None or log_retention is None):
+    if logging_settings is None and (
+        access_log_enabled is None or log_retention is None
+    ):
         try:
-            from app.services.profile_service import ProfileService
+            if existing_container is not None:
+                profile_service = existing_container.profile_service
+            else:
+                from app.services.profile_service import get_profile_service
 
-            profile_service = ProfileService(PROJECT_ROOT)
+                profile_service = get_profile_service(PROJECT_ROOT)
             logging_settings = profile_service.load().global_config.logging
         except Exception:
             startup_logger.warning("读取日志配置失败，使用默认值", exc_info=True)
 
     # 填充未传入的参数
     if access_log_enabled is None:
-        access_log_enabled = bool(logging_settings.access_log) if logging_settings else False
+        access_log_enabled = (
+            bool(logging_settings.access_log) if logging_settings else False
+        )
     if log_retention is None:
-        log_retention = max(1, logging_settings.log_retention_days) if logging_settings else 7
+        log_retention = (
+            max(1, logging_settings.log_retention_days) if logging_settings else 7
+        )
 
     log_center = LogConfigCenter.get_instance()
-    log_center.initialize({"level": "INFO"}, source="backend")
-
-    # 恢复 source 级别日志配置
-    if logging_settings is not None and logging_settings.source_levels:
-        for src, lvl in logging_settings.source_levels.items():
-            with contextlib.suppress(ValueError):
-                log_center.set_source_level(src, lvl)
+    log_center.initialize(
+        {"level": logging_settings.level if logging_settings else "INFO"},
+        source="backend",
+    )
 
     # 压制第三方库的 DEBUG 日志
     import logging

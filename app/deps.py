@@ -1,41 +1,31 @@
-"""FastAPI 依赖注入函数 — 保持路由签名简洁。"""
+"""FastAPI 依赖注入 — Annotated 类型别名。"""
 
 from __future__ import annotations
 
-from fastapi import Request
+from typing import Annotated
 
-from app.container import ServiceContainer
+from fastapi import Depends, Request
+
 from app.services.autostart import AutoStartService
 from app.services.debug_service import DebugSessionManager
 from app.services.engine import ScheduleEngine
 from app.services.login_history_service import LoginHistoryService
 from app.services.profile_service import ProfileService
-from app.services.task_service import TaskService
+from app.tasks import TaskManager
 
 
-def get_services(request: Request) -> ServiceContainer:
-    return request.app.state.services
+def _get(attr: str):
+    """生成从 request.app.state.services 取属性的 Depends 工厂。"""
+
+    def _dep(request: Request):
+        return getattr(request.app.state.services, attr)
+
+    return _dep
 
 
-def get_monitor_service(request: Request) -> ScheduleEngine:
-    return request.app.state.services.engine
-
-
-def get_profile_service(request: Request) -> ProfileService:
-    return request.app.state.services.profile_service
-
-
-def get_task_service(request: Request) -> TaskService:
-    return request.app.state.services.task_service
-
-
-def get_autostart_service(request: Request) -> AutoStartService:
-    return request.app.state.services.autostart_service
-
-
-def get_debug_manager(request: Request) -> DebugSessionManager:
-    return request.app.state.services.debug_manager
-
-
-def get_login_history_service(request: Request) -> LoginHistoryService:
-    return request.app.state.services.login_history_service
+MonitorServiceDep = Annotated[ScheduleEngine, Depends(_get("engine"))]
+ProfileServiceDep = Annotated[ProfileService, Depends(_get("profile_service"))]
+TaskManagerDep = Annotated[TaskManager, Depends(_get("task_manager"))]
+AutoStartServiceDep = Annotated[AutoStartService, Depends(_get("autostart_service"))]
+DebugManagerDep = Annotated[DebugSessionManager, Depends(_get("debug_manager"))]
+LoginHistoryDep = Annotated[LoginHistoryService, Depends(_get("login_history_service"))]

@@ -1,6 +1,6 @@
 """websocket_manager.py — WebSocket 管理器单元测试
 
-覆盖 WebSocketManager 和 NullWebSocketManager 的连接管理、消息广播、异常处理。
+覆盖 WebSocketManager 的连接管理、消息广播、异常处理。
 """
 
 from __future__ import annotations
@@ -10,39 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.services.websocket_manager import NullWebSocketManager, WebSocketManager
-
-
-# =====================================================================
-# NullWebSocketManager
-# =====================================================================
-
-
-class TestNullWebSocketManager:
-    """NullWebSocketManager 所有方法应为空操作，不抛异常。"""
-
-    @pytest.mark.asyncio
-    async def test_connect(self):
-        mgr = NullWebSocketManager()
-        ws = AsyncMock()
-        await mgr.connect(ws)  # 不抛异常即通过
-        ws.accept.assert_called_once()
-
-    @pytest.mark.asyncio
-    async def test_disconnect(self):
-        mgr = NullWebSocketManager()
-        ws = MagicMock()
-        await mgr.disconnect(ws)
-
-    @pytest.mark.asyncio
-    async def test_broadcast(self):
-        mgr = NullWebSocketManager()
-        await mgr.broadcast("hello")
-
-    @pytest.mark.asyncio
-    async def test_close_all(self):
-        mgr = NullWebSocketManager()
-        await mgr.close_all()
+from app.services.websocket_manager import WebSocketManager
 
 
 # =====================================================================
@@ -296,3 +264,48 @@ class TestBroadcastOverallTimeout:
         await mgr.connect(ws)
         await mgr.broadcast("hello")
         ws.send_text.assert_awaited_once_with("hello")
+
+
+# =====================================================================
+# zip strict=True 检测连接/队列长度不一致
+# =====================================================================
+
+
+class TestBroadcastStrictZip:
+    """验证 broadcast 中 zip(strict=True) 能检测长度不一致。"""
+
+    @pytest.mark.asyncio
+    async def test_strict_zip_raises_on_length_mismatch(self):
+        """connections 与 results 长度不一致时应抛出 ValueError。"""
+        mgr = WebSocketManager()
+        ws1, ws2 = AsyncMock(), AsyncMock()
+        await mgr.connect(ws1)
+        await mgr.connect(ws2)
+
+        async def bad_wait_for(coro, timeout):
+            # 让 gather 正常执行（消费掉 tasks），但返回长度不匹配的结果
+            await coro
+            return ["only_one"]  # 1 个结果，但 connections 有 2 个
+
+        with (
+            patch.object(asyncio, "wait_for", side_effect=bad_wait_for),
+            pytest.raises(ValueError),
+        ):
+            await mgr.broadcast("msg")
+
+    @pytest.mark.asyncio
+    async def test_strict_zip_no_error_when_lengths_match(self):
+        """connections 与 results 长度一致时不应抛出异常。"""
+        mgr = WebSocketManager()
+        ws1, ws2 = AsyncMock(), AsyncMock()
+        await mgr.connect(ws1)
+        await mgr.connect(ws2)
+
+        async def correct_wait_for(coro, timeout):
+            # 返回与 connections 等长的结果
+            await coro
+            return [None, None]
+
+        with patch.object(asyncio, "wait_for", side_effect=correct_wait_for):
+            # 不应抛出 ValueError
+            await mgr.broadcast("msg")

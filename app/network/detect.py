@@ -6,9 +6,11 @@
 from __future__ import annotations
 
 import ipaddress
+import json
 import locale
 import re
 import subprocess
+import sys
 
 from app.utils.logging import get_logger
 from app.utils.platform import (
@@ -18,7 +20,7 @@ from app.utils.platform import (
     is_windows,
 )
 
-logger = get_logger("network_detect", source="network")
+logger = get_logger("network_detect", source="backend")
 
 
 def _is_valid_ipv4(ip: str) -> bool:
@@ -45,16 +47,16 @@ def detect_gateway_ip() -> str | None:
         elif is_macos():
             result = _detect_gateway_darwin()
         else:
-            logger.warning("不支持的平台")
+            logger.warning("不支持的平台: {}", sys.platform)
             return None
 
         if result:
-            logger.info("检测到网关 IP: {}", result)
+            logger.info("检测网关 IP 成功: {}", result)
         else:
-            logger.warning("未能检测到网关 IP")
+            logger.warning("检测网关 IP 失败: 未检测到")
         return result
     except Exception as exc:
-        logger.error("网关检测异常: {}", exc, exc_info=True)
+        logger.exception("网关检测异常: {}", exc)
         return None
 
 
@@ -70,31 +72,109 @@ def detect_wifi_ssid() -> str | None:
         elif is_macos():
             result = _detect_ssid_darwin()
         else:
-            logger.warning("不支持的平台")
+            logger.warning("不支持的平台: {}", sys.platform)
             return None
 
         if result:
-            logger.info("检测到 SSID: {}", result)
+            logger.info("检测 SSID 成功: {}", result)
         else:
-            logger.warning("未能检测到 SSID（可能未连接 WiFi）")
+            logger.warning("检测 SSID 失败: 未检测到 (可能未连接 WiFi)")
         return result
     except Exception as exc:
-        logger.error("SSID 检测异常: {}", exc, exc_info=True)
+        logger.exception("SSID 检测异常: {}", exc)
         return None
 
 
 # ── Windows 实现 ──
 
 
-def _detect_gateway_windows() -> str | None:
-    """Windows: 检测默认网关 IP。
+def _parse_windows_route_print(output: str) -> str | None:
+    """解析 route print 输出，提取默认网关 IP。"""
+    for line in output.splitlines():
+        parts = line.split()
+        # 路由行格式：Network Destination  Netmask  Gateway  Interface  Metric
+        if len(parts) >= 3 and parts[0] == "0.0.0.0" and parts[1] == "0.0.0.0":
+            gateway = parts[2]
+            if _is_valid_ipv4(gateway) and gateway != "0.0.0.0":
+                return gateway
+    return None
 
-    优先使用 PowerShell Get-NetRoute（结构化输出，不受系统语言影响），
-    失败时回退到 ipconfig + 多语言字节匹配。
+
+def parse_windows_all_routes(output: str) -> list[tuple[str, str]]:
+    """解析 route print 输出，提取所有默认路由的 (网关IP, 接口IP) 对。
+
+    用于按网卡名索引网关的场景：接口 IP 可通过 psutil 映射到网卡名。
     """
-    creationflags = CREATE_NO_WINDOW_FLAG
+    routes: list[tuple[str, str]] = []
+    for line in output.splitlines():
+        parts = line.split()
+        if len(parts) >= 4 and parts[0] == "0.0.0.0" and parts[1] == "0.0.0.0":
+            gateway, interface_ip = parts[2], parts[3]
+            if _is_valid_ipv4(gateway) and gateway != "0.0.0.0":
+                routes.append((gateway, interface_ip))
+    return routes
 
-    # 优先使用 PowerShell（结构化输出，不受语言影响）
+
+def parse_linux_route_entry(line: str) -> tuple[str, str] | None:
+    """解析 /proc/net/route 单行，提取默认路由的 (接口名, 网关IP)。
+
+    复用 _parse_linux_gateway 提取网关 IP，额外返回接口名。
+    """
+    ip = _parse_linux_gateway(line)
+    if ip is None:
+        return None
+    parts = line.split()
+    return (parts[0], ip)
+
+
+def parse_darwin_netstat_routes(output: str) -> dict[str, str]:
+    """解析 netstat -rn 输出，提取 {接口名: 网关IP} 映射。
+
+    macOS 的 netstat -rn 输出直接包含接口名（Netif 列），
+    无需通过 IP→名称映射。
+    """
+    routes: dict[str, str] = {}
+    in_internet = False
+    for line in output.splitlines():
+        stripped = line.strip()
+        if stripped == "Internet:":
+            in_internet = True
+            continue
+        if not in_internet:
+            continue
+        if stripped.startswith("Internet6:"):
+            break
+        parts = stripped.split()
+        # 格式：Destination  Gateway  Flags  Netif  [Expire]
+        if len(parts) >= 4 and parts[0] == "default":
+            gateway = parts[1]
+            netif = parts[3]
+            if _is_valid_ipv4(gateway) and gateway != "0.0.0.0":
+                routes[netif] = gateway
+    return routes
+
+
+def _get_windows_gateway_route_print() -> str | None:
+    """使用 route print 0.0.0.0 检测默认网关（快速，无冷启动）。"""
+    try:
+        result = subprocess.run(
+            ["route", "print", "0.0.0.0"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            creationflags=CREATE_NO_WINDOW_FLAG,
+        )
+        if result.returncode == 0:
+            return _parse_windows_route_print(result.stdout)
+    except FileNotFoundError:
+        logger.debug("route 命令不可用")
+    except Exception as exc:
+        logger.debug("route print 检测失败: {}", exc)
+    return None
+
+
+def _get_windows_gateway_powershell() -> str | None:
+    """使用 PowerShell Get-NetRoute 检测默认网关。"""
     try:
         result = subprocess.run(
             [
@@ -107,17 +187,38 @@ def _detect_gateway_windows() -> str | None:
             capture_output=True,
             text=True,
             timeout=5,
-            creationflags=creationflags,
+            creationflags=CREATE_NO_WINDOW_FLAG,
         )
         if result.returncode == 0:
             ip = result.stdout.strip()
             if ip and _is_valid_ipv4(ip) and ip != "0.0.0.0":
-                logger.info("检测到网关 IP (PowerShell): {}", ip)
                 return ip
     except FileNotFoundError:
-        logger.debug("PowerShell 不可用，回退到 ipconfig")
+        logger.debug("PowerShell 不可用")
     except Exception as exc:
         logger.debug("PowerShell 网关检测失败: {}", exc)
+    return None
+
+
+def _detect_gateway_windows() -> str | None:
+    """Windows: 检测默认网关 IP。
+
+    优先使用 route print（快速，无 PowerShell 冷启动），
+    失败时回退 PowerShell，最后回退到 ipconfig + 多语言字节匹配。
+    """
+    creationflags = CREATE_NO_WINDOW_FLAG
+
+    # 方式 1：route print（最快，无冷启动）
+    gw = _get_windows_gateway_route_print()
+    if gw:
+        logger.info("检测网关 IP 成功 (route print): {}", gw)
+        return gw
+
+    # 方式 2：PowerShell Get-NetRoute（结构化输出，不受语言影响）
+    gw = _get_windows_gateway_powershell()
+    if gw:
+        logger.info("检测网关 IP 成功 (PowerShell): {}", gw)
+        return gw
 
     # 回退：ipconfig + 多语言字节匹配
     try:
@@ -153,7 +254,9 @@ def _detect_gateway_windows() -> str | None:
                 return ip
 
         # 回退：查找网关标签后缩进的 IPv4 地址（通常在下一行）
-        gateway_line_pattern = re.compile(combined + rb"[^\n]*\n\s+(\d+\.\d+\.\d+\.\d+)")
+        gateway_line_pattern = re.compile(
+            combined + rb"[^\n]*\n\s+(\d+\.\d+\.\d+\.\d+)"
+        )
         for match in gateway_line_pattern.finditer(output):
             ip = match.group(1).decode("ascii")
             if ip != "0.0.0.0" and _is_valid_ipv4(ip):
@@ -161,11 +264,11 @@ def _detect_gateway_windows() -> str | None:
 
         logger.debug("ipconfig 输出中未找到网关地址")
     except FileNotFoundError:
-        logger.error("ipconfig 命令不存在")
+        logger.warning("ipconfig 命令不存在")
     except subprocess.TimeoutExpired:
-        logger.error("ipconfig 执行超时")
+        logger.warning("ipconfig 执行超时")
     except Exception as exc:
-        logger.error("Windows 网关检测失败: {}", exc, exc_info=True)
+        logger.exception("Windows 网关检测异常: {}", exc)
 
     return None
 
@@ -182,7 +285,14 @@ def _detect_ssid_windows() -> str | None:
         )
         output = result.stdout
 
-        encoding = locale.getpreferredencoding(False) or "utf-8"
+        # 编码回退链：UTF-8 → UTF-16-LE → locale 编码 → GBK（去重）
+        locale_enc = locale.getpreferredencoding(False) or "utf-8"
+        seen: set[str] = set()
+        encodings: list[str] = []
+        for enc in ("utf-8", "utf-16-le", locale_enc, "gbk"):
+            if enc not in seen:
+                seen.add(enc)
+                encodings.append(enc)
 
         pattern = re.compile(rb"^\s*SSID\s*:\s*(.+)$", re.MULTILINE)
         match = pattern.search(output)
@@ -203,13 +313,17 @@ def _detect_ssid_windows() -> str | None:
             except (ValueError, UnicodeDecodeError):
                 pass
 
-            # 正常解码
-            try:
-                ssid = raw.decode(encoding)
-            except (UnicodeDecodeError, LookupError):
-                ssid = raw.decode("utf-8", errors="replace")
-            if ssid:
-                return ssid
+            # 编码回退链：优先 UTF-8/UTF-16-LE（现代 Windows 常见），
+            # 再尝试 locale 编码和 GBK（兼容旧系统）
+            for enc in encodings:
+                try:
+                    ssid = raw.decode(enc).strip("\x00").strip()
+                    # 基本校验：非空、无可打印性异常字符
+                    # （UTF-16-LE 解码非 UTF-16 数据时会产生不可打印字符如 PUA）
+                    if ssid and all(c.isprintable() for c in ssid):
+                        return ssid
+                except (UnicodeDecodeError, LookupError):
+                    continue
     except Exception as exc:
         logger.debug("Windows SSID 检测失败: {}", exc)
 
@@ -219,18 +333,39 @@ def _detect_ssid_windows() -> str | None:
 # ── Linux 实现 ──
 
 
+def _hex_to_ipv4(hex_str: str) -> str | None:
+    """将 /proc/net/route 中的 8 字符十六进制网关转换为 IPv4 字符串。"""
+    try:
+        gateway_bytes = bytes.fromhex(hex_str)
+        return ".".join(str(b) for b in reversed(gateway_bytes))
+    except (ValueError, TypeError):
+        return None
+
+
+def _parse_linux_gateway(line: str) -> str | None:
+    """解析 /proc/net/route 单行，提取默认网关 IPv4 地址。"""
+    parts = line.split()
+    if len(parts) < 3:
+        return None
+    dest, gateway = parts[1], parts[2]
+    if len(dest) < 8 or len(gateway) < 8:
+        return None
+    if dest != "00000000":
+        return None
+    ip = _hex_to_ipv4(gateway)
+    if ip is None or not _is_valid_ipv4(ip):
+        return None
+    return ip
+
+
 def _detect_gateway_linux() -> str | None:
     """Linux: 解析 /proc/net/route 获取默认网关"""
     try:
         with open("/proc/net/route") as f:
             for line in f:
-                parts = line.strip().split()
-                if len(parts) >= 3 and parts[1] == "00000000":
-                    gateway_hex = parts[2]
-                    gateway_bytes = bytes.fromhex(gateway_hex)
-                    ip = ".".join(str(b) for b in reversed(gateway_bytes))
-                    if ip != "0.0.0.0":
-                        return ip
+                ip = _parse_linux_gateway(line)
+                if ip is not None and ip != "0.0.0.0":
+                    return ip
     except Exception as exc:
         logger.debug("Linux 网关检测失败: {}", exc)
 
@@ -297,6 +432,42 @@ def _detect_gateway_darwin() -> str | None:
     return None
 
 
+def _get_ssid_macos_modern() -> str | None:
+    """macOS 14+: 使用 system_profiler SPAirPortDataType 获取当前 WiFi SSID。
+
+    airport 工具在 macOS 14+ 上可能不可用或受限，
+    system_profiler 提供 JSON 格式的结构化输出作为可靠回退。
+    """
+    try:
+        result = subprocess.run(
+            ["system_profiler", "SPAirPortDataType", "-json"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if result.returncode != 0:
+            return None
+        data = json.loads(result.stdout)
+        for info in data.get("SPAirPortDataType", []):
+            for key in (
+                "spairport_current_wireless_information",
+                "current_wireless_information",
+            ):
+                wireless = info.get(key, {})
+                ssid = wireless.get("spairport_current_ssid") or wireless.get(
+                    "current_ssid"
+                )
+                if ssid:
+                    return ssid
+    except (json.JSONDecodeError, TypeError) as exc:
+        logger.debug("system_profiler JSON 解析失败: {}", exc)
+    except FileNotFoundError:
+        logger.debug("system_profiler 命令不存在")
+    except Exception as exc:
+        logger.debug("macOS SSID 检测失败 (system_profiler): {}", exc)
+    return None
+
+
 def _detect_ssid_darwin() -> str | None:
     """macOS: 获取当前 WiFi SSID。"""
     # 方式 1：airport 命令（较旧 macOS）
@@ -352,5 +523,10 @@ def _detect_ssid_darwin() -> str | None:
                         return ssid
     except Exception as exc:
         logger.debug("macOS SSID 检测失败 (networksetup): {}", exc)
+
+    # 方式 3：system_profiler（macOS 14+ 回退）
+    ssid = _get_ssid_macos_modern()
+    if ssid:
+        return ssid
 
     return None

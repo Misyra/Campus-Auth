@@ -2,7 +2,8 @@
 
 import threading
 import time
-from unittest.mock import MagicMock, patch
+from concurrent.futures import Future, ThreadPoolExecutor
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -32,6 +33,18 @@ def _make_runtime_config(**overrides) -> RuntimeConfig:
 
 
 VALID_CONFIG = _make_runtime_config()
+
+
+def _make_mock_executor():
+    """创建使用真实线程池的 mock executor，用于测试。
+
+    使用后台线程执行任务，确保 submit 返回时任务仍在运行（与真实 executor 行为一致）。
+    """
+    real_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="test-exec")
+    mock = MagicMock()
+    mock.submit.side_effect = real_pool.submit
+    mock.shutdown.side_effect = real_pool.shutdown
+    return mock
 
 
 # ── validate_login_config ──
@@ -132,6 +145,15 @@ class TestLoginHandle:
         f.done.return_value = True
         assert h.done() is True
 
+    def test_result_returns_cancelled_when_future_cancelled(self):
+        """CancelledError 应被捕获并返回 (False, '登录已取消')。"""
+        from concurrent.futures import CancelledError
+
+        f = MagicMock()
+        f.result.side_effect = CancelledError()
+        h = LoginHandle(future=f, source="auto", cancel_event=threading.Event())
+        assert h.result() == (False, "登录已取消")
+
 
 # ── Fixtures ──
 
@@ -171,6 +193,7 @@ def orchestrator():
         worker_getter=lambda: worker,
         login_history=MagicMock(),
         profile_service=MagicMock(),
+        executor=_make_mock_executor(),
     )
 
 
@@ -216,6 +239,7 @@ class TestOrchestratorSubmit:
         orch = LoginOrchestrator(
             worker_getter=lambda: worker,
             get_runtime_config=lambda: VALID_CONFIG,
+            executor=_make_mock_executor(),
         )
         handle = orch.submit(source="auto")
         assert handle.future is not None
@@ -291,6 +315,7 @@ class TestOrchestratorValidate:
         orch = LoginOrchestrator(
             worker_getter=lambda: worker,
             get_runtime_config=lambda: VALID_CONFIG,
+            executor=_make_mock_executor(),
         )
         assert orch.validate() is None
 
@@ -301,3 +326,258 @@ class TestOrchestratorValidate:
 class TestOrchestratorShutdown:
     def test_shutdown(self, orchestrator):
         orchestrator.shutdown(wait=False)
+
+
+# ── _dispatch cancel_event 源清理 ──
+
+
+class TestDispatchClearsCancelSources:
+    """_dispatch 的 _on_done 回调应清理 CompositeCancelEvent 源列表。"""
+
+    def test_on_done_clears_composite_cancel_sources(self):
+        """登录完成后，cancel_event 的源列表应被清空。"""
+        from app.utils.cancel_token import CompositeCancelEvent
+
+        worker = _make_mock_worker()
+        orch = LoginOrchestrator(
+            worker_getter=lambda: worker,
+            login_history=MagicMock(),
+            profile_service=MagicMock(),
+            executor=_make_mock_executor(),
+        )
+
+        cancel_event = CompositeCancelEvent()
+        src1 = threading.Event()
+        src2 = threading.Event()
+        cancel_event.add_source(src1)
+        cancel_event.add_source(src2)
+        assert len(cancel_event._sources) == 2
+
+        # 通过 _dispatch 提交，触发 _on_done 回调
+        handle = orch._dispatch(VALID_CONFIG, "auto", cancel_event)
+        assert handle.future is not None
+
+        # 等待 future 完成 + done_callback 执行
+        handle.result(timeout=5)
+        time.sleep(0.1)
+
+        # 源列表应被清空
+        assert len(cancel_event._sources) == 0
+
+
+# ── submit 锁范围 ──
+
+
+class TestSubmitLockScope:
+    """submit() 应在锁外执行 _dispatch，锁内仅做去重判断。"""
+
+    def test_dispatch_called_outside_lock(self):
+        """_dispatch 应在 _slot_lock 释放后被调用。
+
+        通过在 _dispatch 执行时向 _slot_lock 写入 None 来验证锁未被持有——
+        若锁仍被持有，写入会死锁。
+        """
+        mock_pool = MagicMock()
+        mock_future = Future()
+        mock_pool.submit.return_value = mock_future
+
+        orch = LoginOrchestrator(
+            worker_getter=MagicMock(),
+            executor=mock_pool,
+            get_runtime_config=lambda: VALID_CONFIG,
+        )
+
+        original_dispatch = orch._dispatch
+        lock_held_during_dispatch = []
+
+        def tracking_dispatch(*args, **kwargs):
+            # 若锁被持有，acquire 会阻塞 → 超时 → _held=False
+            _held = orch._slot_lock.acquire(timeout=0.1)
+            lock_held_during_dispatch.append(_held)
+            if _held:
+                orch._slot_lock.release()
+            return original_dispatch(*args, **kwargs)
+
+        orch._dispatch = tracking_dispatch
+
+        orch.submit(source="auto")
+
+        assert len(lock_held_during_dispatch) == 1
+        # _dispatch 执行时锁不应被持有（acquire 成功说明锁空闲）
+        assert lock_held_during_dispatch[0] is True
+
+    def test_concurrent_submit_respects_sentinel(self):
+        """并发 auto submit 时，后到的线程应等待 dispatch 完成后复用 handle。"""
+        call_count = [0]
+        dispatch_barrier = threading.Barrier(2, timeout=5)
+        slow_future = Future()
+
+        def slow_dispatch(config, source, cancel_event, timeout=None):
+            call_count[0] += 1
+            # 同步：确保两个线程都已就绪
+            dispatch_barrier.wait()
+            time.sleep(0.15)
+            return LoginHandle(
+                future=slow_future,
+                source=source,
+                cancel_event=cancel_event or threading.Event(),
+            )
+
+        orch = LoginOrchestrator(
+            worker_getter=MagicMock(),
+            get_runtime_config=lambda: VALID_CONFIG,
+            executor=_make_mock_executor(),
+        )
+        orch._dispatch = slow_dispatch
+
+        results = []
+
+        def first_submit():
+            results.append(orch.submit(source="auto", config=VALID_CONFIG))
+
+        def second_submit():
+            dispatch_barrier.wait()
+            time.sleep(0.02)
+            results.append(orch.submit(source="auto", config=VALID_CONFIG))
+
+        t1 = threading.Thread(target=first_submit)
+        t2 = threading.Thread(target=second_submit)
+        t1.start()
+        t2.start()
+        t1.join(timeout=5)
+        t2.join(timeout=5)
+
+        assert len(results) == 2
+        # 第二个 auto submit 应复用第一个的 handle（去重）
+        assert results[0] is results[1]
+        # _dispatch 只应被调用一次
+        assert call_count[0] == 1
+
+    def test_dispatch_exception_clears_sentinel(self):
+        """如果 _dispatch 抛异常，slot 应被清除，不卡在 dispatching 占位状态。"""
+        orch = LoginOrchestrator(
+            worker_getter=MagicMock(),
+            get_runtime_config=lambda: VALID_CONFIG,
+            executor=_make_mock_executor(),
+        )
+        orch._dispatch = MagicMock(side_effect=RuntimeError("pool full"))
+
+        with pytest.raises(RuntimeError):
+            orch.submit(source="auto", config=VALID_CONFIG)
+
+        # slot 应为 None（不再是 dispatching 占位状态）
+        assert orch._slot is None
+
+
+# ── TaskExecutor.login_executor property ──
+
+
+# ── 超时后 cancel_event 设置 ──
+
+
+class TestTimeoutCancelsEvent:
+    """Worker 超时后 _run() 应设置 cancel_event，给 Worker 时间响应取消。"""
+
+    def test_timeout_sets_cancel_event(self):
+        """超时异常触发时，cancel_event（CompositeCancelEvent）应被 set。"""
+        worker = MagicMock()
+        worker.submit.side_effect = TimeoutError("登录超时: Worker 提交超时")
+
+        orch = LoginOrchestrator(
+            worker_getter=lambda: worker,
+            login_history=MagicMock(),
+            profile_service=MagicMock(),
+            executor=_make_mock_executor(),
+        )
+        handle = orch.submit(source="auto", config=VALID_CONFIG)
+        assert handle.future is not None
+        success, msg = handle.result(timeout=5)
+        assert success is False
+        # _run() 在超时后设置 handle.cancel_event（CompositeCancelEvent）
+        assert handle.cancel_event.is_set()
+
+    def test_timeout_sets_cancel_event_english_message(self):
+        """英文 timed out 异常也应触发 cancel_event 设置。"""
+        worker = MagicMock()
+        worker.submit.side_effect = TimeoutError("Worker timed out after 300s")
+
+        orch = LoginOrchestrator(
+            worker_getter=lambda: worker,
+            login_history=MagicMock(),
+            profile_service=MagicMock(),
+            executor=_make_mock_executor(),
+        )
+        handle = orch.submit(source="auto", config=VALID_CONFIG)
+        assert handle.future is not None
+        success, _ = handle.result(timeout=5)
+        assert success is False
+        assert handle.cancel_event.is_set()
+
+    def test_non_timeout_exception_does_not_set_cancel_event(self):
+        """非超时异常不应设置 cancel_event。"""
+        worker = MagicMock()
+        worker.submit.side_effect = RuntimeError("连接被拒绝")
+
+        orch = LoginOrchestrator(
+            worker_getter=lambda: worker,
+            login_history=MagicMock(),
+            profile_service=MagicMock(),
+            executor=_make_mock_executor(),
+        )
+        handle = orch.submit(source="auto", config=VALID_CONFIG)
+        assert handle.future is not None
+        success, _ = handle.result(timeout=5)
+        assert success is False
+        # 非超时异常不应设置 cancel_event
+        # 注意：done_callback 中 clear_sources 会清除源，但 CompositeCancelEvent
+        # 的内部 set 标志不会被 clear_sources 清除，所以 is_set() 仍为 False
+        assert not handle.cancel_event.is_set()
+
+
+class TestTaskExecutorLoginExecutor:
+    def test_login_executor_property_exposed(self):
+        """TaskExecutor 应暴露 login_executor 只读 property。"""
+        from app.services.task_executor import TaskExecutor
+
+        te = TaskExecutor(
+            registry=MagicMock(),
+            history_store=MagicMock(),
+            worker_getter=lambda: None,
+            login_orchestrator=MagicMock(),
+        )
+        # login_executor 应返回 BoundedExecutor 实例
+        assert te.login_executor is not None
+        assert hasattr(te.login_executor, "submit")
+
+
+# ── executor 必传 ──
+
+
+class TestExecutorRequired:
+    def test_no_executor_raises(self):
+        """未传 executor 时应直接报错，不再静默自建 pool。"""
+        with pytest.raises(TypeError, match="executor"):
+            LoginOrchestrator(worker_getter=lambda: None)
+
+    def test_executor_stored(self):
+        """传入的 executor 应被保存为 _executor。"""
+        mock_exec = MagicMock()
+        orch = LoginOrchestrator(worker_getter=lambda: None, executor=mock_exec)
+        assert orch._executor is mock_exec
+
+    def test_no_set_executor_method(self):
+        """set_executor 应已被移除。"""
+        orch = LoginOrchestrator(worker_getter=lambda: None, executor=MagicMock())
+        assert not hasattr(orch, "set_executor")
+
+    def test_no_pool_attribute(self):
+        """_pool 字段应已移除。"""
+        orch = LoginOrchestrator(worker_getter=lambda: None, executor=MagicMock())
+        assert not hasattr(orch, "_pool")
+
+    def test_shutdown_does_not_close_external_executor(self):
+        """shutdown 不应关闭外部 executor（由调用方管理）。"""
+        mock_exec = MagicMock()
+        orch = LoginOrchestrator(worker_getter=lambda: None, executor=mock_exec)
+        orch.shutdown(wait=False)
+        mock_exec.shutdown.assert_not_called()

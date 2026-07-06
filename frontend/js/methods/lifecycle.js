@@ -43,8 +43,11 @@ export const lifecycleMethods = {
     this.autoCheckUpdateOnStartup();
     this.timers.push(setInterval(() => {
         if (this._statusPolling) return;
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) return;
         this._statusPolling = true;
-        this.fetchStatus().finally(() => { this._statusPolling = false; });
+        this.fetchStatus()
+          .catch(err => this.frontendLogger.warn('status_poll', err))
+          .finally(() => { this._statusPolling = false; });
     }, TIMING.STATUS_POLL_INTERVAL));  // 30s fallback, WS 实时推送
     this.timers.push(setInterval(() => this.fetchAutostart(), TIMING.AUTOSTART_POLL_INTERVAL));
     this.frontendLogger.info('app.init', '初始化完成');
@@ -79,7 +82,7 @@ export const lifecycleMethods = {
   },
   async autoCheckUpdateOnStartup() {
     try {
-      const { data } = await this.$api.get('/api/check-update');
+      const data = await this.$apiService.system.checkUpdate();
       this.updateInfo = data;
       if (!data?.has_update) return;
 
@@ -107,7 +110,7 @@ export const lifecycleMethods = {
   },
   async checkInitStatus() {
     try {
-      const { data } = await this.$api.get('/api/init-status');
+      const data = await this.$apiService.system.initStatus();
       this.showWizard = !data.agreed;
       if (data.password_decryption_failed) {
         this.frontendLogger.error('init', '密码解密失败，请在设置页面重新输入密码');
@@ -124,7 +127,7 @@ export const lifecycleMethods = {
   },
   async fetchAppVersion() {
     try {
-      const { data } = await this.$api.get('/api/health');
+      const data = await this.$apiService.system.health();
       if (data?.version) {
         this.appVersion = data.version;
         if (data.python_version) this.pythonVersion = data.python_version;
@@ -158,7 +161,7 @@ export const lifecycleMethods = {
     this.updateLoading = true;
     this.updateInfo = null;
     try {
-      const { data } = await this.$api.get('/api/check-update');
+      const data = await this.$apiService.system.checkUpdate();
       this.updateInfo = data;
     } catch {
       this.updateInfo = { error: '检查更新失败，请检查网络连接' };
@@ -169,7 +172,7 @@ export const lifecycleMethods = {
   async finishWizard() {
     this.busy.save = true;
     try {
-      const { data } = await this.$api.post('/api/agree');
+      const data = await this.$apiService.system.agree();
       if (data.success) {
         this.showWizard = false;
         this.agreedToTerms = false;
@@ -198,6 +201,8 @@ export const lifecycleMethods = {
       if (this.frontendLogger) {
         this.frontendLogger.setWebSocket(null);
       }
+      oldWs.onopen = null;
+      oldWs.onmessage = null;
       oldWs.onclose = null;
       oldWs.onerror = null;
       oldWs.close();
@@ -224,9 +229,21 @@ export const lifecycleMethods = {
       try {
         const data = JSON.parse(event.data);
         if (data.type === 'status') {
-          this.status = { ...this.status, ...data.data };
+          if (typeof data.data === 'object' && data.data !== null) {
+            this.status = data.data;
+          } else {
+            this.frontendLogger.warn('websocket', 'status 消息数据非对象: ' + typeof data.data);
+          }
         } else if (data.type === 'log') {
-          this._appendLogs([data.data]);
+          if (typeof data.data === 'object' && data.data !== null) {
+            this._appendLogs([data.data]);
+          } else {
+            this.frontendLogger.warn('websocket', 'log 消息数据非对象: ' + typeof data.data);
+          }
+        } else if (data.type === 'pong') {
+          // 心跳响应，无需处理
+        } else {
+          this.frontendLogger.warn('websocket', '未知消息类型: ' + data.type);
         }
       } catch (e) {
         this.frontendLogger.error('websocket', '消息解析错误', e);
@@ -236,6 +253,12 @@ export const lifecycleMethods = {
     this.ws.onclose = () => {
       this.frontendLogger.setWebSocket(null);
       this.frontendLogger.warn('websocket', '连接已关闭');
+      // 关闭时清理 ping 定时器，避免无意义的发送尝试
+      if (this._wsPingTimer) {
+        clearInterval(this._wsPingTimer);
+        this.timers = this.timers.filter(t => t !== this._wsPingTimer);
+        this._wsPingTimer = null;
+      }
       if (this._wsDestroyed) return;
       if (this.wsRetryCount >= this.wsMaxRetries) {
         this.wsReconnecting = false;
@@ -244,7 +267,7 @@ export const lifecycleMethods = {
         return;
       }
       this.wsReconnecting = true;
-      const delay = Math.min(1000 * Math.pow(2, this.wsRetryCount), 30000);
+      const delay = Math.min(TIMING.WS_BACKOFF_BASE * Math.pow(2, this.wsRetryCount), TIMING.WS_BACKOFF_MAX);
       this.wsRetryCount++;
       this._wsRetryTimer = setTimeout(() => {
         if (!this._wsDestroyed) this.connectWebSocket();
@@ -266,7 +289,7 @@ export const lifecycleMethods = {
       if (this.ws && this.ws.readyState === WebSocket.OPEN) {
         this.ws.send(JSON.stringify({ type: 'ping' }));
       }
-    }, 30000);
+    }, TIMING.WS_PING_INTERVAL);
     this.timers.push(this._wsPingTimer);
   },
   _setupVisibilityChange() {
@@ -285,7 +308,7 @@ export const lifecycleMethods = {
   },
   async fetchStatus() {
     try {
-      const { data } = await this.$api.get('/api/status');
+      const data = await this.$apiService.monitor.fetchStatus();
       this.status = data;
       if (this.fetchStatusFailCount > 0) {
         this.fetchStatusFailCount = 0;
@@ -301,7 +324,7 @@ export const lifecycleMethods = {
   },
   async fetchLogs() {
     try {
-      const { data } = await this.$api.get('/api/logs', { params: { limit: LIMITS.LOG_MAX_ENTRIES } });
+      const data = await this.$apiService.system.fetchLogs(LIMITS.LOG_MAX_ENTRIES);
       this.logs = data;
       this.$nextTick(() => this.scrollToBottom());
     } catch (error) {

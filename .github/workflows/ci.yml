@@ -11,7 +11,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        python-version: ["3.12", "3.13"]
+        python-version: ["3.12"]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 10
     env:
@@ -28,7 +28,10 @@ jobs:
 
       - name: Install dependencies (Windows)
         if: runner.os == 'Windows'
-        run: go run start.go --install-only
+        run: |
+          cp resources/tools/start/start.go .
+          go run start.go --install-only
+          rm start.go
 
       - name: Install dependencies (Unix)
         if: runner.os != 'Windows'

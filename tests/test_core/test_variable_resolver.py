@@ -181,10 +181,10 @@ class TestResolveForJs:
         assert "a'b" in result
 
     def test_unresolved_var_preserved_in_js(self):
-        """未解析变量在 JS 中保留原样（JSON 编码）。"""
+        """白名单模式：未解析变量在 JS 中保留原样，不 JSON 编码。"""
         resolver = VariableResolver(_make_config(), {})
         result = resolver.resolve_for_js("{{MISSING}}")
-        assert result == '"{{MISSING}}"'
+        assert result == "{{MISSING}}"
 
     def test_non_template_passthrough(self):
         """无模板标记原样返回。"""

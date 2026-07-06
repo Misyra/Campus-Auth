@@ -15,6 +15,7 @@ from app.api.tools import (
     MAX_FILE_SIZE,
     _cleanup_old_backgrounds,
 )
+from app.schemas import FetchUrlRequest
 
 
 @pytest.fixture
@@ -22,7 +23,7 @@ def client(tmp_path):
     """创建测试客户端，使用临时背景目录。"""
     bg_dir = tmp_path / "frontend" / "background"
     bg_dir.mkdir(parents=True, exist_ok=True)
-    tools_dir = tmp_path / "res" / "tools"
+    tools_dir = tmp_path / "resources" / "tools"
     tools_dir.mkdir(parents=True, exist_ok=True)
     docs_dir = tmp_path / "docs"
     docs_dir.mkdir(exist_ok=True)
@@ -65,7 +66,9 @@ class TestUploadBackground:
             files={"file": ("bg.png", io.BytesIO(png_data), "image/png")},
         )
         assert resp.status_code == 200
-        data = resp.json()
+        body = resp.json()
+        assert body["success"] is True
+        data = body["data"]
         assert "filename" in data
         assert data["url"].startswith("/api/background/")
         assert data["filename"].endswith(".png")
@@ -151,6 +154,26 @@ class TestDeleteBackground:
         resp = test_client.delete("/api/background/no_such.jpg")
         assert resp.status_code == 404
 
+    def test_delete_permission_error(self, client):
+        """文件被占用时返回 409。"""
+        test_client, bg_dir, _ = client
+        (bg_dir / "locked.jpg").write_bytes(b"data")
+
+        with patch.object(Path, "unlink", side_effect=PermissionError("文件被占用")):
+            resp = test_client.delete("/api/background/locked.jpg")
+        assert resp.status_code == 409
+        assert "文件被占用" in resp.json()["detail"]
+
+    def test_delete_os_error(self, client):
+        """其他 OS 错误返回 500。"""
+        test_client, bg_dir, _ = client
+        (bg_dir / "err.jpg").write_bytes(b"data")
+
+        with patch.object(Path, "unlink", side_effect=OSError("磁盘错误")):
+            resp = test_client.delete("/api/background/err.jpg")
+        assert resp.status_code == 500
+        assert "删除文件失败" in resp.json()["detail"]
+
 
 # ── 下载任务录制器脚本 ──
 
@@ -161,7 +184,7 @@ class TestDownloadTaskRecorder:
     def test_download_when_exists(self, client):
         """脚本存在时成功下载。"""
         test_client, _, tmp_path = client
-        script_path = tmp_path / "res" / "tools" / "task-recorder.user.js"
+        script_path = tmp_path / "resources" / "tools" / "task-recorder.user.js"
         script_path.write_text(
             "// ==UserScript==\nconsole.log('test');", encoding="utf-8"
         )
@@ -173,7 +196,7 @@ class TestDownloadTaskRecorder:
         """脚本不存在时返回 404。"""
         test_client, _, tmp_path = client
         # 确保 tools 目录为空
-        tools_dir = tmp_path / "res" / "tools"
+        tools_dir = tmp_path / "resources" / "tools"
         for f in tools_dir.iterdir():
             f.unlink()
         resp = test_client.get("/api/tools/task-recorder.user.js")
@@ -322,7 +345,9 @@ class TestFetchUrlContentLength:
             from app.api.tools import fetch_background_url
 
             with pytest.raises(Exception) as exc_info:
-                await fetch_background_url({"url": "https://example.com/big.png"})
+                await fetch_background_url(
+                    FetchUrlRequest(url="https://example.com/big.png")
+                )
             assert exc_info.value.status_code == 400
             assert "5MB" in exc_info.value.detail
 
@@ -348,9 +373,12 @@ class TestFetchUrlContentLength:
         ):
             from app.api.tools import fetch_background_url
 
-            result = await fetch_background_url({"url": "https://example.com/small.png"})
-            assert "filename" in result
-            assert result["url"].startswith("/api/background/")
+            result = await fetch_background_url(
+                FetchUrlRequest(url="https://example.com/small.png")
+            )
+            assert result.success is True
+            assert "filename" in result.data
+            assert result.data["url"].startswith("/api/background/")
 
     @pytest.mark.asyncio
     async def test_falls_back_to_body_size_when_no_content_length(self, tmp_path):
@@ -374,5 +402,8 @@ class TestFetchUrlContentLength:
         ):
             from app.api.tools import fetch_background_url
 
-            result = await fetch_background_url({"url": "https://example.com/no-header.png"})
-            assert "filename" in result
+            result = await fetch_background_url(
+                FetchUrlRequest(url="https://example.com/no-header.png")
+            )
+            assert result.success is True
+            assert "filename" in result.data

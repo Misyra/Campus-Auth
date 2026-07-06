@@ -10,16 +10,7 @@ function cloneConfig(src) {
     retry: { ...src.retry },
     credentials: { ...src.credentials },
     active_task: src.active_task,
-    custom_variables: { ...src.custom_variables },
-    block_proxy: src.block_proxy,
-    shell_path: src.shell_path,
-    minimize_to_tray: src.minimize_to_tray,
-    lightweight_tray: src.lightweight_tray,
-    startup_action: src.startup_action,
-    autostart_lightweight: src.autostart_lightweight,
-    auto_open_browser: src.auto_open_browser,
-    proxy: src.proxy,
-    app_port: src.app_port,
+    app_settings: { ...src.app_settings },
   };
 }
 
@@ -27,7 +18,11 @@ function cloneConfig(src) {
 export function configData() {
   return {
     config: cloneConfig(DEFAULT_CONFIG),
-    defaultUrlCheckUrls: DEFAULT_CONFIG.monitor.url_check_urls,
+    // 密码掩码回显：后端 has_password 标记，前端展示 •••••• 占位
+    passwordSaved: false,
+    // inline edit 模式：是否处于密码编辑态
+    editingPassword: false,
+    defaultUrlCheckUrls: [...DEFAULT_CONFIG.monitor.url_check_urls],
     dangerConfirm: null,
     dangerCountdown: 0,
     availableShells: [],
@@ -36,5 +31,7 @@ export function configData() {
     ocrStatus: { installed: false, size_mb: 0 },
     // 并发锁（防止重复请求）
     _autostartInFlight: false,
+    // 用于 configDirty computed 的快照（响应式，使 dirty 指示器及时更新）
+    _lastSavedConfig: null,
   };
 }

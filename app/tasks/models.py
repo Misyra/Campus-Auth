@@ -11,10 +11,10 @@ from typing import Any
 from app.constants import DEFAULT_TASK_TIMEOUT_MS
 from app.utils.logging import get_logger
 
-logger = get_logger("task_models", source="task")
+logger = get_logger("task_models", source="backend")
 
 # 任务ID验证正则
-TASK_ID_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
+TASK_ID_PATTERN = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
 
 
 def _is_valid_step(s: Any) -> bool:
@@ -35,13 +35,7 @@ def _safe_float(value: Any, default: float) -> float:
         return default
 
 
-class TaskError(Exception):
-    """任务执行错误"""
-
-    pass
-
-
-class StepError(TaskError):
+class StepError(Exception):
     """步骤执行错误"""
 
     pass
@@ -93,18 +87,20 @@ class StepConfig:
 
     @classmethod
     def _field_defaults(cls) -> dict[str, Any]:
-        """动态获取字段默认值，用于 to_dict 时跳过默认值。"""
-        from dataclasses import MISSING, fields
+        """动态获取字段默认值，用于 to_dict 时跳过默认值（结果按类缓存）。"""
+        if "_cached_field_defaults" not in cls.__dict__:
+            from dataclasses import MISSING, fields
 
-        defaults = {}
-        for f in fields(cls):
-            if f.name in ("id", "type", "extra"):
-                continue
-            if f.default is not MISSING:
-                defaults[f.name] = f.default
-            elif f.default_factory is not MISSING:
-                defaults[f.name] = f.default_factory()
-        return defaults
+            defaults = {}
+            for f in fields(cls):
+                if f.name in ("id", "type", "extra"):
+                    continue
+                if f.default is not MISSING:
+                    defaults[f.name] = f.default
+                elif f.default_factory is not MISSING:
+                    defaults[f.name] = f.default_factory()
+            cls._cached_field_defaults = defaults
+        return cls._cached_field_defaults
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> StepConfig:

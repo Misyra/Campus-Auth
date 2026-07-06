@@ -9,28 +9,46 @@ if TYPE_CHECKING:
     from app.schemas import PauseSettings
 
 
-def is_in_pause_period(pause: PauseSettings) -> bool:
-    """检查当前时间是否在暂停时段内。
+def _parse_pause_range(raw: str) -> tuple[datetime.time, datetime.time]:
+    """解析 HH:MM-HH:MM 格式的暂停时段字符串。"""
+    start_str, end_str = raw.split("-")
+    start = datetime.datetime.strptime(start_str.strip(), "%H:%M").time()
+    end = datetime.datetime.strptime(end_str.strip(), "%H:%M").time()
+    return start, end
+
+
+def _is_in_pause_period(
+    now: datetime.datetime, ranges: list[tuple[datetime.time, datetime.time]]
+) -> bool:
+    """检查指定时间是否在暂停时段内。
 
     参数:
-        pause: PauseSettings 模型实例
+        now: 要判断的时间点
+        ranges: 暂停时段列表，每项为 (start, end) 时间对
 
     返回:
         是否在暂停时段
     """
+    current = now.time()
+    for start, end in ranges:
+        if start <= end:
+            if start <= current <= end:
+                return True
+        else:
+            if current >= start or current <= end:
+                return True
+    return False
+
+
+def is_pause_enabled(pause: PauseSettings) -> bool:
+    """检查 PauseSettings 是否在当前时间处于暂停状态。"""
     if not pause.enabled:
         return False
 
-    current_hour = datetime.datetime.now().hour
-    start_hour = pause.start_hour
-    end_hour = pause.end_hour
-
-    # start_hour == end_hour 时视为全天暂停
-    if start_hour == end_hour:
+    # start == end 且分钟相同时视为全天暂停
+    if pause.start_hour == pause.end_hour and pause.start_minute == pause.end_minute:
         return True
 
-    # 处理跨天的情况（如23点到6点）
-    if start_hour < end_hour:
-        return start_hour <= current_hour < end_hour
-    else:
-        return current_hour >= start_hour or current_hour < end_hour
+    start = datetime.time(pause.start_hour, pause.start_minute)
+    end = datetime.time(pause.end_hour, pause.end_minute)
+    return _is_in_pause_period(datetime.datetime.now(), [(start, end)])

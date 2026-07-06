@@ -12,9 +12,14 @@ import subprocess
 import sys
 import threading
 from collections.abc import Callable
+from pathlib import Path
 
 from app.utils.logging import get_logger
-from app.utils.platform import CREATE_NO_WINDOW_FLAG, is_windows
+from app.utils.platform import (
+    CREATE_NO_WINDOW_FLAG,
+    get_playwright_cache_dir,
+    is_windows,
+)
 
 logger = get_logger("playwright_bootstrap", source="backend")
 
@@ -49,7 +54,12 @@ def _is_enabled() -> bool:
 
 
 def _run(cmd: list[str], env: dict | None = None) -> subprocess.CompletedProcess[str]:
-    kwargs: dict = {"capture_output": True, "text": True, "check": False, "timeout": BOOTSTRAP_TIMEOUT}
+    kwargs: dict = {
+        "capture_output": True,
+        "text": True,
+        "check": False,
+        "timeout": BOOTSTRAP_TIMEOUT,
+    }
     if is_windows():
         kwargs["creationflags"] = CREATE_NO_WINDOW_FLAG
     if env is not None:
@@ -65,15 +75,15 @@ def _get_browser_channel() -> str | None:
         None: 配置文件不存在或读取失败
     """
     try:
-        from app.services.profile_service import create_profile_service
+        from app.services.profile_service import get_profile_service
 
-        _ps = create_profile_service()
+        _ps = get_profile_service()
         _data = _ps.load()
         channel = _data.global_config.browser.browser_channel
         if channel:
             return channel
     except Exception:
-        logger.debug("读取 browser_channel 配置失败", exc_info=True)
+        logger.warning("读取 browser_channel 配置失败", exc_info=True)
     return None  # 配置文件不存在或未配置
 
 
@@ -95,6 +105,24 @@ def _has_chromium() -> bool:
     return has_playwright_chromium()
 
 
+def _verify_chromium_install(cache_dir: Path) -> bool:
+    """校验 Chromium 安装完整性：关键二进制文件存在且可执行。"""
+    binary_paths = [
+        Path("chrome-win64") / "chrome.exe",
+        Path("chrome-win") / "chrome.exe",
+        Path("chrome-linux") / "chrome",
+        Path("chrome-mac") / "Chromium.app" / "Contents" / "MacOS" / "Chromium",
+    ]
+    for d in cache_dir.glob("chromium-*"):
+        if not d.is_dir():
+            continue
+        for rel in binary_paths:
+            exe = d / rel
+            if exe.exists() and os.access(exe, os.X_OK):
+                return True
+    return False
+
+
 def ensure_playwright_ready(log: Callable[[str], None] | None = None) -> bool:
     """确保 playwright 包可导入且所需浏览器已安装。
 
@@ -104,6 +132,8 @@ def ensure_playwright_ready(log: Callable[[str], None] | None = None) -> bool:
     - msedge/chrome/custom: 跳过下载（使用系统浏览器）
     """
     global _BOOTSTRAP_DONE, _BOOTSTRAP_SKIPPED
+
+    logger.debug("检查 Playwright 浏览器就绪状态")
 
     with _BOOTSTRAP_LOCK:
         if _BOOTSTRAP_DONE:
@@ -139,7 +169,7 @@ def ensure_playwright_ready(log: Callable[[str], None] | None = None) -> bool:
             return True
 
         # 需要下载的浏览器：playwright 或 firefox
-        VALID_CHANNELS = ("playwright", "msedge", "chrome", "firefox", "custom")
+        VALID_CHANNELS = ("playwright", "firefox")
         if channel not in VALID_CHANNELS:
             logger.warning("无效的 browser_channel: {}，跳过下载", channel)
             _BOOTSTRAP_DONE = True
@@ -150,9 +180,10 @@ def ensure_playwright_ready(log: Callable[[str], None] | None = None) -> bool:
         try:
             if _has_browser(channel):
                 _BOOTSTRAP_DONE = True
+                logger.info("Playwright 浏览器就绪成功")
                 return True
         except Exception:
-            logger.debug("快速路径浏览器检查失败，回退到慢速路径", exc_info=True)
+            logger.debug("快速检查失败，回退到慢速路径", exc_info=True)
 
         # 慢速路径：需要导入 playwright 来安装
         try:
@@ -182,6 +213,21 @@ def ensure_playwright_ready(log: Callable[[str], None] | None = None) -> bool:
                     _BOOTSTRAP_DONE = True
                     if log:
                         log(f"Playwright {install_target} 下载完成")
+
+                    # 安装完整性校验：确认二进制文件存在且可执行
+                    if install_target == "chromium":
+                        cache_dir = get_playwright_cache_dir()
+                        if cache_dir is not None and not _verify_chromium_install(
+                            cache_dir
+                        ):
+                            _BOOTSTRAP_DONE = False
+                            msg = "Chromium 安装完整性校验失败：未找到可执行的浏览器二进制"
+                            logger.error(msg)
+                            if log:
+                                log(msg)
+                            return False
+
+                    logger.info("Playwright 浏览器就绪成功")
                     return True
 
                 if log:

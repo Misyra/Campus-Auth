@@ -1,283 +1,249 @@
 <div v-if="currentPage === 'appearance'" class="page-content">
   <div class="appearance-page">
-      <!-- 背景图片卡片 - 全宽 -->
-      <div class="card appearance-card appearance-bg-card">
-        <div class="appearance-card-header">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-lg">
-            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+  <!-- 卡片 1：背景与氛围 -->
+  <div class="card appearance-card appearance-section-card">
+    <div class="appearance-card-header">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="appearance-card-icon">
+        <rect x="3" y="3" width="18" height="18" rx="2"/>
+        <circle cx="8.5" cy="8.5" r="1.5"/>
+        <polyline points="21 15 16 10 5 21"/>
+      </svg>
+      <h3>背景与氛围</h3>
+      <button v-if="cardDirty('background')" type="button" class="appearance-reset-btn" @click="resetCard('background')">恢复默认</button>
+    </div>
+    <div class="appearance-card-body appearance-grid-2col">
+      <!-- 背景图缩略图 + 按钮 -->
+      <div class="appearance-bg-thumb-group">
+        <div v-if="appearance.background_url" class="appearance-bg-thumb" @click="openBgLightbox">
+          <img :src="appearance.background_url" alt="背景预览" />
+          <div class="appearance-bg-thumb-zoom">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-sm">
+              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+              <line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/>
+            </svg>
+          </div>
+          <button type="button" class="appearance-bg-thumb-remove" @click.stop="clearBackgroundImage" title="移除背景">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-sm">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+        <div v-else class="appearance-bg-thumb empty" @click="selectBackgroundImage">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:24px;height:24px;">
+            <rect x="3" y="3" width="18" height="18" rx="2"/>
             <circle cx="8.5" cy="8.5" r="1.5"/>
             <polyline points="21 15 16 10 5 21"/>
           </svg>
-          <h3>背景图片</h3>
+          <span>选择图片</span>
         </div>
-        <div class="appearance-card-body">
-          <div class="appearance-bg-layout">
-            <!-- 预览 -->
-            <div class="appearance-bg-preview">
-              <div v-if="appearance.background_url" class="appearance-bg-preview-img" @click="openBgLightbox">
-                <img :src="appearance.background_url" alt="背景预览" />
-                <div class="appearance-bg-preview-zoom" title="点击放大">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-md">
-                    <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-                    <line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/>
-                  </svg>
-                </div>
-                <button type="button" class="appearance-bg-remove" @click="clearBackgroundImage" title="移除背景">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-md">
-                    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                  </svg>
-                </button>
-              </div>
-              <div v-else class="appearance-bg-preview-empty" @click="selectBackgroundImage">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="width:40px;height:40px;">
-                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-                  <circle cx="8.5" cy="8.5" r="1.5"/>
-                  <polyline points="21 15 16 10 5 21"/>
-                </svg>
-                <span>点击选择图片</span>
-                <span class="text-secondary" style="font-size:11px;">支持 JPG、PNG、GIF，最大 5MB</span>
-              </div>
-            </div>
-            <!-- 控制滑块 -->
-            <div class="appearance-bg-controls">
-              <div v-if="appearance.background_url" class="appearance-sliders">
-                <div class="appearance-slider-item">
-                  <label for="bg-blur">模糊</label>
-                  <input id="bg-blur" type="range" v-model.number="appearance.background_blur" min="0" max="30" step="1" />
-                  <span>{{ appearance.background_blur }}px</span>
-                </div>
-                <div class="appearance-slider-item">
-                  <label for="bg-opacity">遮罩暗度</label>
-                  <input id="bg-opacity" type="range" v-model.number="appearance.background_opacity" min="0" max="0.8" step="0.05" />
-                  <span>{{ Math.round(appearance.background_opacity * 100) }}%</span>
-                </div>
-              </div>
-              <div class="appearance-bg-actions">
-                <button type="button" class="btn btn-secondary btn-sm" @click="selectBackgroundImage">
-                  选择图片
-                </button>
-                <button type="button" class="btn btn-secondary btn-sm" @click="openRandomWallpaperDialog">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-sm">
-                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-                    <path d="M3 15l4-4a2 2 0 012.8 0L15 16"/>
-                    <path d="M14 14l1-1a2 2 0 012.8 0L21 16"/>
-                    <circle cx="8.5" cy="8.5" r="1.5"/>
-                  </svg>
-                  随机壁纸
-                </button>
-              </div>
-            </div>
-          </div>
+        <div class="appearance-bg-thumb-actions">
+          <button type="button" class="btn btn-secondary btn-sm" @click="selectBackgroundImage">选择图片</button>
+          <button type="button" class="btn btn-secondary btn-sm" @click="openRandomWallpaperDialog">从链接下载</button>
         </div>
       </div>
 
-      <!-- 设置卡片网格 -->
-      <div class="appearance-settings-grid">
-        <!-- 主题色卡片 -->
-        <div class="card appearance-card">
-          <div class="appearance-card-header">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-lg">
-              <circle cx="12" cy="12" r="10"/>
-              <path d="M12 2a10 10 0 0 1 0 20"/>
-            </svg>
-            <h3>主题色</h3>
-          </div>
-          <div class="appearance-card-body">
-            <label class="toggle" style="margin-bottom:14px;">
-              <input type="checkbox" v-model="appearance.theme" true-value="light" false-value="dark" />
-              <span class="toggle-slider"></span>
-              <span class="toggle-label">浅色主题</span>
-            </label>
-            <div class="appearance-colors">
-              <button
-                v-for="color in getAccentColors()"
-                :key="color.value"
-                type="button"
-                class="appearance-color-btn"
-                :class="{ active: appearance.accent_color === color.value }"
-                :style="{ background: color.value }"
-                @click="appearance.accent_color = color.value"
-                :title="color.label"
-              >
-                <svg v-if="appearance.accent_color === color.value" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" class="icon-sm">
-                  <polyline points="20 6 9 17 4 12"/>
-                </svg>
-              </button>
-            </div>
-            <div class="appearance-custom-color">
-              <label for="custom-accent-input" class="appearance-custom-swatch" :style="{ background: appearance.accent_color }" title="点击选择颜色">
-                <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" class="icon-sm">
-                  <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
-                </svg>
-              </label>
-              <input id="custom-accent-input" type="color" v-model="appearance.accent_color" class="sr-only" />
-              <span class="appearance-custom-hex">{{ appearance.accent_color }}</span>
-              <button v-if="appearance.accent_color !== '#22d3ee'" type="button" class="btn btn-sm ms-auto" @click="appearance.accent_color = '#22d3ee'">重置</button>
-            </div>
-          </div>
+      <!-- 滑块组 -->
+      <div class="appearance-sliders appearance-sliders-col">
+        <div class="appearance-slider-item">
+          <label for="bg-blur">背景模糊</label>
+          <input id="bg-blur" type="range" v-model.number="appearance.background_blur" min="0" max="30" step="1" />
+          <span>{{ appearance.background_blur }}px</span>
         </div>
-
-        <!-- 毛玻璃卡片 -->
-        <div class="card appearance-card">
-          <div class="appearance-card-header">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-lg">
-              <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/>
-            </svg>
-            <h3>毛玻璃</h3>
-          </div>
-          <div class="appearance-card-body">
-            <label class="toggle">
-              <input type="checkbox" v-model="appearance.backdrop_filter" />
-              <span class="toggle-slider"></span>
-              <span class="toggle-label">启用毛玻璃效果</span>
-            </label>
-            <p class="form-hint">卡片背景呈现磨砂玻璃般的模糊效果，关闭可提升性能</p>
-            <div class="appearance-slider-item" style="margin-top:14px;">
-              <label for="card-blur">模糊度</label>
-              <input id="card-blur" type="range" v-model.number="appearance.card_blur" min="0" max="24" step="1" :disabled="!appearance.backdrop_filter" />
-              <span>{{ appearance.card_blur }}px</span>
-            </div>
-            <p class="form-hint">毛玻璃模糊半径，0 为完全清晰，关闭毛玻璃时无效</p>
-          </div>
+        <div class="appearance-slider-item">
+          <label for="bg-opacity">背景可见度</label>
+          <input id="bg-opacity" type="range" v-model.number="appearance.background_opacity" min="0" max="0.8" step="0.05" />
+          <span>{{ Math.round(appearance.background_opacity * 100) }}%</span>
         </div>
-
-        <!-- 背景色卡片 -->
-        <div class="card appearance-card">
-          <div class="appearance-card-header">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-lg">
-              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-              <line x1="3" y1="9" x2="21" y2="9"/>
-              <line x1="9" y1="3" x2="9" y2="21"/>
-            </svg>
-            <h3>背景颜色</h3>
-          </div>
-          <div class="appearance-card-body">
-            <div class="appearance-colors">
-              <button
-                v-for="color in getBgColors()"
-                :key="color.value"
-                type="button"
-                class="appearance-color-btn"
-                :class="{ active: appearance.background_color === color.value }"
-                :style="{ background: color.value }"
-                @click="appearance.background_color = color.value"
-                :title="color.label"
-              >
-                <svg v-if="appearance.background_color === color.value" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" class="icon-sm">
-                  <polyline points="20 6 9 17 4 12"/>
-                </svg>
-              </button>
-            </div>
-            <div class="appearance-custom-color">
-              <label for="custom-bg-input" class="appearance-custom-swatch" :style="{ background: appearance.background_color }" title="点击选择颜色">
-                <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" class="icon-sm">
-                  <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
-                </svg>
-              </label>
-              <input id="custom-bg-input" type="color" v-model="appearance.background_color" class="sr-only" />
-              <span class="appearance-custom-hex">{{ appearance.background_color }}</span>
-              <button v-if="appearance.background_color !== '#0f172a'" type="button" class="btn btn-sm ms-auto" @click="appearance.background_color = '#0f172a'">重置</button>
-            </div>
-          </div>
+        <div class="appearance-slider-item" :class="{ disabled: !appearance.backdrop_filter }">
+          <label for="card-blur">玻璃模糊度</label>
+          <input id="card-blur" type="range" v-model.number="appearance.card_blur" min="0" max="24" step="1" :disabled="!appearance.backdrop_filter" />
+          <span>{{ appearance.card_blur }}px</span>
         </div>
+        <label class="toggle appearance-toggle-row">
+          <input type="checkbox" v-model="appearance.backdrop_filter" />
+          <span class="toggle-slider"></span>
+          <span class="toggle-label">毛玻璃效果</span>
+        </label>
+      </div>
+    </div>
+  </div>
 
-        <!-- 卡片样式卡片 -->
-        <div class="card appearance-card">
-          <div class="appearance-card-header">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-lg">
-              <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
-              <rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>
-            </svg>
-            <h3>卡片样式</h3>
-          </div>
-          <div class="appearance-card-body">
-            <div class="appearance-slider-item">
-              <label for="card-opacity">不透明度</label>
-              <input id="card-opacity" type="range" v-model.number="appearance.card_opacity" min="0" max="1" step="0.05" />
-              <span>{{ Math.round(appearance.card_opacity * 100) }}%</span>
-            </div>
-            <p class="form-hint">卡片背景不透明程度，越低越透明</p>
-            <div class="appearance-slider-item" style="margin-top:12px;">
-              <label for="border-intensity">边框强度</label>
-              <input id="border-intensity" type="range" v-model.number="appearance.border_intensity" min="0" max="2" step="0.1" />
-              <span>{{ appearance.border_intensity.toFixed(1) }}x</span>
-            </div>
-            <p class="form-hint">边框线条的可见程度</p>
-          </div>
-        </div>
-
-        <!-- 缩放卡片 -->
-        <div class="card appearance-card">
-          <div class="appearance-card-header">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-lg">
-              <circle cx="11" cy="11" r="8"/>
-              <line x1="21" y1="21" x2="16.65" y2="16.65"/>
-              <line x1="11" y1="8" x2="11" y2="14"/>
-              <line x1="8" y1="11" x2="14" y2="11"/>
-            </svg>
-            <h3>缩放</h3>
-          </div>
-          <div class="appearance-card-body">
-            <div class="appearance-slider-item">
-              <label for="zoom-scale">比例</label>
-              <input id="zoom-scale" type="range" v-model.number="appearance.zoom" min="80" max="130" step="5" />
-              <span>
-                {{ appearance.zoom }}%
-                <button v-if="appearance.zoom !== 100" type="button" class="btn btn-sm" style="margin-left:6px;padding:2px 8px;font-size:11px;" @click="appearance.zoom = 100">重置</button>
-              </span>
-            </div>
-            <div class="appearance-font-preview" :style="{ fontSize: appearance.zoom / 100 + 'em' }">
-              预览文字 ABCabc 123
-            </div>
-          </div>
-        </div>
-
-        <!-- 侧边栏卡片 -->
-        <div class="card appearance-card">
-          <div class="appearance-card-header">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-lg">
-              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-              <line x1="9" y1="3" x2="9" y2="21"/>
-            </svg>
-            <h3>侧边栏</h3>
-          </div>
-          <div class="appearance-card-body">
-            <div class="appearance-slider-item">
-              <label for="sidebar-opacity">不透明度</label>
-              <input id="sidebar-opacity" type="range" v-model.number="appearance.sidebar_opacity" min="0.3" max="1" step="0.05" />
-              <span>{{ Math.round(appearance.sidebar_opacity * 100) }}%</span>
-            </div>
-            <p class="form-hint">侧边栏背景不透明程度</p>
-            <div class="appearance-custom-color" style="margin-top:12px;">
-              <label for="custom-sidebar-color" class="appearance-custom-swatch" :style="{ background: appearance.sidebar_color || appearance.background_color || '#1e293b' }" title="点击选择侧边栏颜色">
-                <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" class="icon-sm">
-                  <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
-                </svg>
-              </label>
-              <input id="custom-sidebar-color" type="color" :value="appearance.sidebar_color || '#1e293b'" @change="appearance.sidebar_color = $event.target.value" class="sr-only" />
-              <span class="appearance-custom-hex">{{ appearance.sidebar_color || '跟随背景色' }}</span>
-              <button v-if="appearance.sidebar_color" type="button" class="btn btn-sm ms-auto" @click="appearance.sidebar_color = ''">重置</button>
-            </div>
-            <p class="form-hint">留空自动跟随背景色加深</p>
-            <div class="appearance-custom-color" style="margin-top:10px;">
-              <label for="custom-sidebar-accent" class="appearance-custom-swatch" :style="{ background: appearance.sidebar_accent || appearance.accent_color }" title="点击选择高亮色">
-                <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" class="icon-sm">
-                  <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
-                </svg>
-              </label>
-              <input id="custom-sidebar-accent" type="color" :value="appearance.sidebar_accent || '#22d3ee'" @change="appearance.sidebar_accent = $event.target.value" class="sr-only" />
-              <span class="appearance-custom-hex">{{ appearance.sidebar_accent || '跟随主题色' }}</span>
-              <button v-if="appearance.sidebar_accent" type="button" class="btn btn-sm ms-auto" @click="appearance.sidebar_accent = ''">重置</button>
-            </div>
-            <p class="form-hint">选中项高亮色，留空跟随主题色</p>
-          </div>
+  <!-- 卡片 2：主题与配色 -->
+  <div class="card appearance-card appearance-section-card">
+    <div class="appearance-card-header">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="appearance-card-icon">
+        <circle cx="12" cy="12" r="10"/>
+        <path d="M12 2a10 10 0 0 1 0 20"/>
+      </svg>
+      <h3>主题与配色</h3>
+      <button v-if="cardDirty('theme')" type="button" class="appearance-reset-btn" @click="resetCard('theme')">恢复默认</button>
+    </div>
+    <div class="appearance-card-body appearance-grid-2col">
+      <!-- 主题切换 -->
+      <div class="appearance-field">
+        <div class="appearance-field-label">主题</div>
+        <div class="appearance-segmented">
+          <button type="button" :class="{ active: appearance.theme === 'light' }" @click="appearance.theme = 'light'">浅色</button>
+          <button type="button" :class="{ active: appearance.theme === 'dark' }" @click="appearance.theme = 'dark'">深色</button>
+          <button type="button" :class="{ active: appearance.theme === 'auto' }" @click="appearance.theme = 'auto'">跟随系统</button>
         </div>
       </div>
-
-      <!-- 恢复默认 -->
-      <div class="appearance-actions">
-        <button type="button" class="btn btn-secondary" @click="resetAppearance">恢复默认</button>
+      <div></div>
+      <!-- 主题色 -->
+      <div class="appearance-field">
+        <div class="appearance-field-label">主题色</div>
+        <div class="appearance-color-row">
+          <div class="appearance-colors">
+            <button
+              v-for="color in getColorList('accent')"
+              :key="color.value"
+              type="button"
+              class="appearance-color-btn"
+              :class="{ active: appearance.accent_color === color.value, custom: color.custom }"
+              :style="{ background: color.value }"
+              @click="appearance.accent_color = color.value"
+              @contextmenu.prevent="color.custom ? onColorLongPress('accent', color.value, $event) : null"
+              @touchstart="color.custom ? startLongPress('accent', color.value, $event) : null"
+              :title="color.label"
+            >
+              <svg v-if="appearance.accent_color === color.value" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" class="icon-sm">
+                <polyline points="20 6 9 17 4 12"/>
+              </svg>
+            </button>
+            <button type="button" class="appearance-color-btn appearance-color-add" @click="pickCustomColor('accent')" title="自定义颜色">+</button>
+          </div>
+          <span class="appearance-color-hex">{{ appearance.accent_color }}</span>
+        </div>
+        <input type="color" data-color-picker="accent" class="sr-only" @change="onCustomColorPicked('accent', $event)" />
       </div>
+      <!-- 背景色 -->
+      <div class="appearance-field">
+        <div class="appearance-field-label">
+          背景颜色
+          <button v-if="appearance.background_color" type="button" class="appearance-reset-btn-inline" @click="resetThemeBackground">恢复默认</button>
+        </div>
+        <div class="appearance-color-row">
+          <div class="appearance-colors">
+            <button
+              v-for="color in getColorList('bg')"
+              :key="color.value"
+              type="button"
+              class="appearance-color-btn"
+              :class="{ active: appearance.background_color === color.value, custom: color.custom }"
+              :style="{ background: color.value }"
+              @click="appearance.background_color = color.value"
+              @contextmenu.prevent="color.custom ? onColorLongPress('bg', color.value, $event) : null"
+              @touchstart="color.custom ? startLongPress('bg', color.value, $event) : null"
+              :title="color.label"
+            >
+              <svg v-if="appearance.background_color === color.value" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" class="icon-sm">
+                <polyline points="20 6 9 17 4 12"/>
+              </svg>
+            </button>
+            <button type="button" class="appearance-color-btn appearance-color-add" @click="pickCustomColor('bg')" title="自定义颜色">+</button>
+          </div>
+          <span class="appearance-color-hex">{{ appearance.background_color }}</span>
+        </div>
+        <input type="color" data-color-picker="bg" class="sr-only" @change="onCustomColorPicked('bg', $event)" />
+      </div>
+    </div>
+  </div>
+
+  <!-- 卡片 3：卡片样式 -->
+  <div class="card appearance-card appearance-section-card">
+    <div class="appearance-card-header">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="appearance-card-icon">
+        <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+        <rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/>
+      </svg>
+      <h3>卡片样式</h3>
+      <button v-if="cardDirty('card')" type="button" class="appearance-reset-btn" @click="resetCard('card')">恢复默认</button>
+    </div>
+    <div class="appearance-card-body appearance-grid-2col">
+      <div class="appearance-slider-item">
+        <label for="card-opacity">不透明度</label>
+        <input id="card-opacity" type="range" v-model.number="appearance.card_opacity" min="0" max="1" step="0.05" />
+        <span>{{ Math.round(appearance.card_opacity * 100) }}%</span>
+      </div>
+      <div class="appearance-slider-item">
+        <label for="border-intensity">边框</label>
+        <input id="border-intensity" type="range" v-model.number="appearance.border_intensity" min="0" max="2" step="0.1" />
+        <span>{{ appearance.border_intensity.toFixed(1) }}x</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 卡片 4：侧边栏 -->
+  <div class="card appearance-card appearance-section-card">
+    <div class="appearance-card-header">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="appearance-card-icon">
+        <rect x="3" y="3" width="18" height="18" rx="2"/>
+        <line x1="9" y1="3" x2="9" y2="21"/>
+      </svg>
+      <h3>侧边栏</h3>
+      <button v-if="cardDirty('sidebar')" type="button" class="appearance-reset-btn" @click="resetCard('sidebar')">恢复默认</button>
+    </div>
+    <div class="appearance-card-body appearance-grid-2col">
+      <div class="appearance-slider-item">
+        <label for="sidebar-opacity">不透明度</label>
+        <input id="sidebar-opacity" type="range" v-model.number="appearance.sidebar_opacity" min="0.3" max="1" step="0.05" />
+        <span>{{ Math.round(appearance.sidebar_opacity * 100) }}%</span>
+      </div>
+      <div></div>
+      <div class="appearance-field">
+        <div class="appearance-field-label">侧边栏色</div>
+        <div class="appearance-color-row">
+          <div class="appearance-colors">
+            <button
+              v-for="color in getColorList('sidebar')"
+              :key="color.value"
+              type="button"
+              class="appearance-color-btn"
+              :class="{ active: appearance.sidebar_color === color.value, custom: color.custom }"
+              :style="{ background: color.value }"
+              @click="appearance.sidebar_color = color.value"
+              @contextmenu.prevent="color.custom ? onColorLongPress('sidebar', color.value, $event) : null"
+              @touchstart="color.custom ? startLongPress('sidebar', color.value, $event) : null"
+              :title="color.label"
+            >
+              <svg v-if="appearance.sidebar_color === color.value" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" class="icon-sm">
+                <polyline points="20 6 9 17 4 12"/>
+              </svg>
+            </button>
+            <button type="button" class="appearance-color-btn appearance-color-add" @click="pickCustomColor('sidebar')" title="自定义颜色">+</button>
+          </div>
+          <span class="appearance-color-hex">{{ appearance.sidebar_color || '跟随背景色' }}</span>
+        </div>
+        <input type="color" data-color-picker="sidebar" class="sr-only" @change="onCustomColorPicked('sidebar', $event)" />
+      </div>
+      <div class="appearance-field">
+        <div class="appearance-field-label">高亮色</div>
+        <div class="appearance-color-row">
+          <div class="appearance-colors">
+            <button
+              v-for="color in getColorList('sidebar_accent')"
+              :key="color.value"
+              type="button"
+              class="appearance-color-btn"
+              :class="{ active: appearance.sidebar_accent === color.value, custom: color.custom }"
+              :style="{ background: color.value }"
+              @click="appearance.sidebar_accent = color.value"
+              @contextmenu.prevent="color.custom ? onColorLongPress('sidebar_accent', color.value, $event) : null"
+              @touchstart="color.custom ? startLongPress('sidebar_accent', color.value, $event) : null"
+              :title="color.label"
+            >
+              <svg v-if="appearance.sidebar_accent === color.value" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" class="icon-sm">
+                <polyline points="20 6 9 17 4 12"/>
+              </svg>
+            </button>
+            <button type="button" class="appearance-color-btn appearance-color-add" @click="pickCustomColor('sidebar_accent')" title="自定义颜色">+</button>
+          </div>
+          <span class="appearance-color-hex">{{ appearance.sidebar_accent || '跟随主题色' }}</span>
+        </div>
+        <input type="color" data-color-picker="sidebar_accent" class="sr-only" @change="onCustomColorPicked('sidebar_accent', $event)" />
+      </div>
+    </div>
+  </div>
   </div>
 
   <!-- 背景图放大预览 -->
@@ -292,9 +258,9 @@
     </div>
   </div>
 
-  <!-- 随机壁纸弹窗 -->
+  <!-- 从链接下载壁纸弹窗 -->
   <div v-if="randomWallpaperDialog.visible" class="random-wallpaper-overlay" @click.self="closeRandomWallpaperDialog">
-    <div class="random-wallpaper-modal" role="dialog" aria-modal="true" aria-label="随机壁纸">
+    <div class="random-wallpaper-modal" role="dialog" aria-modal="true" aria-label="从链接下载壁纸">
       <div class="random-wallpaper-header">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon-lg">
           <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
@@ -302,9 +268,9 @@
           <path d="M14 14l1-1a2 2 0 012.8 0L21 16"/>
           <circle cx="8.5" cy="8.5" r="1.5"/>
         </svg>
-        <h3>随机壁纸</h3>
+        <h3>从链接下载壁纸</h3>
       </div>
-      <p class="random-wallpaper-hint">输入图片链接地址，每次刷新页面自动更换壁纸（如 https://picsum.photos/1920/1080）</p>
+      <p class="random-wallpaper-hint">输入图片链接地址，将下载并设置为背景（如 https://picsum.photos/1920/1080）</p>
       <input
         type="text"
         class="form-input"

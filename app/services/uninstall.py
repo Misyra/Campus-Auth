@@ -13,8 +13,6 @@ from app.utils.platform import get_platform, get_playwright_cache_dir
 
 logger = get_logger("uninstall", source="backend")
 
-USER_DATA_DIR = AUTH_DATA_DIR
-
 PLATFORM = get_platform()  # 使用 platform 获取平台标识（"windows"/"darwin"/"linux"）
 
 
@@ -48,15 +46,15 @@ def detect() -> list[CleanupItem]:
         items.append(CleanupItem("autostart", "开机自启动", False))
 
     # 用户数据
-    if USER_DATA_DIR.exists():
-        items.append(CleanupItem("userdata", "用户数据", True, str(USER_DATA_DIR)))
+    if AUTH_DATA_DIR.exists():
+        items.append(CleanupItem("userdata", "用户数据", True, str(AUTH_DATA_DIR)))
     else:
         items.append(CleanupItem("userdata", "用户数据", False))
 
     # Playwright 缓存
     pw_cache = get_playwright_cache_dir()
     if pw_cache and pw_cache.exists():
-        size = dir_size_mb(pw_cache)
+        size = dir_size_mb(pw_cache).size_mb
         items.append(
             CleanupItem(
                 "playwright", "Playwright 浏览器缓存", True, str(pw_cache), size
@@ -94,13 +92,23 @@ def perform(keys: list[str]) -> list[CleanupResult]:
 # ==================== 内部实现 ====================
 
 
-def _check_autostart() -> dict:
-    try:
+_autostart_service = None
+
+
+def _get_autostart_service():
+    global _autostart_service
+    if _autostart_service is None:
         from app.services.autostart import AutoStartService
 
-        autostart_service = AutoStartService(PROJECT_ROOT)
-        return autostart_service.status()
-    except Exception:
+        _autostart_service = AutoStartService(PROJECT_ROOT)
+    return _autostart_service
+
+
+def _check_autostart() -> dict:
+    try:
+        return _get_autostart_service().status()
+    except Exception as e:
+        logger.warning("检查自启动状态失败", exc_info=True)
         return {
             "enabled": False,
             "platform": PLATFORM,
@@ -111,28 +119,25 @@ def _check_autostart() -> dict:
 
 def _remove_autostart() -> tuple[bool, str]:
     try:
-        from app.services.autostart import AutoStartService
-
-        autostart_service = AutoStartService(PROJECT_ROOT)
-        return autostart_service.disable()
+        return _get_autostart_service().disable()
     except Exception as exc:
         return False, f"移除开机自启失败: {exc}"
 
 
 def _remove_user_data() -> tuple[bool, str]:
-    if not USER_DATA_DIR.exists():
+    if not AUTH_DATA_DIR.exists():
         return True, "用户数据目录不存在，跳过"
 
     # 路径校验：确保删除的是预期的用户数据目录
     expected_name = ".campus_network_auth"
-    if USER_DATA_DIR.name != expected_name:
+    if AUTH_DATA_DIR.name != expected_name:
         return False, f"安全检查失败：目录名不是 {expected_name}"
 
     try:
-        file_count = sum(1 for _ in USER_DATA_DIR.rglob("*") if _.is_file())
-        logger.warning("即将删除用户数据目录: {} ({} 个文件)", USER_DATA_DIR, file_count)
-        shutil.rmtree(USER_DATA_DIR)
-        return True, f"已删除 {USER_DATA_DIR}"
+        file_count = sum(1 for _ in AUTH_DATA_DIR.rglob("*") if _.is_file())
+        logger.info("删除用户数据目录: {} ({} 个文件)", AUTH_DATA_DIR, file_count)
+        shutil.rmtree(AUTH_DATA_DIR)
+        return True, f"已删除 {AUTH_DATA_DIR}"
     except Exception as exc:
         return False, f"删除用户数据失败: {exc}"
 
@@ -140,9 +145,25 @@ def _remove_user_data() -> tuple[bool, str]:
 def _remove_playwright_cache(cache_dir: Path) -> tuple[bool, str]:
     if not cache_dir.exists():
         return True, "Playwright 缓存不存在，跳过"
+
+    # 路径校验：确保删除的是 Playwright 标准缓存目录，避免环境变量或软链接指向敏感目录
+    expected_name = "ms-playwright"
+    if cache_dir.name != expected_name:
+        return False, f"安全检查失败：目录名不是 {expected_name}"
+
+    # 校验路径上任一节点不是软链接（防止链接到用户其他目录造成误删）
+    try:
+        current = cache_dir
+        while current and current != current.parent:
+            if current.is_symlink():
+                return False, f"安全检查失败：路径 {current} 是软链接，拒绝删除"
+            current = current.parent
+    except Exception as exc:
+        return False, f"安全检查失败：路径解析异常: {exc}"
+
+    logger.debug("清理 Playwright 缓存")
     try:
         shutil.rmtree(cache_dir)
         return True, f"已删除 {cache_dir}"
     except Exception as exc:
         return False, f"删除 Playwright 缓存失败: {exc}"
-

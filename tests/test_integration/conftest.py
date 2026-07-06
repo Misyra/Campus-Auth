@@ -9,14 +9,16 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from app.schemas import Profile, ProfilesData
 from app.services.engine import ScheduleEngine
 from app.services.login_history_service import LoginHistoryService
 from app.services.login_orchestrator import LoginOrchestrator
 from app.services.profile_service import ProfileService
 from app.services.task_executor import TaskExecutor
 from app.services.task_registry import TaskHistoryStore, TaskRegistry
+from app.utils.logging import get_logger
 from app.workers.playwright_worker import WorkerResponse
+
+logger = get_logger("test_integration.conftest", source="test")
 
 
 def _write_initial_config(tmp_path: Path, **overrides) -> None:
@@ -67,59 +69,13 @@ def integration_stack(tmp_path, mock_worker):
 
     Mock 边界：Playwright worker。
     Returns:
-        (engine, profile_service, task_executor, mock_worker)
-    """
-    _write_initial_config(tmp_path)
-
-    profile_service = ProfileService(tmp_path)
-    login_history = LoginHistoryService(tmp_path / "history")
-    task_registry = TaskRegistry(tmp_path / "tasks" / "scheduled")
-    task_history_store = TaskHistoryStore(tmp_path / "tasks" / "scheduled" / "history")
-
-    engine = ScheduleEngine(
-        project_root=tmp_path,
-        profile_service=profile_service,
-        ws_manager=None,
-        login_history_service=login_history,
-        worker_getter=lambda: mock_worker,
-        task_registry=task_registry,
-    )
-
-    orchestrator = LoginOrchestrator(
-        worker_getter=lambda: mock_worker,
-        login_history=login_history,
-        profile_service=profile_service,
-        get_runtime_config=engine.get_runtime_config,
-    )
-    engine.set_orchestrator(orchestrator)
-
-    task_executor = TaskExecutor(
-        registry=task_registry,
-        history_store=task_history_store,
-        worker_getter=lambda: mock_worker,
-        login_orchestrator=orchestrator,
-    )
-    engine.set_task_executor(task_executor)
-    task_executor.set_runtime_config_getter(engine.get_runtime_config)
-
-    # 启动引擎线程
-    engine.boot()
-
-    yield engine, profile_service, task_executor, mock_worker
-
-    orchestrator.shutdown(wait=False)
-
-    engine.shutdown()
-    task_executor.shutdown()
-
-
-@pytest.fixture
-def full_stack(tmp_path, mock_worker):
-    """完整模式组件栈：含 TaskRegistry + TaskHistoryStore。
-
-    Returns:
         (engine, profile_service, task_executor, task_registry, mock_worker)
     """
+    # 清除可能由其他测试遗留的解密错误状态
+    from app.utils.crypto import _clear_decryption_error
+
+    _clear_decryption_error()
+
     _write_initial_config(tmp_path)
 
     profile_service = ProfileService(tmp_path)
@@ -134,30 +90,43 @@ def full_stack(tmp_path, mock_worker):
         login_history_service=login_history,
         worker_getter=lambda: mock_worker,
         task_registry=task_registry,
+        task_executor=None,
+        orchestrator=None,
     )
-
-    orchestrator = LoginOrchestrator(
-        worker_getter=lambda: mock_worker,
-        login_history=login_history,
-        profile_service=profile_service,
-        get_runtime_config=engine.get_runtime_config,
-    )
-    engine.set_orchestrator(orchestrator)
 
     task_executor = TaskExecutor(
         registry=task_registry,
         history_store=task_history_store,
         worker_getter=lambda: mock_worker,
-        login_orchestrator=orchestrator,
     )
-    engine.set_task_executor(task_executor)
-    task_executor.set_runtime_config_getter(engine.get_runtime_config)
+
+    orchestrator = LoginOrchestrator(
+        worker_getter=lambda: mock_worker,
+        executor=task_executor.login_executor,
+        login_history=login_history,
+        profile_service=profile_service,
+    )
+    task_executor.bind_login_orchestrator(orchestrator)
+    # 构造器注入后绑定
+    engine._orchestrator = orchestrator
+    engine._task_executor = task_executor
+    orchestrator.bind_runtime_config(engine.get_runtime_config)
+    task_executor.bind_runtime_config(engine.get_runtime_config)
 
     # 启动引擎线程
     engine.boot()
 
     yield engine, profile_service, task_executor, task_registry, mock_worker
 
-    engine.shutdown()
-    task_executor.shutdown()
-    orchestrator.shutdown(wait=False)
+    try:
+        orchestrator.shutdown(wait=False)
+    except Exception as e:
+        logger.warning("orchestrator shutdown failed: {}", e)
+    try:
+        engine.shutdown()
+    except Exception as e:
+        logger.warning("engine shutdown failed: {}", e)
+    try:
+        task_executor.shutdown()
+    except Exception as e:
+        logger.warning("executor shutdown failed: {}", e)

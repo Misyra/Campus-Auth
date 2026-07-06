@@ -30,32 +30,48 @@ def _make_subprocess_result(stdout: str | bytes = "", returncode: int = 0) -> Ma
 @patch.object(nd, "is_macos", return_value=False)
 @patch.object(nd, "is_windows", return_value=True)
 class TestDetectGatewayWindows:
-    """测试 _detect_gateway_windows 的 PowerShell 与 ipconfig 回退逻辑。"""
+    """测试 _detect_gateway_windows 的 route print、PowerShell 与 ipconfig 回退逻辑。"""
 
-    @patch(
-        "subprocess.run",
-        return_value=_make_subprocess_result("192.168.1.1\n"),
-    )
-    def test_powershell_success(self, _mock_run, *_):
-        """PowerShell Get-NetRoute 成功返回网关 IP。"""
+    @patch("subprocess.run")
+    def test_route_print_success(self, mock_run, *_):
+        """route print 成功返回网关 IP，不再调用 PowerShell。"""
+        route_output = (
+            "Network Destination        Netmask          Gateway       Interface  Metric\n"
+            "          0.0.0.0          0.0.0.0      192.168.1.1     192.168.1.100     25\n"
+        )
+        mock_run.return_value = _make_subprocess_result(route_output)
+        assert nd._detect_gateway_windows() == "192.168.1.1"
+        # 只调用了一次（route print），没有后续调用
+        assert mock_run.call_count == 1
+
+    @patch("subprocess.run")
+    def test_powershell_success(self, mock_run, *_):
+        """route print 失败后 PowerShell Get-NetRoute 成功返回网关 IP。"""
+        route_result = _make_subprocess_result("")
+        route_result.returncode = 1
+        ps_result = _make_subprocess_result("192.168.1.1\n")
+        mock_run.side_effect = [route_result, ps_result]
         assert nd._detect_gateway_windows() == "192.168.1.1"
 
-    @patch(
-        "subprocess.run",
-        return_value=_make_subprocess_result("10.0.0.1\r\n"),
-    )
-    def test_powershell_with_crlf(self, _mock_run, *_):
-        """PowerShell 输出带 CRLF 时应正确 strip。"""
+    @patch("subprocess.run")
+    def test_powershell_with_crlf(self, mock_run, *_):
+        """route print 失败后 PowerShell 输出带 CRLF 时应正确 strip。"""
+        route_result = _make_subprocess_result("")
+        route_result.returncode = 1
+        ps_result = _make_subprocess_result("10.0.0.1\r\n")
+        mock_run.side_effect = [route_result, ps_result]
         assert nd._detect_gateway_windows() == "10.0.0.1"
 
     @patch("subprocess.run", side_effect=FileNotFoundError)
     def test_powershell_not_found_returns_none(self, _mock_run, *_):
-        """PowerShell 和 ipconfig 都不存在时返回 None。"""
+        """route print、PowerShell 和 ipconfig 都不存在时返回 None。"""
         assert nd._detect_gateway_windows() is None
 
     @patch("subprocess.run")
     def test_ipconfig_fallback_chinese_gbk(self, mock_run, *_):
-        """PowerShell 失败后回退到 ipconfig，解析中文 GBK 输出。"""
+        """route print 和 PowerShell 都失败后回退到 ipconfig，解析中文 GBK 输出。"""
+        route_result = _make_subprocess_result("")
+        route_result.returncode = 1
         ps_result = _make_subprocess_result("")
         ps_result.returncode = 1
         ipconfig_output = (
@@ -69,12 +85,14 @@ class TestDetectGatewayWindows:
             b"   \xc4\xac\xc8\xcf\xcd\xf8\xb9\xd8 . . . . . . . . . : 192.168.1.1\r\n"
         )
         ipconfig_result = _make_subprocess_result(ipconfig_output)
-        mock_run.side_effect = [ps_result, ipconfig_result]
+        mock_run.side_effect = [route_result, ps_result, ipconfig_result]
         assert nd._detect_gateway_windows() == "192.168.1.1"
 
     @patch("subprocess.run")
     def test_ipconfig_fallback_english(self, mock_run, *_):
-        """回退到 ipconfig，解析英文输出。"""
+        """route print 和 PowerShell 都失败后回退到 ipconfig，解析英文输出。"""
+        route_result = _make_subprocess_result("")
+        route_result.returncode = 1
         ps_result = _make_subprocess_result("")
         ps_result.returncode = 1
         ipconfig_output = (
@@ -85,12 +103,14 @@ class TestDetectGatewayWindows:
             b"   Default Gateway . . . . . . . . . : 10.0.0.1\r\n"
         )
         ipconfig_result = _make_subprocess_result(ipconfig_output)
-        mock_run.side_effect = [ps_result, ipconfig_result]
+        mock_run.side_effect = [route_result, ps_result, ipconfig_result]
         assert nd._detect_gateway_windows() == "10.0.0.1"
 
     @patch("subprocess.run")
     def test_ipconfig_multiple_gateways_returns_first(self, mock_run, *_):
-        """多个适配器各有网关时，返回第一个非 0.0.0.0 的网关。"""
+        """route print 和 PowerShell 都失败后回退到 ipconfig，多个适配器各有网关时返回第一个非 0.0.0.0 的网关。"""
+        route_result = _make_subprocess_result("")
+        route_result.returncode = 1
         ps_result = _make_subprocess_result("")
         ps_result.returncode = 1
         ipconfig_output = (
@@ -98,7 +118,7 @@ class TestDetectGatewayWindows:
             b"   Default Gateway . . . . . . . . . : 10.0.0.1\r\n"
         )
         ipconfig_result = _make_subprocess_result(ipconfig_output)
-        mock_run.side_effect = [ps_result, ipconfig_result]
+        mock_run.side_effect = [route_result, ps_result, ipconfig_result]
         assert nd._detect_gateway_windows() == "192.168.1.1"
 
     @patch("subprocess.run")
@@ -292,9 +312,7 @@ class TestDetectGatewayDarwin:
     def test_no_default_route(self, mock_run, *_):
         """route 输出中无 gateway 行时返回 None。"""
         mock_run.return_value = _make_subprocess_result(
-            "   route to: default\n"
-            "destination: default\n"
-            "       mask: default\n"
+            "   route to: default\ndestination: default\n       mask: default\n"
         )
         assert nd._detect_gateway_darwin() is None
 

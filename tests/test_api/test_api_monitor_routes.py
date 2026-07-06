@@ -138,4 +138,67 @@ class TestPureMode:
         mock_services.engine.toggle_pure_mode.return_value = True
         resp = test_client.post("/api/pure-mode")
         assert resp.status_code == 200
-        assert "enabled" in resp.json()
+        body = resp.json()
+        assert body["success"] is True
+        assert body["data"]["enabled"] is True
+
+
+class TestNetworkInterfacesAPI:
+    """测试 GET /api/network/interfaces 端点。"""
+
+    def test_get_interfaces_returns_list(self, api_client):
+        from unittest.mock import patch
+
+        from app.network.interfaces import InterfaceInfo
+
+        test_client, _mock_services = api_client
+        fake_interfaces = [
+            InterfaceInfo(
+                name="以太网", ip="192.168.1.5", gateway="192.168.1.1", is_up=True
+            ),
+        ]
+        with patch("app.api.monitor.InterfaceManager") as MockMgr:
+            MockMgr.return_value.list_interfaces.return_value = fake_interfaces
+            resp = test_client.get("/api/network/interfaces")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 1
+        assert data[0]["id"] == "以太网"
+        assert data[0]["name"] == "以太网"
+        assert data[0]["ip"] == "192.168.1.5"
+        assert data[0]["gateway"] == "192.168.1.1"
+        assert data[0]["is_up"] is True
+
+    def test_get_interfaces_empty(self, api_client):
+        from unittest.mock import patch
+
+        test_client, _mock_services = api_client
+        with patch("app.api.monitor.InterfaceManager") as MockMgr:
+            MockMgr.return_value.list_interfaces.return_value = []
+            resp = test_client.get("/api/network/interfaces")
+
+        assert resp.status_code == 200
+        assert resp.json() == []
+
+    def test_get_interfaces_multiple(self, api_client):
+        from unittest.mock import patch
+
+        from app.network.interfaces import InterfaceInfo
+
+        test_client, _mock_services = api_client
+        fake_interfaces = [
+            InterfaceInfo(
+                name="以太网", ip="192.168.1.5", gateway="192.168.1.1", is_up=True
+            ),
+            InterfaceInfo(name="WLAN", ip="10.0.0.2", gateway="10.0.0.1", is_up=False),
+        ]
+        with patch("app.api.monitor.InterfaceManager") as MockMgr:
+            MockMgr.return_value.list_interfaces.return_value = fake_interfaces
+            resp = test_client.get("/api/network/interfaces")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 2
+        assert data[1]["id"] == "WLAN"
+        assert data[1]["is_up"] is False

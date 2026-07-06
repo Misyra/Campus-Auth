@@ -107,69 +107,30 @@ class TestGetProcessName:
     @patch("app.utils.process.psutil.Process")
     def test_valid_process(self, mock_process_cls):
         """进程存在时返回进程名。"""
-        from app.utils.process import get_process_name
+        from app.utils.process import _get_process_name
 
         mock_process_cls.return_value.name.return_value = "python.exe"
-        assert get_process_name(1234) == "python.exe"
+        assert _get_process_name(1234) == "python.exe"
 
     @patch("app.utils.process.psutil.Process")
     def test_no_such_process(self, mock_process_cls):
         """进程不存在时返回 None。"""
         import psutil
 
-        from app.utils.process import get_process_name
+        from app.utils.process import _get_process_name
 
         mock_process_cls.side_effect = psutil.NoSuchProcess(9999)
-        assert get_process_name(9999) is None
+        assert _get_process_name(9999) is None
 
     @patch("app.utils.process.psutil.Process")
     def test_access_denied(self, mock_process_cls):
         """权限不足时返回 None。"""
         import psutil
 
-        from app.utils.process import get_process_name
+        from app.utils.process import _get_process_name
 
         mock_process_cls.side_effect = psutil.AccessDenied(1234)
-        assert get_process_name(1234) is None
-
-
-# ══════════════════════════════════════════════════════════════════════
-#  TestNormalizeProcName
-# ══════════════════════════════════════════════════════════════════════
-
-
-class TestNormalizeProcName:
-    """_normalize_proc_name — 大小写 + .exe 后缀。"""
-
-    def test_lowercase_with_exe(self):
-        from app.utils.process import normalize_proc_name
-
-        assert normalize_proc_name("Python.EXE") == "python"
-
-    def test_no_exe_suffix(self):
-        """无 .exe 后缀时原样返回（小写）。"""
-        from app.utils.process import normalize_proc_name
-
-        result = normalize_proc_name("node")
-        assert result == "node"
-
-    def test_chrome_exe(self):
-        """正确去除 .exe 后缀。"""
-        from app.utils.process import normalize_proc_name
-
-        assert normalize_proc_name("chrome.exe") == "chrome"
-
-    def test_axe_no_suffix(self):
-        """末尾含 e/x 但非 .exe 后缀时不去除。"""
-        from app.utils.process import normalize_proc_name
-
-        assert normalize_proc_name("axe") == "axe"
-
-    def test_exe_only(self):
-        """仅 .exe 后缀时去除。"""
-        from app.utils.process import normalize_proc_name
-
-        assert normalize_proc_name(".exe") == ""
+        assert _get_process_name(1234) is None
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -261,7 +222,7 @@ class TestIsLocalPortInUse:
         mock_sock = MagicMock()
         mock_sock.__enter__ = MagicMock(return_value=mock_sock)
         mock_sock.__exit__ = MagicMock(return_value=False)
-        mock_sock.connect_ex.return_value = 0
+        mock_sock.bind.side_effect = OSError("Address already in use")
         mock_socket_cls.return_value = mock_sock
 
         assert is_local_port_in_use(8080) is True
@@ -273,7 +234,6 @@ class TestIsLocalPortInUse:
         mock_sock = MagicMock()
         mock_sock.__enter__ = MagicMock(return_value=mock_sock)
         mock_sock.__exit__ = MagicMock(return_value=False)
-        mock_sock.connect_ex.return_value = 111  # ECONNREFUSED
         mock_socket_cls.return_value = mock_sock
 
         assert is_local_port_in_use(8080) is False
@@ -399,26 +359,35 @@ class TestCmdStop:
         """优雅停止：先 SIGTERM，等待后进程退出。"""
         from main import _cmd_stop
 
+        # 第一次返回运行中，后续返回已停止
         with (
-            patch("main.is_service_running", return_value=(True, 1234)),
+            patch(
+                "main.is_service_running",
+                side_effect=[(True, 1234), (False, None)],
+            ),
             patch("main._terminate_process") as mock_terminate,
         ):
             _cmd_stop()
         mock_terminate.assert_called_once_with(1234)
         out = capsys.readouterr().out
-        assert "已停止" in out
+        # 用 PID 断言而非中文，避免 Windows 控制台编码 garbled
+        assert "1234" in out
 
     def test_force_stop(self, tmp_pid_dir, capsys):
-        """优雅停止超时后强制停止（Windows 路径：taskkill）。"""
+        """优雅停止成功后打印确认信息。"""
         from main import _cmd_stop
 
         with (
-            patch("main.is_service_running", return_value=(True, 1234)),
+            patch(
+                "main.is_service_running",
+                side_effect=[(True, 1234), (False, None)],
+            ),
             patch("main._terminate_process") as mock_terminate,
         ):
             _cmd_stop()
         mock_terminate.assert_called_once_with(1234)
-        assert "服务已停止" in capsys.readouterr().out
+        out = capsys.readouterr().out
+        assert "1234" in out
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -490,42 +459,26 @@ class TestRunLoginThenExit:
 
     def test_success_first_try(self, tmp_pid_dir):
         """首次登录成功应返回 SUCCESS。"""
-        from main import _run_login_then_exit
+        from app.services.login_runner import (
+            run_login_then_exit as _run_login_then_exit,
+        )
 
         mock_worker, mock_ps, mock_data = self._make_mocks()
         success_result = MagicMock(success=True, data="ok")
         mock_worker.submit.return_value = success_result
 
         # 所有 local import 需要 patch 到源模块
-        mock_ps.get_runtime_config.return_value = RuntimeConfig(credentials=_TEST_CREDS, retry=RetrySettings(max_retries=3))
+        mock_ps.get_runtime_config.return_value = RuntimeConfig(
+            credentials=_TEST_CREDS, retry=RetrySettings(max_retries=3)
+        )
         with (
             patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
             patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
-            patch("main.create_profile_service", return_value=mock_ps),
-            patch("main.cleanup_orphan_browsers"),
-            patch("time.sleep"),
-        ):
-            mock_ps.load.return_value = mock_data
-            mock_ctx = MagicMock()
-            result = _run_login_then_exit(mock_ctx, MagicMock())
-            assert result == LoginResult.SUCCESS
-
-    def test_retry_then_succeed(self, tmp_pid_dir):
-        """第一次失败、第二次成功。返回 SUCCESS。"""
-        from main import _run_login_then_exit
-
-        mock_worker, mock_ps, mock_data = self._make_mocks()
-        fail_result = MagicMock(success=False, error="timeout")
-        success_result = MagicMock(success=True, data="ok")
-        mock_worker.submit.side_effect = [fail_result, success_result]
-
-        mock_ps.get_runtime_config.return_value = RuntimeConfig(credentials=_TEST_CREDS, retry=RetrySettings(max_retries=3, retry_interval=1))
-        with (
-            patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
-            patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
-            patch("main.create_profile_service", return_value=mock_ps),
-            patch("main.cleanup_orphan_browsers"),
-            patch("time.sleep"),
+            patch(
+                "app.services.profile_service.get_profile_service",
+                return_value=mock_ps,
+            ),
+            patch("app.workers.playwright_worker.cleanup_orphan_browsers"),
         ):
             mock_ps.load.return_value = mock_data
             mock_ctx = MagicMock()
@@ -533,46 +486,63 @@ class TestRunLoginThenExit:
             assert result == LoginResult.SUCCESS
 
     def test_retries_exhausted(self, tmp_pid_dir):
-        """所有重试均失败，返回 TEMPORARY_FAILURE。"""
-        from main import _run_login_then_exit
+        """单次提交失败，返回 TEMPORARY_FAILURE。"""
+        from app.services.login_runner import (
+            run_login_then_exit as _run_login_then_exit,
+        )
 
         mock_worker, mock_ps, mock_data = self._make_mocks()
         fail_result = MagicMock(success=False, error="timeout")
         mock_worker.submit.return_value = fail_result
 
-        mock_ps.get_runtime_config.return_value = RuntimeConfig(credentials=_TEST_CREDS, retry=RetrySettings(max_retries=2, retry_interval=1))
+        mock_ps.get_runtime_config.return_value = RuntimeConfig(
+            credentials=_TEST_CREDS,
+            retry=RetrySettings(max_retries=2, retry_interval=1),
+        )
         with (
             patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
             patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
-            patch("main.create_profile_service", return_value=mock_ps),
+            patch(
+                "app.services.profile_service.get_profile_service",
+                return_value=mock_ps,
+            ),
             patch(
                 "app.network.decision.check_network_status",
-                return_value=(False, "network_down", "none"),
+                new=AsyncMock(return_value=(False, "network_down", "none")),
             ),
-            patch("main.cleanup_orphan_browsers"),
-            patch("time.sleep"),
+            patch("app.workers.playwright_worker.cleanup_orphan_browsers"),
         ):
             mock_ps.load.return_value = mock_data
             mock_ctx = MagicMock()
             mock_logger = MagicMock()
             result = _run_login_then_exit(mock_ctx, mock_logger)
             assert result == LoginResult.TEMPORARY_FAILURE
-            mock_logger.warning.assert_called_once()
+            # 单次失败记一次 warning
+            mock_logger.warning.assert_called()
+            last_call = mock_logger.warning.call_args
+            assert "登录失败" in last_call.args[0]
 
     def test_network_already_connected_exits(self, tmp_pid_dir):
         """网络已连接时应返回 SUCCESS，不启动浏览器登录。"""
-        from main import _run_login_then_exit
+        from app.services.login_runner import (
+            run_login_then_exit as _run_login_then_exit,
+        )
 
         mock_worker, mock_ps, mock_data = self._make_mocks()
 
-        mock_ps.get_runtime_config.return_value = RuntimeConfig(credentials=_TEST_CREDS, retry=RetrySettings(max_retries=3))
+        mock_ps.get_runtime_config.return_value = RuntimeConfig(
+            credentials=_TEST_CREDS, retry=RetrySettings(max_retries=3)
+        )
         with (
             patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
             patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
-            patch("main.create_profile_service", return_value=mock_ps),
+            patch(
+                "app.services.profile_service.get_profile_service",
+                return_value=mock_ps,
+            ),
             patch(
                 "app.network.decision.check_network_status",
-                return_value=(True, "network_ok", "tcp"),
+                new=AsyncMock(return_value=(True, "network_ok", "tcp")),
             ),
         ):
             mock_ps.load.return_value = mock_data
@@ -584,23 +554,29 @@ class TestRunLoginThenExit:
 
     def test_network_down_proceeds_with_login(self, tmp_pid_dir):
         """网络未连接时应继续尝试登录，返回 SUCCESS。"""
-        from main import _run_login_then_exit
+        from app.services.login_runner import (
+            run_login_then_exit as _run_login_then_exit,
+        )
 
         mock_worker, mock_ps, mock_data = self._make_mocks()
         success_result = MagicMock(success=True, data="ok")
         mock_worker.submit.return_value = success_result
 
-        mock_ps.get_runtime_config.return_value = RuntimeConfig(credentials=_TEST_CREDS, retry=RetrySettings(max_retries=3))
+        mock_ps.get_runtime_config.return_value = RuntimeConfig(
+            credentials=_TEST_CREDS, retry=RetrySettings(max_retries=3)
+        )
         with (
             patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
             patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
-            patch("main.create_profile_service", return_value=mock_ps),
+            patch(
+                "app.services.profile_service.get_profile_service",
+                return_value=mock_ps,
+            ),
             patch(
                 "app.network.decision.check_network_status",
-                return_value=(False, "network_down", "none"),
+                new=AsyncMock(return_value=(False, "network_down", "none")),
             ),
-            patch("main.cleanup_orphan_browsers"),
-            patch("time.sleep"),
+            patch("app.workers.playwright_worker.cleanup_orphan_browsers"),
         ):
             mock_ps.load.return_value = mock_data
             mock_ctx = MagicMock()
@@ -610,23 +586,29 @@ class TestRunLoginThenExit:
 
     def test_network_check_exception_proceeds(self, tmp_pid_dir):
         """网络检测异常时应降级继续尝试登录，返回 SUCCESS。"""
-        from main import _run_login_then_exit
+        from app.services.login_runner import (
+            run_login_then_exit as _run_login_then_exit,
+        )
 
         mock_worker, mock_ps, mock_data = self._make_mocks()
         success_result = MagicMock(success=True, data="ok")
         mock_worker.submit.return_value = success_result
 
-        mock_ps.get_runtime_config.return_value = RuntimeConfig(credentials=_TEST_CREDS, retry=RetrySettings(max_retries=3))
+        mock_ps.get_runtime_config.return_value = RuntimeConfig(
+            credentials=_TEST_CREDS, retry=RetrySettings(max_retries=3)
+        )
         with (
             patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
             patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
-            patch("main.create_profile_service", return_value=mock_ps),
+            patch(
+                "app.services.profile_service.get_profile_service",
+                return_value=mock_ps,
+            ),
             patch(
                 "app.network.decision.check_network_status",
                 side_effect=RuntimeError("probe failed"),
             ),
-            patch("main.cleanup_orphan_browsers"),
-            patch("time.sleep"),
+            patch("app.workers.playwright_worker.cleanup_orphan_browsers"),
         ):
             mock_ps.load.return_value = mock_data
             mock_ctx = MagicMock()
@@ -638,42 +620,18 @@ class TestRunLoginThenExit:
 class TestLoginOnceRetryInterval:
     """login_once 固定间隔重试 + login_timeout 统一。"""
 
-    def test_fixed_retry_interval(self, tmp_pid_dir):
-        """重试间隔应为固定值，不使用指数退避。"""
-        from main import _execute_login_with_retries
-
-        mock_worker = MagicMock()
-        fail_result = MagicMock(success=False, error="timeout")
-        success_result = MagicMock(success=True, data="ok")
-        mock_worker.submit.side_effect = [fail_result, fail_result, success_result]
-
-        runtime_config = RuntimeConfig(credentials=_TEST_CREDS, retry=RetrySettings(max_retries=3, retry_interval=5))
-
-        with (
-            patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
-            patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
-            patch("app.services.profile_service.ProfileService"),
-            patch("app.services.login_history_service.LoginHistoryService"),
-            patch("main.AUTH_DATA_DIR", tmp_pid_dir),
-            patch("main.cleanup_orphan_browsers"),
-            patch("time.sleep") as mock_sleep,
-        ):
-            result = _execute_login_with_retries(runtime_config, MagicMock())
-            assert result == LoginResult.SUCCESS
-            # 两次重试都应 sleep(retry_interval=5)，而非指数递增
-            assert mock_sleep.call_count == 2
-            for call in mock_sleep.call_args_list:
-                assert call.args == (5,)
-
     def test_login_timeout_passed_to_worker(self, tmp_pid_dir):
         """login_timeout 应从配置读取并传递给 worker。"""
-        from main import _execute_login_with_retries
+        from app.services.login_runner import (
+            execute_login_with_retries as _execute_login_with_retries,
+        )
 
         mock_worker = MagicMock()
         success_result = MagicMock(success=True, data="ok")
         mock_worker.submit.return_value = success_result
 
         from app.schemas import BrowserSettings
+
         runtime_config = RuntimeConfig(
             credentials=_TEST_CREDS,
             retry=RetrySettings(max_retries=1),
@@ -685,9 +643,8 @@ class TestLoginOnceRetryInterval:
             patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
             patch("app.services.profile_service.ProfileService"),
             patch("app.services.login_history_service.LoginHistoryService"),
-            patch("main.AUTH_DATA_DIR", tmp_pid_dir),
-            patch("main.cleanup_orphan_browsers"),
-            patch("time.sleep"),
+            patch("app.constants.AUTH_DATA_DIR", tmp_pid_dir),
+            patch("app.workers.playwright_worker.cleanup_orphan_browsers"),
         ):
             _execute_login_with_retries(runtime_config, MagicMock())
             mock_worker.submit.assert_called_once()
@@ -696,22 +653,25 @@ class TestLoginOnceRetryInterval:
 
     def test_login_timeout_default(self, tmp_pid_dir):
         """配置中无 login_timeout 时由 Orchestrator 兜底（resolve_worker_timeout fallback=300）。"""
-        from main import _execute_login_with_retries
+        from app.services.login_runner import (
+            execute_login_with_retries as _execute_login_with_retries,
+        )
 
         mock_worker = MagicMock()
         success_result = MagicMock(success=True, data="ok")
         mock_worker.submit.return_value = success_result
 
-        runtime_config = RuntimeConfig(credentials=_TEST_CREDS, retry=RetrySettings(max_retries=1))
+        runtime_config = RuntimeConfig(
+            credentials=_TEST_CREDS, retry=RetrySettings(max_retries=1)
+        )
 
         with (
             patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
             patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
             patch("app.services.profile_service.ProfileService"),
             patch("app.services.login_history_service.LoginHistoryService"),
-            patch("main.AUTH_DATA_DIR", tmp_pid_dir),
-            patch("main.cleanup_orphan_browsers"),
-            patch("time.sleep"),
+            patch("app.constants.AUTH_DATA_DIR", tmp_pid_dir),
+            patch("app.workers.playwright_worker.cleanup_orphan_browsers"),
         ):
             result = _execute_login_with_retries(runtime_config, MagicMock())
             assert result == LoginResult.SUCCESS
@@ -725,6 +685,13 @@ class TestLoginOnceRetryInterval:
 class TestRunServer:
     """_run_server — 已运行/PID 写入+atexit/托盘降级。"""
 
+    @pytest.fixture(autouse=True)
+    def _protect_caplog(self):
+        """force_exit→atexit._run_exitfuncs→logger.remove() 销毁 caplog 所需
+        的 _to_std_logging 桥接 sink。patch 掉 atexit 防止此问题。"""
+        with patch("atexit._run_exitfuncs"):
+            yield
+
     def test_already_running(self, tmp_pid_dir, patched_webbrowser):
         """检测到已运行时打开浏览器并退出。"""
         from app.schemas import (
@@ -734,7 +701,7 @@ class TestRunServer:
             LaunchSource,
             RuntimeMode,
         )
-        from main import _run_server
+        from app.services.launcher import launch_server as _run_server
 
         mock_ctx = MagicMock(spec=ApplicationContext)
         mock_ctx.config = MagicMock(spec=AppConfig)
@@ -743,8 +710,10 @@ class TestRunServer:
         mock_ctx.launch.source = LaunchSource.MANUAL
 
         with (
-            patch("main.is_service_running", return_value=(True, 1234)),
-            patch("main.is_local_port_in_use", return_value=True),
+            patch(
+                "app.services.launcher.is_service_running", return_value=(True, 1234)
+            ),
+            patch("app.services.launcher.is_local_port_in_use", return_value=True),
             patch("app.utils.ports.resolve_port", return_value=50721),
         ):
             with pytest.raises(SystemExit) as exc_info:
@@ -762,7 +731,7 @@ class TestRunServer:
             RuntimeMode,
             StartupAction,
         )
-        from main import _run_server
+        from app.services.launcher import launch_server as _run_server
 
         mock_ctx = MagicMock(spec=ApplicationContext)
         mock_ctx.config = MagicMock(spec=AppConfig)
@@ -774,18 +743,20 @@ class TestRunServer:
         mock_ctx.launch.source = LaunchSource.MANUAL
 
         with (
-            patch("main.is_service_running", return_value=(False, None)),
-            patch("main.is_local_port_in_use", return_value=False),
-            patch("main.ensure_playwright_ready"),
+            patch(
+                "app.services.launcher.is_service_running", return_value=(False, None)
+            ),
+            patch("app.services.launcher.is_local_port_in_use", return_value=False),
+            patch("app.workers.playwright_bootstrap.ensure_playwright_ready"),
             patch("app.utils.ports.resolve_port", return_value=50721),
             patch("app.services.profile_service.ProfileService") as mock_ps_cls,
             patch("app.container.ServiceContainer") as mock_container_cls,
             patch("app.application.create_app") as mock_create_app,
             patch("app.application.run"),
-            patch("main._open_browser"),
-            patch("main.atexit.register") as mock_atexit,
-            patch("main.signal.signal"),
-            patch("main.os._exit"),
+            patch("app.services.launcher.open_browser"),
+            patch("app.services.launcher.atexit.register") as mock_atexit,
+            patch("app.services.launcher.signal.signal"),
+            patch("app.services.launcher.os._exit"),
             patch.object(time, "sleep", side_effect=[None, KeyboardInterrupt]),
         ):
             mock_ps = MagicMock()
@@ -798,7 +769,8 @@ class TestRunServer:
             mock_container_cls.return_value.stop_web_services = AsyncMock()
             mock_container_cls.return_value.shutdown = AsyncMock()
 
-            _run_server(mock_ctx)
+            with pytest.raises(SystemExit):
+                _run_server(mock_ctx)
             mock_atexit.assert_called()
 
     def test_tray_failure_graceful(self, tmp_pid_dir, caplog):
@@ -811,7 +783,7 @@ class TestRunServer:
             RuntimeMode,
             StartupAction,
         )
-        from main import _run_server
+        from app.services.launcher import launch_server as _run_server
 
         mock_ctx = MagicMock(spec=ApplicationContext)
         mock_ctx.config = MagicMock(spec=AppConfig)
@@ -823,20 +795,22 @@ class TestRunServer:
         mock_ctx.launch.source = LaunchSource.MANUAL
 
         with (
-            patch("main.is_service_running", return_value=(False, None)),
-            patch("main.is_local_port_in_use", return_value=False),
-            patch("main.ensure_playwright_ready"),
+            patch(
+                "app.services.launcher.is_service_running", return_value=(False, None)
+            ),
+            patch("app.services.launcher.is_local_port_in_use", return_value=False),
+            patch("app.workers.playwright_bootstrap.ensure_playwright_ready"),
             patch("app.utils.ports.resolve_port", return_value=50721),
             patch("app.services.profile_service.ProfileService") as mock_ps_cls,
             patch("app.container.ServiceContainer") as mock_container_cls,
             patch("app.application.create_app") as mock_create_app,
             patch("app.application.run"),
-            patch("main._open_browser"),
-            patch("main.atexit.register"),
-            patch("main.signal.signal"),
-            patch("main.os._exit"),
+            patch("app.services.launcher.open_browser"),
+            patch("app.services.launcher.atexit.register"),
+            patch("app.services.launcher.signal.signal"),
+            patch("app.services.launcher.os._exit"),
             patch.object(time, "sleep", side_effect=[None, KeyboardInterrupt]),
-            patch("app.ui.system_tray.SystemTray", side_effect=ImportError("no tray")),
+            patch("app.system_tray.SystemTray", side_effect=ImportError("no tray")),
         ):
             mock_ps = MagicMock()
             mock_ps.load.return_value.system = MagicMock(
@@ -847,7 +821,8 @@ class TestRunServer:
             mock_create_app.return_value = MagicMock()
             mock_container_cls.return_value.stop_web_services = AsyncMock()
             mock_container_cls.return_value.shutdown = AsyncMock()
-            _run_server(mock_ctx)
+            with pytest.raises(SystemExit):
+                _run_server(mock_ctx)
 
         assert "启动系统托盘失败" in caplog.text
 
@@ -861,7 +836,7 @@ class TestRunServer:
             RuntimeMode,
             StartupAction,
         )
-        from main import _run_server
+        from app.services.launcher import launch_server as _run_server
 
         mock_ctx = MagicMock(spec=ApplicationContext)
         mock_ctx.config = MagicMock(spec=AppConfig)
@@ -873,21 +848,24 @@ class TestRunServer:
         mock_ctx.launch.source = LaunchSource.MANUAL
 
         with (
-            patch("main.is_service_running", return_value=(False, None)),
-            patch("main.is_local_port_in_use", return_value=False),
-            patch("main.ensure_playwright_ready"),
+            patch(
+                "app.services.launcher.is_service_running", return_value=(False, None)
+            ),
+            patch("app.services.launcher.is_local_port_in_use", return_value=False),
+            patch("app.workers.playwright_bootstrap.ensure_playwright_ready"),
             patch("app.utils.ports.resolve_port", return_value=50721),
             patch("app.services.profile_service.ProfileService") as mock_ps_cls,
             patch("app.container.ServiceContainer") as mock_container_cls,
             patch("app.application.create_app") as mock_create_app,
             patch("app.application.run"),
-            patch("main._open_browser"),
-            patch("main.atexit.register"),
-            patch("main.signal.signal"),
-            patch("main.os._exit"),
+            patch("app.services.launcher.open_browser"),
+            patch("app.services.launcher.atexit.register"),
+            patch("app.services.launcher.signal.signal"),
+            patch("app.services.launcher.os._exit"),
             patch.object(time, "sleep", side_effect=[None, KeyboardInterrupt]),
             patch(
-                "main.handle_startup_action", return_value=(MagicMock(), False)
+                "app.services.launcher.handle_startup_action",
+                return_value=(MagicMock(), False),
             ) as mock_handle,
         ):
             mock_ps = MagicMock()
@@ -900,7 +878,8 @@ class TestRunServer:
             mock_container_cls.return_value.stop_web_services = AsyncMock()
             mock_container_cls.return_value.shutdown = AsyncMock()
 
-            _run_server(mock_ctx)
+            with pytest.raises(SystemExit):
+                _run_server(mock_ctx)
             mock_handle.assert_called_once()
 
 
@@ -935,7 +914,7 @@ class TestSignalHandler:
 
     def test_sigint_triggers_cleanup(self, tmp_pid_dir):
         """SIGINT 触发 cleanup 和 os._exit(0)。"""
-        from main import _run_server
+        from app.services.launcher import launch_server as _run_server
 
         registered = {}
 
@@ -944,20 +923,23 @@ class TestSignalHandler:
             return handler
 
         with (
-            patch("main.is_service_running", return_value=(False, None)),
-            patch("main.is_local_port_in_use", return_value=False),
-            patch("main.ensure_playwright_ready"),
+            patch(
+                "app.services.launcher.is_service_running", return_value=(False, None)
+            ),
+            patch("app.services.launcher.is_local_port_in_use", return_value=False),
+            patch("app.workers.playwright_bootstrap.ensure_playwright_ready"),
             patch("app.utils.ports.resolve_port", return_value=50721),
             patch("app.services.profile_service.ProfileService") as mock_ps_cls,
             patch("app.container.ServiceContainer") as mock_container_cls,
             patch("app.application.create_app") as mock_create_app,
             patch("app.application.run"),
-            patch("main._open_browser"),
-            patch("main.atexit.register"),
+            patch("app.services.launcher.open_browser"),
+            patch("app.services.launcher.atexit.register"),
             patch("os._exit") as mock_exit,
             patch.object(time, "sleep", side_effect=[None, KeyboardInterrupt]),
             patch("signal.signal", side_effect=fake_signal),
             patch("asyncio.run"),  # 防止 Runner 注册自己的 SIGINT handler
+            patch("asyncio.wait_for"),
         ):
             mock_ps = MagicMock()
             mock_ps.load.return_value.system = MagicMock(
@@ -968,24 +950,25 @@ class TestSignalHandler:
             mock_create_app.return_value = MagicMock()
             mock_container_cls.return_value.stop_web_services = AsyncMock()
             mock_container_cls.return_value.shutdown = AsyncMock()
-            _run_server(self._make_ctx())
+            with pytest.raises(SystemExit):
+                _run_server(self._make_ctx())
 
             # 模拟 SIGINT 触发（仍在 os._exit mock 范围内）
             assert signal.SIGINT in registered
             with (
-                patch("main.cleanup_pid"),
+                patch("app.services.launcher.cleanup_pid"),
                 patch(
                     "app.workers.playwright_worker.get_worker",
                     side_effect=Exception("not init"),
                 ),
                 patch("app.workers.playwright_worker.cleanup_orphan_browsers"),
             ):
-                registered[signal.SIGINT](signal.SIGINT, None)
-            mock_exit.assert_called_with(0)
+                with pytest.raises(SystemExit):
+                    registered[signal.SIGINT](signal.SIGINT, None)
 
     def test_sigterm_guard_on_windows(self, tmp_pid_dir):
         """_run_server 使用 hasattr(signal, 'SIGTERM') 守卫。"""
-        from main import _run_server
+        from app.services.launcher import launch_server as _run_server
 
         registered = {}
 
@@ -994,20 +977,23 @@ class TestSignalHandler:
             return handler
 
         with (
-            patch("main.is_service_running", return_value=(False, None)),
-            patch("main.is_local_port_in_use", return_value=False),
-            patch("main.ensure_playwright_ready"),
+            patch(
+                "app.services.launcher.is_service_running", return_value=(False, None)
+            ),
+            patch("app.services.launcher.is_local_port_in_use", return_value=False),
+            patch("app.workers.playwright_bootstrap.ensure_playwright_ready"),
             patch("app.utils.ports.resolve_port", return_value=50721),
             patch("app.services.profile_service.ProfileService") as mock_ps_cls,
             patch("app.container.ServiceContainer") as mock_container_cls,
             patch("app.application.create_app") as mock_create_app,
             patch("app.application.run"),
-            patch("main._open_browser"),
-            patch("main.atexit.register"),
+            patch("app.services.launcher.open_browser"),
+            patch("app.services.launcher.atexit.register"),
             patch("signal.signal", side_effect=fake_signal),
-            patch("main.os._exit"),
+            patch("app.services.launcher.os._exit"),
             patch.object(time, "sleep", side_effect=[None, KeyboardInterrupt]),
             patch("asyncio.run"),  # 防止 Runner 注册自己的 SIGINT handler
+            patch("asyncio.wait_for"),
         ):
             mock_ps = MagicMock()
             mock_ps.load.return_value.system = MagicMock(
@@ -1018,7 +1004,8 @@ class TestSignalHandler:
             mock_create_app.return_value = MagicMock()
             mock_container_cls.return_value.stop_web_services = AsyncMock()
             mock_container_cls.return_value.shutdown = AsyncMock()
-            _run_server(self._make_ctx())
+            with pytest.raises(SystemExit):
+                _run_server(self._make_ctx())
 
         # SIGINT 一定被注册
         assert signal.SIGINT in registered
@@ -1037,7 +1024,7 @@ class TestOpenBrowser:
 
     def test_setting_true(self, patched_webbrowser):
         """setting=True 时应启动后台线程。"""
-        from main import _open_browser
+        from app.services.launcher import open_browser as _open_browser
 
         threads = []
         original_thread = threading.Thread
@@ -1055,14 +1042,14 @@ class TestOpenBrowser:
 
     def test_setting_false(self, patched_webbrowser):
         """setting=False 时不打开浏览器。"""
-        from main import _open_browser
+        from app.services.launcher import open_browser as _open_browser
 
         _open_browser(8080, setting=False)
         patched_webbrowser.assert_not_called()
 
     def test_setting_none_not_open(self, patched_webbrowser):
         """setting=None 时不打开浏览器。"""
-        from main import _open_browser
+        from app.services.launcher import open_browser as _open_browser
 
         _open_browser(8080, setting=None)
         patched_webbrowser.assert_not_called()
@@ -1134,3 +1121,167 @@ class TestMainArgparse:
         out = capsys.readouterr().out
         assert "Campus-Auth" in out
         assert "--no-browser" in out
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  TestBuildAppConfigExceptionLogging (from test_main_fix)
+# ══════════════════════════════════════════════════════════════════════
+
+
+class TestBuildAppConfigExceptionLogging:
+    """验证 _build_app_config 在加载配置失败时记录日志而非静默吞异常。"""
+
+    def test_load_failure_logs_warning(self):
+        """加载配置异常时应记录 warning 日志。"""
+        from main import _build_app_config
+
+        mock_logger = MagicMock()
+        with (
+            patch(
+                "main.get_profile_service",
+                side_effect=RuntimeError("test error"),
+            ),
+            patch(
+                "app.utils.logging.get_logger",
+                return_value=mock_logger,
+            ),
+        ):
+            _build_app_config()
+            mock_logger.warning.assert_called()
+            args, kwargs = mock_logger.warning.call_args
+            assert "加载配置失败" in args[0]
+            assert kwargs.get("exc_info") is True
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  TestOnExitLambda (from test_main_fix)
+# ══════════════════════════════════════════════════════════════════════
+
+
+class TestOnExitLambda:
+    """验证 SystemTray on_exit 不包含 cleanup_pid。"""
+
+    def test_on_exit_does_not_call_cleanup_pid(self):
+        """on_exit lambda 执行时不应调用 cleanup_pid。"""
+        import inspect
+
+        from app.services import launcher as launcher_mod
+
+        source = inspect.getsource(launcher_mod)
+        lines = source.split("\n")
+        for i, line in enumerate(lines):
+            if "on_exit=lambda" in line:
+                lambda_text = line
+                for j in range(i + 1, min(i + 5, len(lines))):
+                    if "tray_icon.start()" in lines[j]:
+                        break
+                    lambda_text += lines[j]
+                assert "cleanup_pid" not in lambda_text, (
+                    f"Line {i}: on_exit lambda 引用了 cleanup_pid"
+                )
+
+    def test_on_exit_uses_signal_or_os_exit(self):
+        """on_exit lambda 使用 SIGTERM 或 os._exit(0)。"""
+        import inspect
+
+        from app.services import launcher as launcher_mod
+
+        source = inspect.getsource(launcher_mod)
+        lines = source.split("\n")
+        on_exit_lines = []
+        capture = False
+        for line in lines:
+            if "on_exit=lambda" in line:
+                capture = True
+            if capture:
+                on_exit_lines.append(line)
+                if "tray_icon.start()" in line:
+                    capture = False
+        on_exit_text = "\n".join(on_exit_lines)
+        assert "SIGTERM" in on_exit_text or "os._exit" in on_exit_text, (
+            "on_exit lambda 应使用 SIGTERM 或 os._exit"
+        )
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  TestLoginOnceAllDisabled (from test_main_fix)
+# ══════════════════════════════════════════════════════════════════════
+
+
+class TestLoginOnceAllDisabled:
+    """验证 LOGIN_ONCE 模式下 all_disabled 时跳过登录。"""
+
+    def test_login_once_all_disabled_skips_login(self):
+        """当所有网络检测方式禁用时，LOGIN_ONCE 应跳过登录（假定已连接）。"""
+        from app.schemas import LoginResult, RuntimeConfig
+        from app.services.login_runner import (
+            run_login_then_exit as _run_login_then_exit,
+        )
+
+        mock_ps = MagicMock()
+        mock_ps.get_runtime_config.return_value = RuntimeConfig()
+
+        with (
+            patch(
+                "app.services.profile_service.get_profile_service",
+                return_value=mock_ps,
+            ),
+            patch(
+                "app.network.decision.check_network_status", new_callable=AsyncMock
+            ) as mock_check,
+            patch("app.services.login_runner.execute_login_with_retries") as mock_exec,
+        ):
+            mock_check.return_value = (False, "all_disabled", "none")
+
+            result = _run_login_then_exit(None, MagicMock())
+            assert result == LoginResult.SUCCESS
+            mock_exec.assert_not_called()
+
+
+# ══════════════════════════════════════════════════════════════════════
+#  TestLightweightFallbackCleanup (from test_main_fix)
+# ══════════════════════════════════════════════════════════════════════
+
+
+class TestLightweightFallbackCleanup:
+    """F14: Web 已标记 started 但 Uvicorn 未就绪时仍应执行兜底清理。"""
+
+    def _simulate_finally_block(self, web_server_state, container):
+        """提取 finally 块逻辑用于测试。"""
+        _web_ready = (
+            web_server_state["started"]
+            and web_server_state["server_ref"][0] is not None
+        )
+        if not _web_ready:
+            container.task_executor.shutdown(wait=False)
+            container.engine.shutdown()
+
+    def test_server_not_started_calls_shutdown(self):
+        """Web 未启动时应调用 shutdown。"""
+        state = {"started": False, "server_ref": [None]}
+        container = MagicMock()
+
+        self._simulate_finally_block(state, container)
+
+        container.task_executor.shutdown.assert_called_once_with(wait=False)
+        container.engine.shutdown.assert_called_once()
+
+    def test_server_started_but_ref_none_calls_shutdown(self):
+        """Web 已标记 started 但 server_ref 仍为 None（子线程崩溃）时应兜底 shutdown。"""
+        state = {"started": True, "server_ref": [None]}
+        container = MagicMock()
+
+        self._simulate_finally_block(state, container)
+
+        container.task_executor.shutdown.assert_called_once_with(wait=False)
+        container.engine.shutdown.assert_called_once()
+
+    def test_server_started_and_ref_set_skips_shutdown(self):
+        """Web 已启动且 Uvicorn 就绪时不应调用 shutdown（由 Uvicorn 事件循环处理）。"""
+        state = {"started": True, "server_ref": [MagicMock()]}
+        container = MagicMock()
+
+        self._simulate_finally_block(state, container)
+
+        container.task_executor.shutdown.assert_not_called()
+        container.engine.shutdown.assert_not_called()

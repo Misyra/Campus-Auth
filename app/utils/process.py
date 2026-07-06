@@ -19,10 +19,8 @@ from app.constants import AUTH_DATA_DIR
 __all__ = [
     "cleanup_pid",
     "get_pid_file",
-    "get_process_name",
     "is_local_port_in_use",
     "is_service_running",
-    "normalize_proc_name",
     "read_pid_file",
     "read_pid_mode",
     "verify_process_identity",
@@ -66,7 +64,7 @@ def read_pid_file() -> dict | None:
         return None
 
 
-def get_process_name(pid: int) -> str | None:
+def _get_process_name(pid: int) -> str | None:
     """获取指定 PID 的进程名。"""
     try:
         return psutil.Process(pid).name()
@@ -74,17 +72,12 @@ def get_process_name(pid: int) -> str | None:
         return None
 
 
-def get_process_create_time(pid: int) -> float | None:
+def _get_process_create_time(pid: int) -> float | None:
     """获取指定 PID 的创建时间。返回时间戳或 None。"""
     try:
         return psutil.Process(pid).create_time()
     except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
         return None
-
-
-def normalize_proc_name(name: str) -> str:
-    """标准化进程名（小写 + 移除 .exe 后缀）。"""
-    return name.lower().removesuffix(".exe")
 
 
 def verify_process_identity(pid: int, stored_create_time: float | None = None) -> bool:
@@ -97,12 +90,12 @@ def verify_process_identity(pid: int, stored_create_time: float | None = None) -
     Returns:
         True 如果进程存活且身份匹配
     """
-    proc_name = get_process_name(pid)
+    proc_name = _get_process_name(pid)
     if proc_name is None:
         return False
 
     if stored_create_time is not None:
-        actual_create_time = get_process_create_time(pid)
+        actual_create_time = _get_process_create_time(pid)
         if actual_create_time is None:
             return False
         # 允许 1 秒误差
@@ -148,11 +141,20 @@ def is_service_running() -> tuple[bool, int | None]:
     return True, pid
 
 
-def is_local_port_in_use(port: int) -> bool:
-    """检查本地端口是否被占用。"""
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.settimeout(0.4)
-        return sock.connect_ex(("127.0.0.1", port)) == 0
+def is_local_port_in_use(port: int, host: str = "127.0.0.1") -> bool:
+    """检查本地端口是否被占用。
+
+    自动检测 IPv6 地址（host 中包含 ":" 时使用 AF_INET6）。
+    设置 0.5 秒超时防止在异常网络环境下长时间阻塞。
+    """
+    family = socket.AF_INET6 if ":" in host else socket.AF_INET
+    with socket.socket(family, socket.SOCK_STREAM) as s:
+        s.settimeout(0.5)
+        try:
+            s.bind((host, port))
+        except OSError:
+            return True
+    return False
 
 
 def write_pid(mode: str | None = None) -> None:
@@ -165,7 +167,7 @@ def write_pid(mode: str | None = None) -> None:
     data = {
         "pid": os.getpid(),
         "create_time": psutil.Process().create_time(),
-        "proc_name": os.path.basename(sys.executable),
+        "proc_name": Path(sys.executable).name,
         "mode": mode,
     }
     atomic_write(pid_file, json.dumps(data, ensure_ascii=False))

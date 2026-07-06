@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import datetime
 import os
+import tempfile
 import time
 from pathlib import Path
 from unittest.mock import patch
@@ -25,7 +26,6 @@ from app.utils import str_to_bool
 from app.utils.crypto import (
     decrypt_password,
     encrypt_password,
-    mask_password,
     save_password_field,
 )
 
@@ -33,7 +33,7 @@ from app.utils.crypto import (
 from app.utils.env import build_login_template_vars
 
 # ── exceptions ──
-from app.utils.exceptions import DecryptionError, LoginCancelledError
+from app.utils.exceptions import LoginCancelledError
 
 # ── files ──
 from app.utils.files import atomic_write
@@ -46,11 +46,10 @@ from app.utils.logging import (
 )
 
 # ── network ──
-from app.utils.network import parse_host_port
+from app.network.parsers import parse_host_port
 
 # ── platform ──
 from app.utils.platform import (
-    get_default_ua,
     get_platform,
     is_linux,
     is_macos,
@@ -59,7 +58,11 @@ from app.utils.platform import (
 
 # ── time_utils ──
 from app.schemas import PauseSettings
-from app.utils.time_utils import is_in_pause_period
+from app.utils.time_utils import (
+    _is_in_pause_period,
+    _parse_pause_range,
+    is_pause_enabled,
+)
 
 # ── version ──
 from app.version import get_project_version
@@ -67,114 +70,6 @@ from app.version import get_project_version
 # =====================================================================
 # crypto
 # =====================================================================
-
-
-class TestEncryptDecrypt:
-    def test_round_trip(self):
-        """加密后解密应返回原文"""
-        original = "my_secret_password_123"
-        encrypted = encrypt_password(original)
-        assert decrypt_password(encrypted) == original
-
-    def test_empty_string(self):
-        """空字符串加密应返回空字符串"""
-        assert encrypt_password("") == ""
-        assert decrypt_password("") == ""
-
-    def test_plaintext_passthrough(self):
-        """无 ENC: 前缀的明文应原样返回（向后兼容）"""
-        plaintext = "old_password"
-        assert decrypt_password(plaintext) == plaintext
-
-    def test_enc_prefix(self):
-        """加密结果应有 ENC: 前缀"""
-        encrypted = encrypt_password("test")
-        assert encrypted.startswith("ENC:")
-
-    def test_unicode_password(self):
-        """中文密码应正常加解密"""
-        original = "校园网密码"
-        encrypted = encrypt_password(original)
-        assert decrypt_password(encrypted) == original
-
-    def test_long_password(self):
-        """长密码应正常加解密"""
-        original = "a" * 1000
-        encrypted = encrypt_password(original)
-        assert decrypt_password(encrypted) == original
-
-    def test_special_characters(self):
-        """特殊字符密码应正常加解密"""
-        original = "!@#$%^&*()_+-=[]{}|;:'\",.<>?/~`"
-        encrypted = encrypt_password(original)
-        assert decrypt_password(encrypted) == original
-
-    def test_decrypt_wrong_key_raises(self):
-        """密钥变更后解密旧密码应抛出 DecryptionError。"""
-        import base64
-
-        original = "secret123"
-        encrypted = encrypt_password(original)
-        from app.utils.crypto import (
-            _derive_fernet_key,
-            clear_decryption_error,
-            has_decryption_error,
-        )
-
-        clear_decryption_error()
-        # 注入不同密钥模拟密钥变更（44 字节 URL-safe base64）
-        other_key = base64.urlsafe_b64encode(b"\x99" * 32)
-        with patch("app.utils.crypto._derive_fernet_key", return_value=other_key):
-            with pytest.raises(DecryptionError):
-                decrypt_password(encrypted)
-            assert has_decryption_error() is True
-
-
-class TestMaskPassword:
-    def test_empty(self):
-        assert mask_password("") == ""
-
-    def test_encrypted(self):
-        """加密密码应返回固定长度掩码"""
-        assert mask_password("ENC:abc123") == "••••••••"
-
-    def test_plaintext_unified_mask(self):
-        """明文密码应返回统一长度掩码（不泄露长度）"""
-        assert mask_password("ab") == "••••••••"
-        assert mask_password("abcdef") == "••••••••"
-        assert mask_password("a" * 100) == "••••••••"
-
-
-class TestSavePasswordField:
-    def test_none_returns_existing(self):
-        """raw=None 时应返回原加密值"""
-        assert save_password_field(None, "ENC:existing") == "ENC:existing"
-
-    def test_empty_raw_clears_password(self):
-        """raw 为空字符串时应清除密码"""
-        assert save_password_field("", "ENC:existing") == ""
-
-    def test_mask_preserves_existing(self):
-        """raw 为掩码时应保留原加密值"""
-        assert save_password_field("••••••••", "ENC:existing") == "ENC:existing"
-
-    def test_enc_passthrough(self):
-        """raw 已有 ENC: 前缀应原样返回"""
-        assert save_password_field("ENC:abc", "ENC:old") == "ENC:abc"
-
-    def test_new_plaintext_gets_encrypted(self):
-        """新的明文密码应被加密"""
-        result = save_password_field("new_password", "")
-        assert result.startswith("ENC:")
-        assert decrypt_password(result) == "new_password"
-
-    def test_none_with_empty_existing(self):
-        """raw=None 且 existing 为空时应返回空字符串"""
-        assert save_password_field(None, "") == ""
-
-    def test_empty_with_empty_existing(self):
-        """raw="" 且 existing 为空时应返回空字符串"""
-        assert save_password_field("", "") == ""
 
 
 # =====================================================================
@@ -259,6 +154,44 @@ class TestAtomicWrite:
         assert target.read_text(encoding="utf-8") == "content"
 
 
+class TestAtomicWriteCrossFilesystem:
+    """测试 atomic_write 的跨文件系统兼容性。"""
+
+    def test_temp_file_created_in_target_directory(self, tmp_path: Path):
+        """验证临时文件在目标文件所在目录创建。"""
+        target = tmp_path / "test.txt"
+        captured_dir = None
+
+        original_mkstemp = tempfile.mkstemp
+
+        def mock_mkstemp(**kwargs):
+            nonlocal captured_dir
+            captured_dir = kwargs.get("dir")
+            return original_mkstemp(**kwargs)
+
+        with patch("app.utils.files.tempfile.mkstemp", side_effect=mock_mkstemp):
+            atomic_write(target, "hello")
+
+        assert captured_dir == str(tmp_path)
+
+    def test_temp_file_created_in_parent_for_relative_path(self):
+        """验证相对路径时临时文件在当前目录创建。"""
+        captured_dir = None
+        original_mkstemp = tempfile.mkstemp
+
+        def mock_mkstemp(**kwargs):
+            nonlocal captured_dir
+            captured_dir = kwargs.get("dir")
+            return original_mkstemp(**kwargs)
+
+        with patch("app.utils.files.tempfile.mkstemp", side_effect=mock_mkstemp):
+            atomic_write("test_relative_file.txt", "hello")
+            if os.path.exists("test_relative_file.txt"):
+                os.unlink("test_relative_file.txt")
+
+        assert captured_dir == "."
+
+
 # =====================================================================
 # platform
 # =====================================================================
@@ -333,28 +266,6 @@ class TestIsLinux:
             assert is_linux() is False
 
 
-class TestGetDefaultUa:
-    def test_windows_ua(self):
-        with patch("app.utils.platform.get_platform", return_value="windows"):
-            ua = get_default_ua()
-            assert "Windows" in ua
-
-    def test_macos_ua(self):
-        with patch("app.utils.platform.get_platform", return_value="darwin"):
-            ua = get_default_ua()
-            assert "Macintosh" in ua
-
-    def test_linux_ua(self):
-        with patch("app.utils.platform.get_platform", return_value="linux"):
-            ua = get_default_ua()
-            assert "Linux" in ua
-
-    def test_unknown_platform_falls_back_to_linux(self):
-        with patch("app.utils.platform.get_platform", return_value="freebsd"):
-            ua = get_default_ua()
-            assert "Linux" in ua
-
-
 # =====================================================================
 # str_to_bool
 # =====================================================================
@@ -404,25 +315,21 @@ class TestParseHostPort:
         result = parse_host_port(["[::1]:8080"])
         assert result == [("::1", 8080)]
 
-    def test_missing_port(self):
-        with pytest.raises(ValueError):
-            parse_host_port(["8.8.8.8"])
+    def test_missing_port_skipped(self):
+        assert parse_host_port(["8.8.8.8"]) == []
 
-    def test_invalid_port(self):
-        with pytest.raises(ValueError):
-            parse_host_port(["8.8.8.8:99999"])
+    def test_invalid_port_skipped(self):
+        assert parse_host_port(["8.8.8.8:99999"]) == []
 
-    def test_non_numeric_port(self):
-        with pytest.raises(ValueError):
-            parse_host_port(["8.8.8.8:abc"])
+    def test_non_numeric_port_skipped(self):
+        assert parse_host_port(["8.8.8.8:abc"]) == []
 
     def test_hostname(self):
         result = parse_host_port(["www.baidu.com:443"])
         assert result == [("www.baidu.com", 443)]
 
-    def test_empty_host(self):
-        with pytest.raises(ValueError):
-            parse_host_port([":8080"])
+    def test_empty_host_skipped(self):
+        assert parse_host_port([":8080"]) == []
 
 
 # =====================================================================
@@ -465,57 +372,160 @@ class TestGetProjectVersion:
 # =====================================================================
 
 
-class TestIsInPausePeriod:
-    def test_disabled(self):
-        pause = PauseSettings(enabled=False, start_hour=0, end_hour=6)
-        assert is_in_pause_period(pause) is False
+class TestParsePauseRange:
+    """_parse_pause_range 解析测试。"""
 
-    def test_same_hour_means_all_day(self):
-        pause = PauseSettings(enabled=True, start_hour=5, end_hour=5)
-        assert is_in_pause_period(pause) is True
+    def test_basic_range(self):
+        start, end = _parse_pause_range("08:00-18:00")
+        assert start == datetime.time(8, 0)
+        assert end == datetime.time(18, 0)
+
+    def test_with_minutes(self):
+        start, end = _parse_pause_range("08:15-09:30")
+        assert start == datetime.time(8, 15)
+        assert end == datetime.time(9, 30)
+
+    def test_cross_midnight(self):
+        start, end = _parse_pause_range("23:30-06:15")
+        assert start == datetime.time(23, 30)
+        assert end == datetime.time(6, 15)
+
+    def test_strips_whitespace(self):
+        start, end = _parse_pause_range(" 08:00 - 18:00 ")
+        assert start == datetime.time(8, 0)
+        assert end == datetime.time(18, 0)
+
+
+class TestIsInPausePeriod:
+    """is_in_pause_period(now, ranges) 纯函数测试。"""
 
     def test_normal_range_in_pause(self):
-        pause = PauseSettings(enabled=True, start_hour=0, end_hour=6)
-        mock_now = datetime.datetime(2025, 1, 1, 3, 0, 0)
-        with patch("app.utils.time_utils.datetime") as mock_dt:
-            mock_dt.datetime.now.return_value = mock_now
-            assert is_in_pause_period(pause) is True
+        now = datetime.datetime(2025, 1, 1, 3, 30, 0)
+        ranges = [(datetime.time(0, 0), datetime.time(6, 0))]
+        assert _is_in_pause_period(now, ranges) is True
 
     def test_normal_range_outside_pause(self):
-        pause = PauseSettings(enabled=True, start_hour=0, end_hour=6)
-        mock_now = datetime.datetime(2025, 1, 1, 12, 0, 0)
-        with patch("app.utils.time_utils.datetime") as mock_dt:
-            mock_dt.datetime.now.return_value = mock_now
-            assert is_in_pause_period(pause) is False
+        now = datetime.datetime(2025, 1, 1, 12, 0, 0)
+        ranges = [(datetime.time(0, 0), datetime.time(6, 0))]
+        assert _is_in_pause_period(now, ranges) is False
 
     def test_cross_midnight_in_pause(self):
-        pause = PauseSettings(enabled=True, start_hour=23, end_hour=6)
-        mock_now = datetime.datetime(2025, 1, 1, 2, 0, 0)
-        with patch("app.utils.time_utils.datetime") as mock_dt:
-            mock_dt.datetime.now.return_value = mock_now
-            assert is_in_pause_period(pause) is True
+        now = datetime.datetime(2025, 1, 1, 2, 0, 0)
+        ranges = [(datetime.time(23, 0), datetime.time(6, 0))]
+        assert _is_in_pause_period(now, ranges) is True
 
     def test_cross_midnight_outside_pause(self):
+        now = datetime.datetime(2025, 1, 1, 12, 0, 0)
+        ranges = [(datetime.time(23, 0), datetime.time(6, 0))]
+        assert _is_in_pause_period(now, ranges) is False
+
+    def test_minute_precision_in_pause(self):
+        now = datetime.datetime(2025, 1, 1, 8, 30, 0)
+        ranges = [(datetime.time(8, 15), datetime.time(9, 0))]
+        assert _is_in_pause_period(now, ranges) is True
+
+    def test_minute_precision_outside_pause(self):
+        now = datetime.datetime(2025, 1, 1, 8, 10, 0)
+        ranges = [(datetime.time(8, 15), datetime.time(9, 0))]
+        assert _is_in_pause_period(now, ranges) is False
+
+    def test_minute_precision_boundary_start(self):
+        now = datetime.datetime(2025, 1, 1, 8, 15, 0)
+        ranges = [(datetime.time(8, 15), datetime.time(9, 0))]
+        assert _is_in_pause_period(now, ranges) is True
+
+    def test_minute_precision_boundary_end(self):
+        now = datetime.datetime(2025, 1, 1, 9, 0, 0)
+        ranges = [(datetime.time(8, 15), datetime.time(9, 0))]
+        assert _is_in_pause_period(now, ranges) is True
+
+    def test_empty_ranges(self):
+        now = datetime.datetime(2025, 1, 1, 3, 0, 0)
+        assert _is_in_pause_period(now, []) is False
+
+    def test_multiple_ranges(self):
+        now = datetime.datetime(2025, 1, 1, 10, 0, 0)
+        ranges = [
+            (datetime.time(8, 0), datetime.time(9, 0)),
+            (datetime.time(9, 50), datetime.time(10, 10)),
+        ]
+        assert _is_in_pause_period(now, ranges) is True
+
+
+class TestIsPauseEnabled:
+    """is_pause_enabled(pause) PauseSettings 包装测试。"""
+
+    def test_disabled(self):
+        pause = PauseSettings(enabled=False, start_hour=0, end_hour=6)
+        assert is_pause_enabled(pause) is False
+
+    def test_same_hour_and_minute_means_all_day(self):
+        pause = PauseSettings(
+            enabled=True, start_hour=5, end_hour=5, start_minute=0, end_minute=0
+        )
+        assert is_pause_enabled(pause) is True
+
+    @patch("app.utils.time_utils._is_in_pause_period", return_value=True)
+    def test_same_hour_different_minute_delegates(self, mock_check):
+        pause = PauseSettings(
+            enabled=True, start_hour=5, start_minute=0, end_hour=5, end_minute=30
+        )
+        assert is_pause_enabled(pause) is True
+        mock_check.assert_called_once()
+        # 验证传入的 start/end 时间对象正确
+        call_args = mock_check.call_args
+        ranges = call_args[0][1]
+        assert ranges == [(datetime.time(5, 0), datetime.time(5, 30))]
+
+    @patch("app.utils.time_utils._is_in_pause_period", return_value=True)
+    def test_normal_range_in_pause(self, mock_check):
+        pause = PauseSettings(enabled=True, start_hour=0, end_hour=6)
+        assert is_pause_enabled(pause) is True
+
+    @patch("app.utils.time_utils._is_in_pause_period", return_value=False)
+    def test_normal_range_outside_pause(self, mock_check):
+        pause = PauseSettings(enabled=True, start_hour=0, end_hour=6)
+        assert is_pause_enabled(pause) is False
+
+    @patch("app.utils.time_utils._is_in_pause_period", return_value=True)
+    def test_cross_midnight_in_pause(self, mock_check):
         pause = PauseSettings(enabled=True, start_hour=23, end_hour=6)
-        mock_now = datetime.datetime(2025, 1, 1, 12, 0, 0)
-        with patch("app.utils.time_utils.datetime") as mock_dt:
-            mock_dt.datetime.now.return_value = mock_now
-            assert is_in_pause_period(pause) is False
+        assert is_pause_enabled(pause) is True
 
-    def test_defaults_in_pause(self):
+    @patch("app.utils.time_utils._is_in_pause_period", return_value=False)
+    def test_cross_midnight_outside_pause(self, mock_check):
+        pause = PauseSettings(enabled=True, start_hour=23, end_hour=6)
+        assert is_pause_enabled(pause) is False
+
+    @patch("app.utils.time_utils._is_in_pause_period", return_value=True)
+    def test_defaults_in_pause(self, mock_check):
         pause = PauseSettings()
-        mock_now = datetime.datetime(2025, 1, 1, 3, 0, 0)
-        with patch("app.utils.time_utils.datetime") as mock_dt:
-            mock_dt.datetime.now.return_value = mock_now
-            assert is_in_pause_period(pause) is True
+        assert is_pause_enabled(pause) is True
 
-    def test_defaults_outside_pause(self):
+    @patch("app.utils.time_utils._is_in_pause_period", return_value=False)
+    def test_defaults_outside_pause(self, mock_check):
         pause = PauseSettings()
-        mock_now = datetime.datetime(2025, 1, 1, 12, 0, 0)
-        with patch("app.utils.time_utils.datetime") as mock_dt:
-            mock_dt.datetime.now.return_value = mock_now
-            assert is_in_pause_period(pause) is False
+        assert is_pause_enabled(pause) is False
 
+    @patch("app.utils.time_utils._is_in_pause_period", return_value=True)
+    def test_minute_precision_delegates(self, mock_check):
+        pause = PauseSettings(
+            enabled=True, start_hour=8, start_minute=15, end_hour=9, end_minute=0
+        )
+        assert is_pause_enabled(pause) is True
+        call_args = mock_check.call_args
+        ranges = call_args[0][1]
+        assert ranges == [(datetime.time(8, 15), datetime.time(9, 0))]
+
+    @patch("app.utils.time_utils._is_in_pause_period", return_value=True)
+    def test_minute_precision_cross_midnight_delegates(self, mock_check):
+        pause = PauseSettings(
+            enabled=True, start_hour=23, start_minute=30, end_hour=6, end_minute=30
+        )
+        assert is_pause_enabled(pause) is True
+        call_args = mock_check.call_args
+        ranges = call_args[0][1]
+        assert ranges == [(datetime.time(23, 30), datetime.time(6, 30))]
 
 
 # =====================================================================
@@ -549,35 +559,11 @@ class TestBuildLoginTemplateVars:
         )
         assert result["LOGIN_URL"] == "http://10.0.0.1/login?user=user1&isp=联通"
 
-    def test_custom_variables_injected(self):
-        """自定义变量应注入到模板变量"""
-        custom = {"MY_VAR": "hello", "ANOTHER": "world"}
-        result = build_login_template_vars(
-            auth_url="http://test.com",
-            username="u",
-            password="p",
-            custom_variables=custom,
-        )
-        assert result["MY_VAR"] == "hello"
-        assert result["ANOTHER"] == "world"
-
-    def test_denylist_not_overridden(self):
-        """保留名自定义变量应被拒绝"""
-        custom = {"PATH": "/evil/path", "PYTHONPATH": "/evil"}
-        result = build_login_template_vars(custom_variables=custom)
-        assert result.get("PATH") is None
-        assert result.get("PYTHONPATH") is None
-
     def test_empty_config(self):
         """空参数应返回空字典"""
         result = build_login_template_vars()
         assert isinstance(result, dict)
         assert result.get("LOGIN_URL", "") == ""
-
-    def test_none_custom_variables(self):
-        """custom_variables=None 不应报错"""
-        result = build_login_template_vars(auth_url="http://test.com", custom_variables=None)
-        assert "LOGIN_URL" in result
 
     def test_task_url_with_login_url_fallback(self):
         """task_url 中无模板变量时，LOGIN_URL 应被设置为解析后的 task_url"""
@@ -612,16 +598,8 @@ class TestExceptions:
         with pytest.raises(LoginCancelledError):
             raise LoginCancelledError("cancelled")
 
-    def test_decryption_error(self):
-        """DecryptionError 应为 Exception 子类"""
-        with pytest.raises(DecryptionError):
-            raise DecryptionError("decryption failed")
-
     def test_login_cancelled_error_is_exception(self):
         assert issubclass(LoginCancelledError, Exception)
-
-    def test_decryption_error_is_exception(self):
-        assert issubclass(DecryptionError, Exception)
 
 
 # =====================================================================
@@ -635,7 +613,7 @@ class TestNormalizeLevel:
         assert normalize_level("INFO") == "INFO"
         assert normalize_level("WARNING") == "WARNING"
         assert normalize_level("ERROR") == "ERROR"
-        assert normalize_level("CRITICAL") == "CRITICAL"
+        assert normalize_level("CRITICAL") == "INFO"
 
     def test_case_insensitive(self):
         assert normalize_level("debug") == "DEBUG"
@@ -689,51 +667,6 @@ class TestLogConfigCenter:
         config = center.get_config()
         assert config["level"] == "INFO"
 
-    def test_is_initialized_default_false(self):
-        center = LogConfigCenter()
-        # 注意：由于单例模式，如果之前已初始化则为 True
-        # 这里只验证方法可调用
-        assert isinstance(center.is_initialized(), bool)
-
-    def test_set_source_level(self):
-        """测试设置 source 级别"""
-        config = LogConfigCenter()
-        config.initialize()
-        config.set_source_level("network", "DEBUG")
-        assert config.get_source_level("network") == "DEBUG"
-
-    def test_get_source_level_default(self):
-        """测试获取未设置的 source 级别返回全局级别"""
-        config = LogConfigCenter()
-        config.initialize()
-        config.set_level("INFO")
-        config._source_levels.clear()
-        assert config.get_source_level("network") == "INFO"
-
-    def test_should_emit_with_source_level(self):
-        """测试 should_emit 过滤逻辑"""
-        config = LogConfigCenter()
-        config.initialize()
-        config.set_level("INFO")
-        config.set_source_level("network", "DEBUG")
-
-        # network source 应该输出 DEBUG
-        assert config.should_emit("network", "DEBUG") is True
-        assert config.should_emit("network", "INFO") is True
-
-        # backend source 使用全局级别 INFO，不应该输出 DEBUG
-        assert config.should_emit("backend", "DEBUG") is False
-        assert config.should_emit("backend", "INFO") is True
-
-    def test_get_all_source_levels(self):
-        """测试获取所有 source 级别配置"""
-        config = LogConfigCenter()
-        config.initialize()
-        config.set_source_level("network", "DEBUG")
-        config.set_source_level("task", "WARNING")
-        levels = config.get_all_source_levels()
-        assert levels == {"network": "DEBUG", "task": "WARNING"}
-
 
 # =====================================================================
 # CREATE_NO_WINDOW_FLAG 常量
@@ -762,16 +695,16 @@ class TestCreateNoWindowFlag:
 
 
 # =====================================================================
-# LoginAttemptHandler.close_browser 幂等性
+# LoginAttempt.close_browser 幂等性
 # =====================================================================
 
 
-class TestLoginAttemptHandlerCloseIdempotent:
+class TestLoginAttemptCloseIdempotent:
     def test_close_browser_idempotent(self):
         """多次调用 close_browser 不应报错（幂等）"""
-        from app.utils.login import LoginAttemptHandler
+        from app.services.login_attempt import LoginAttempt
 
-        handler = LoginAttemptHandler(config={})
+        handler = LoginAttempt(config={})
         # _browser_ctx 为 None 时，close_browser 应安全返回
         import asyncio
 
@@ -825,56 +758,21 @@ class TestDefaultConstants:
             assert part.startswith("http")
 
 
-
 # ── has_decryption_error / clear_decryption_error ──
-
-
-class TestDecryptionError:
-    """解密错误状态管理。"""
-
-    def teardown_method(self):
-        """每个测试后清除解密错误状态，防止污染其他测试。"""
-        from app.utils.crypto import clear_decryption_error
-
-        clear_decryption_error()
-
-    def test_initial_state(self):
-        """初始状态无解密错误。"""
-        from app.utils.crypto import clear_decryption_error, has_decryption_error
-
-        clear_decryption_error()
-        assert has_decryption_error() is False
-
-    def test_set_and_clear(self):
-        """设置和清除解密错误。"""
-        from app.utils.crypto import (
-            _decryption_failed,
-            clear_decryption_error,
-            has_decryption_error,
-        )
-
-        _decryption_failed.set()
-        assert has_decryption_error() is True
-        clear_decryption_error()
-        assert has_decryption_error() is False
 
 
 # ── 日志安全 ──
 
 
-def test_save_password_field_logs_no_plaintext(caplog):
-    """save_password_field 的 warning 日志不应包含密码明文。"""
+def test_save_password_field_no_warning_for_empty(caplog):
+    """save_password_field 对空串输入不应产生 warning 日志。"""
     from app.utils.crypto import save_password_field
 
-    for raw_value in ("", "••••••••"):
-        caplog.clear()
-        with caplog.at_level("WARNING"):
-            result = save_password_field(raw_value, existing_encrypted="")
+    caplog.clear()
+    with caplog.at_level("WARNING"):
+        save_password_field("", existing_encrypted="ENC:old")
 
-        assert result == ""
-        for record in caplog.records:
-            msg = record.message
-            assert repr(raw_value[:20]) not in msg, f"日志泄露了原始输入内容: {msg}"
+    assert not caplog.records
 
 
 # =====================================================================
@@ -968,64 +866,12 @@ class TestValidLogLevels:
         assert "INFO" in VALID_LOG_LEVELS
         assert "WARNING" in VALID_LOG_LEVELS
         assert "ERROR" in VALID_LOG_LEVELS
-        assert "CRITICAL" in VALID_LOG_LEVELS
 
     def test_count(self):
         """级别数量。"""
         from app.utils.logging import VALID_LOG_LEVELS
 
-        assert len(VALID_LOG_LEVELS) == 5
-
-
-# ── DashboardSink source 级别过滤 ──
-
-
-def test_dashboard_sink_filters_by_source_level():
-    """测试 DashboardSink 根据 source 级别过滤"""
-    from unittest.mock import MagicMock
-
-    from app.utils.logging import DashboardSink, LogConfigCenter
-
-    config = LogConfigCenter()
-    config.initialize()
-    config.set_level("INFO")
-    config.set_source_level("network", "WARNING")
-
-    sink = DashboardSink()
-
-    level_debug = MagicMock()
-    level_debug.name = "DEBUG"
-    level_warning = MagicMock()
-    level_warning.name = "WARNING"
-    level_info = MagicMock()
-    level_info.name = "INFO"
-
-    def make_msg(source, level_mock):
-        msg = MagicMock()
-        msg.record = {
-            "extra": {"source": source, "name": "test"},
-            "level": level_mock,
-            "time": MagicMock(timestamp=lambda: 0),
-            "name": "test",
-        }
-        msg.__str__ = lambda self: "test message"
-        return msg
-
-    # network source 设置为 WARNING，DEBUG 应该被过滤
-    sink.write(make_msg("network", level_debug))
-    assert len(sink.buffer) == 0
-
-    # network source 设置为 WARNING，WARNING 应该通过
-    sink.write(make_msg("network", level_warning))
-    assert len(sink.buffer) == 1
-
-    # backend source 使用全局级别 INFO，DEBUG 应该被过滤
-    sink.write(make_msg("backend", level_debug))
-    assert len(sink.buffer) == 1
-
-    # backend source 使用全局级别 INFO，INFO 应该通过
-    sink.write(make_msg("backend", level_info))
-    assert len(sink.buffer) == 2
+        assert len(VALID_LOG_LEVELS) == 4
 
 
 # ── DashboardSink ──

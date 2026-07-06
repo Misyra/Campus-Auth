@@ -13,9 +13,19 @@ from fastapi import APIRouter
 # ── 辅助 fixtures ──
 
 _ROUTER_NAMES = [
-    "monitor", "config", "tasks", "profiles", "debug",
-    "repo", "system", "autostart", "ocr", "tools",
-    "scripts", "scheduled_tasks", "history",
+    "monitor",
+    "config",
+    "tasks",
+    "profiles",
+    "debug",
+    "repo",
+    "system",
+    "autostart",
+    "ocr",
+    "tools",
+    "scripts",
+    "scheduled_tasks",
+    "history",
 ]
 
 
@@ -49,9 +59,12 @@ def _make_mock_container():
     mock_container.engine.has_enabled_tasks.return_value = False
     mock_container.start_web_services = MagicMock()
     mock_container.shutdown = AsyncMock()
-    mock_container.monitor_service.get_config.return_value = MagicMock(
-        username="", password="", auth_url="",
-        carrier="默认", check_interval_seconds=60,
+    mock_container.engine.get_config.return_value = MagicMock(
+        username="",
+        password="",
+        auth_url="",
+        carrier="默认",
+        check_interval_seconds=60,
     )
     return mock_container
 
@@ -99,8 +112,7 @@ class TestCreateAppInitialization:
 
         result = create_app()
         mounted_paths = [
-            r.path for r in result.routes
-            if hasattr(r, "path") and hasattr(r, "name")
+            r.path for r in result.routes if hasattr(r, "path") and hasattr(r, "name")
         ]
         assert "/static" in mounted_paths
         assert "/debug" in mounted_paths
@@ -112,8 +124,7 @@ class TestCreateAppInitialization:
 
         result = create_app()
         ws_routes = [
-            r for r in result.routes
-            if hasattr(r, "path") and r.path == "/ws/logs"
+            r for r in result.routes if hasattr(r, "path") and r.path == "/ws/logs"
         ]
         assert len(ws_routes) >= 1
 
@@ -132,7 +143,8 @@ class TestCreateAppInitialization:
 
         result = create_app()
         cors_middleware = [
-            m for m in result.user_middleware
+            m
+            for m in result.user_middleware
             if hasattr(m, "cls") and "CORS" in m.cls.__name__
         ]
         assert len(cors_middleware) >= 1
@@ -236,9 +248,12 @@ class TestAppLifespan:
         mock_container = _make_mock_container()
         mock_container.engine.has_enabled_tasks.return_value = True
         mock_container.engine.start_scheduler = MagicMock()
-        mock_container.monitor_service.get_config.return_value = MagicMock(
-            username="admin", password="secret", auth_url="http://auth.example.com",
-            carrier="中国移动", check_interval_seconds=30,
+        mock_container.engine.get_config.return_value = MagicMock(
+            username="admin",
+            password="secret",
+            auth_url="http://auth.example.com",
+            carrier="中国移动",
+            check_interval_seconds=30,
         )
         _app = create_app(existing_container=mock_container)
 
@@ -300,21 +315,23 @@ class TestDependencyInjection:
 
         asyncio.run(_run_lifespan_coro(_app, _check))
 
-    def test_monitor_service_config_accessible(self, mock_all_routers, mock_deps):
-        """lifespan 中应能通过 monitor_service.get_config() 获取配置。"""
+    def test_engine_config_accessible(self, mock_all_routers, mock_deps):
+        """lifespan 中应能通过 engine.get_config() 获取配置。"""
         from app.application import create_app
 
         mock_config = MagicMock(
-            username="testuser", password="testpass",
-            auth_url="http://example.com", carrier="中国电信",
+            username="testuser",
+            password="testpass",
+            auth_url="http://example.com",
+            carrier="中国电信",
             check_interval_seconds=120,
         )
         mock_container = _make_mock_container()
-        mock_container.monitor_service.get_config.return_value = mock_config
+        mock_container.engine.get_config.return_value = mock_config
         _app = create_app(existing_container=mock_container)
 
         async def _check(app):
-            cfg = mock_container.monitor_service.get_config()
+            cfg = mock_container.engine.get_config()
             assert cfg.username == "testuser"
             assert cfg.carrier == "中国电信"
             assert cfg.check_interval_seconds == 120
@@ -344,7 +361,7 @@ class TestDependencyInjection:
             mock_sys_settings = MagicMock()
             mock_sys_settings.access_log = False
             mock_sys_settings.log_retention_days = 7
-            mock_sys_settings.source_levels = {}
+
             mock_ps_instance.load.return_value.global_settings = mock_sys_settings
             mock_ps.return_value = mock_ps_instance
 
@@ -374,7 +391,7 @@ class TestDependencyInjection:
             mock_sys_settings = MagicMock()
             mock_sys_settings.access_log = False
             mock_sys_settings.log_retention_days = 7
-            mock_sys_settings.source_levels = {}
+
             mock_ps_instance.load.return_value.global_settings = mock_sys_settings
             mock_ps.return_value = mock_ps_instance
 
@@ -403,7 +420,7 @@ class TestDependencyInjection:
             mock_lcc.get_instance.return_value = MagicMock()
             mock_ps_instance = MagicMock()
             mock_sys_settings = MagicMock()
-            mock_sys_settings.source_levels = {}
+
             mock_ps_instance.load.return_value.global_settings = mock_sys_settings
             mock_ps.return_value = mock_ps_instance
 

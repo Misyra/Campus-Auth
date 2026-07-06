@@ -36,11 +36,15 @@ class CompositeCancelEvent(threading.Event):
         """惰性扫描：每次调用时检查所有源。"""
         if super().is_set():
             return True
+        should_set = False
         with self._lock:
             for src in self._sources:
                 if src.is_set():
-                    super().set()
-                    return True
+                    should_set = True
+                    break
+        if should_set:
+            super().set()  # 移到锁外，消除锁顺序颠倒
+            return True
         return False
 
     def wait(self, timeout: float | None = None) -> bool:
@@ -67,8 +71,10 @@ class CompositeCancelEvent(threading.Event):
             return True
 
     def clear(self) -> None:
-        """重置（仅清除自身标志，保留源列表）。"""
+        """重置自身标志并清除所有源引用。"""
         super().clear()
+        with self._lock:
+            self._sources.clear()
 
     def clear_sources(self) -> None:
         """清除所有源（用于 handle 销毁时释放引用）。"""

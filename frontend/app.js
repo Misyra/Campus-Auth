@@ -19,7 +19,13 @@ function applyAppearanceEarly() {
     const body = document.body;
 
     if (appearance.background_url) {
-      body.style.setProperty('--bg-image', `url(${appearance.background_url})`);
+      const bgUrl = appearance.background_url;
+      // 仅允许 http/https 协议，防止 CSS 注入
+      try {
+        const parsed = new URL(bgUrl);
+        if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return;
+      } catch { return; }
+      body.style.setProperty('--bg-image', `url(${bgUrl})`);
       body.style.setProperty('--bg-blur', `blur(${appearance.background_blur || 10}px)`);
       body.style.setProperty('--bg-opacity', appearance.background_opacity || 0.3);
       body.classList.add('has-custom-bg');
@@ -28,7 +34,6 @@ function applyAppearanceEarly() {
     if (appearance.accent_color) {
       root.style.setProperty('--accent', appearance.accent_color);
     }
-    // zoom 在 mounted() 中由 applyAppearance() 统一处理，此处不设置（Vue 挂载前 .content-wrapper 可能不存在）
     if (appearance.theme) {
       root.setAttribute('data-theme', appearance.theme);
     }

@@ -39,7 +39,7 @@ class TestUpdateCache:
             result = await sys_mod.check_update()
 
         assert call_count == 0
-        assert result["latest"] == "v99.0.0"
+        assert result.latest == "v99.0.0"
 
     @pytest.mark.asyncio
     async def test_cache_expired_triggers_network(self):
@@ -50,7 +50,9 @@ class TestUpdateCache:
 
         # 设置过期缓存
         sys_mod._update_cache = {"latest": "v1.0.0", "has_update": False}
-        sys_mod._update_cache_time = time_mod.monotonic() - sys_mod._UPDATE_CACHE_TTL - 100
+        sys_mod._update_cache_time = (
+            time_mod.monotonic() - sys_mod._UPDATE_CACHE_TTL - 100
+        )
 
         mock_resp = MagicMock()
         mock_resp.status_code = 200
@@ -68,7 +70,7 @@ class TestUpdateCache:
         with patch("httpx.AsyncClient.get", mock_get):
             result = await sys_mod.check_update()
 
-        assert result["latest"] == "99.0.0"
+        assert result.latest == "99.0.0"
         assert sys_mod._update_cache["latest"] == "99.0.0"
 
     @pytest.mark.asyncio
@@ -98,13 +100,11 @@ class TestUpdateCache:
             return mock_resp
 
         with patch("httpx.AsyncClient.get", mock_get):
-            results = await asyncio.gather(
-                *[sys_mod.check_update() for _ in range(5)]
-            )
+            results = await asyncio.gather(*[sys_mod.check_update() for _ in range(5)])
 
         # 所有请求都应返回有效结果
-        assert all("current" in r for r in results)
-        assert all("latest" in r for r in results)
+        assert all(r.current for r in results)
+        assert all(r.latest for r in results)
         # 缓存应被正确更新（最后一个请求的值）
         assert sys_mod._update_cache is not None
         assert sys_mod._update_cache["latest"] == "99.0.0"

@@ -7,6 +7,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import sys
 import threading
 import time
@@ -29,13 +31,17 @@ class BoundedExecutor:
     队列满时 submit 抛出 RuntimeError，防止任务堆积。
     """
 
-    def __init__(self, max_workers: int, queue_size: int) -> None:
+    def __init__(
+        self, max_workers: int, queue_size: int, thread_name_prefix: str = "task-exec"
+    ) -> None:
         self._executor = ThreadPoolExecutor(
             max_workers=max_workers,
-            thread_name_prefix="task-exec",
+            thread_name_prefix=thread_name_prefix,
         )
         # Semaphore 初始值 = queue_size，控制同时排队的任务数
         self._semaphore = threading.Semaphore(queue_size)
+        self._futures: set[Future] = set()
+        self._futures_lock = threading.Lock()
 
     def submit(self, func, *args, **kwargs) -> Future:
         """提交任务到线程池。
@@ -52,10 +58,18 @@ class BoundedExecutor:
             self._semaphore.release()
             raise
         # 任务完成或取消时释放信号量
-        future.add_done_callback(lambda _: self._semaphore.release())
+        with self._futures_lock:
+            self._futures.add(future)
+
+        def _on_done(fut: Future) -> None:
+            self._semaphore.release()
+            with self._futures_lock:
+                self._futures.discard(fut)
+
+        future.add_done_callback(_on_done)
         return future
 
-    def shutdown(self, wait: bool = True) -> None:
+    def shutdown(self, wait: bool = True, timeout: float | None = None) -> None:
         """关闭线程池。
 
         Note:
@@ -63,7 +77,17 @@ class BoundedExecutor:
             因为 done_callback 可能未被触发。这仅影响优雅退出场景，
             进程退出后信号量随资源回收，不会造成实际问题。
         """
-        self._executor.shutdown(wait=wait)
+        if wait and timeout is not None:
+            self._executor.shutdown(wait=False, cancel_futures=True)
+            deadline = time.monotonic() + timeout
+            with self._futures_lock:
+                pending = list(self._futures)
+            for fut in pending:
+                remaining = max(0.0, deadline - time.monotonic())
+                with contextlib.suppress(Exception):
+                    fut.result(timeout=remaining)
+        else:
+            self._executor.shutdown(wait=wait)
 
 
 class TaskExecutor:
@@ -79,7 +103,8 @@ class TaskExecutor:
         registry: Any,
         history_store: Any,
         worker_getter: Callable,
-        login_orchestrator: Any,
+        login_orchestrator: Any = None,
+        task_manager: Any = None,
         get_runtime_config: Callable[[], RuntimeConfig] | None = None,
     ) -> None:
         self._registry = registry
@@ -87,13 +112,19 @@ class TaskExecutor:
         self._worker_getter = worker_getter
         self._get_runtime_config = get_runtime_config
         self._login_orchestrator = login_orchestrator
+        self._task_manager = task_manager
 
         # 线程池：任务池懒初始化（无定时任务时不创建线程）
         self._task_pool: BoundedExecutor | None = None
         self._task_pool_lock = threading.Lock()
 
-        # 定时任务去重
-        self._running_tasks: dict[str, Future] = {}
+        # 登录专用执行器（max_workers=1, queue_size=2 — 保证单并发，预留 manual 抢占 auto 的槽位）
+        self._login_executor = BoundedExecutor(
+            max_workers=1, queue_size=2, thread_name_prefix="login-exec"
+        )
+
+        # 定时任务去重（Future + cancel_event 配对）
+        self._running_tasks: dict[str, tuple[Future, threading.Event]] = {}
         self._running_tasks_lock = threading.Lock()
 
         # Shell 安全策略
@@ -101,9 +132,33 @@ class TaskExecutor:
             allowlist=[shell["path"] for shell in detect_shells()]
         )
 
-    def set_runtime_config_getter(self, getter: Callable[[], RuntimeConfig]) -> None:
-        """设置运行时配置获取器（公共接口）。"""
+    @property
+    def registry(self):
+        """定时任务注册中心（只读，供 API 路由直接访问）。"""
+        return self._registry
+
+    @property
+    def history_store(self):
+        """任务历史存储（只读，供 API 路由直接访问）。"""
+        return self._history_store
+
+    @property
+    def login_executor(self) -> BoundedExecutor:
+        """登录专用 BoundedExecutor（只读，供 container 注入 LoginOrchestrator）。"""
+        return self._login_executor
+
+    def bind_runtime_config(self, getter: Callable[[], RuntimeConfig]) -> None:
+        """延迟绑定运行时配置获取器（用于解决 Engine 循环依赖）。"""
         self._get_runtime_config = getter
+
+    def bind_login_orchestrator(self, orchestrator: Any) -> None:
+        """延迟绑定登录编排器（用于解决与 LoginOrchestrator 的循环依赖）。"""
+        self._login_orchestrator = orchestrator
+
+    @property
+    def task_manager(self):
+        """浏览器/脚本任务管理器（供 API 路由访问）。"""
+        return self._task_manager
 
     def _ensure_task_pool(self) -> BoundedExecutor:
         """确保定时任务线程池存在（懒初始化，双检锁）。"""
@@ -113,34 +168,23 @@ class TaskExecutor:
                     self._task_pool = BoundedExecutor(max_workers=2, queue_size=10)
         return self._task_pool
 
-    # ── 定时任务 CRUD（原 TaskFacade 方法）──
-
-    def list_tasks(self) -> list[dict]:
-        """列出所有定时任务。"""
-        return self._registry.list_tasks()
-
-    def get_task(self, task_id: str) -> dict | None:
-        """获取单个定时任务。"""
-        return self._registry.get_task(task_id)
-
-    def save_task(self, task_id: str, config: dict) -> tuple[bool, str]:
-        """保存定时任务。"""
-        return self._registry.save_task(task_id, config)
+    # ── 定时任务删除（协调 registry + history_store）──
 
     def delete_task(self, task_id: str) -> tuple[bool, str]:
         """删除定时任务及其历史。"""
+        with self._running_tasks_lock:
+            entry = self._running_tasks.get(task_id)
+        if entry is not None:
+            future, cancel_event = entry
+            if not future.done():
+                cancel_event.set()
+                future.cancel()
+                logger.warning("取消运行中任务: {}", task_id)
+
         success, message = self._registry.delete_task(task_id)
         if success:
             self._history_store.delete_history(task_id)
         return success, message
-
-    def get_history(self, task_id: str) -> list[dict]:
-        """获取任务执行历史。"""
-        return self._history_store.get_history(task_id)
-
-    def has_enabled_tasks(self) -> bool:
-        """检查是否存在启用的定时任务。"""
-        return self._registry.has_enabled_tasks()
 
     # ── 异步提交接口 ──
 
@@ -157,59 +201,33 @@ class TaskExecutor:
         """
         with self._running_tasks_lock:
             existing = self._running_tasks.get(task_id)
-            if existing is not None and not existing.done():
-                logger.info("定时任务 {} 已在执行中，跳过重复提交", task_id)
-                return existing
+            if existing is not None and not existing[0].done():
+                logger.debug("定时任务 {} 已在执行中，跳过重复提交", task_id)
+                return existing[0]
 
+            cancel_event = threading.Event()
             try:
-                future = self._ensure_task_pool().submit(self.execute_task, task_id)
+                future = self._ensure_task_pool().submit(
+                    self.execute_task, task_id, cancel_event
+                )
             except RuntimeError:
-                logger.warning("任务队列已满，任务 {} 被拒绝", task_id)
+                logger.warning("提交任务 {} 失败: 队列已满", task_id)
                 f: Future = Future()
                 f.set_exception(RuntimeError(f"任务队列已满，无法提交任务 {task_id}"))
                 return f
-            self._running_tasks[task_id] = future
+            self._running_tasks[task_id] = (future, cancel_event)
 
         # 锁外注册清理回调
         def _cleanup(f: Future, tid=task_id):
             with self._running_tasks_lock:
-                if self._running_tasks.get(tid) is f:
+                entry = self._running_tasks.get(tid)
+                if entry is not None and entry[0] is f:
                     del self._running_tasks[tid]
 
         future.add_done_callback(_cleanup)
         return future
 
     # ── 登录接口（委托 LoginOrchestrator）──
-
-    def execute_login_async(
-        self,
-        cancel_event: threading.Event | None = None,
-        config_snapshot: RuntimeConfig | None = None,
-    ) -> Future:
-        """异步执行登录。签名兼容。"""
-        handle = self._login_orchestrator.submit(
-            source="auto", config=config_snapshot, cancel_event=cancel_event,
-        )
-        if handle.future is not None:
-            return handle.future
-        # 被拒绝：返回已完成的 failed future
-        f: Future = Future()
-        f.set_result((False, handle.rejected_reason or "登录被拒绝"))
-        return f
-
-    def execute_login(
-        self,
-        cancel_event: threading.Event | None = None,
-        config_snapshot: RuntimeConfig | None = None,
-    ) -> tuple[bool, str]:
-        """同步执行登录。签名兼容。"""
-        cfg = config_snapshot if config_snapshot is not None else (
-            self._get_runtime_config() if self._get_runtime_config else RuntimeConfig()
-        )
-        handle = self._login_orchestrator.submit(
-            source="auto", config=cfg, cancel_event=cancel_event,
-        )
-        return handle.result()
 
     def is_login_running(self) -> bool:
         """检查是否有登录在执行。"""
@@ -219,18 +237,24 @@ class TaskExecutor:
         """取消当前登录。"""
         self._login_orchestrator.cancel_running()
 
-    def force_clear_login_slot(self) -> None:
-        """强制清理旧登录引用（仅用于旧任务无法正常取消的兜底场景）。"""
-        self._login_orchestrator.cancel_running()
-
     # ── 同步执行接口 ──
 
-    def execute_task(self, task_id: str) -> tuple[bool, str]:
+    def execute_task(
+        self, task_id: str, cancel_event: threading.Event | None = None
+    ) -> tuple[bool, str]:
         """同步执行定时任务（在线程池工作线程中运行）。
 
         根据任务类型分发到 _execute_script / _execute_browser / _execute_shell。
         执行完成后记录历史和更新 last_run。
+
+        Args:
+            task_id: 任务 ID
+            cancel_event: 可选的取消事件，set 后任务应尽快终止
         """
+        logger.debug("收到执行定时任务请求: {}", task_id)
+        if cancel_event is not None and cancel_event.is_set():
+            return False, "任务已被取消"
+
         task = self._registry.get_task(task_id)
         if not task:
             return False, "定时任务不存在"
@@ -240,17 +264,21 @@ class TaskExecutor:
         start = time.perf_counter()
 
         try:
+            if cancel_event is not None and cancel_event.is_set():
+                return False, "任务已被取消"
+
             if task_type == "script":
                 success, message = self._execute_script(
-                    task.get("target_id", ""), timeout
+                    task.get("target_id", ""), timeout, cancel_event
                 )
             elif task_type == "browser":
                 success, message = self._execute_browser(
-                    task.get("target_id", ""), timeout
+                    task.get("target_id", ""), timeout, cancel_event
                 )
             elif task_type == "shell":
                 success, message = self._execute_shell(
-                    task.get("command", ""), timeout, task.get("shell_path", "")
+                    task.get("command", ""), timeout,
+                    task.get("shell_path", ""), cancel_event
                 )
             else:
                 success, message = (
@@ -269,32 +297,32 @@ class TaskExecutor:
         # 更新最后执行时间
         self._registry.update_last_run(task_id, status)
 
-        logger.info(
-            "定时任务执行完成 {}: success={}, message={}",
-            task_id,
-            success,
-            message[:100],
-        )
+        if success:
+            logger.info("定时任务 {} 执行成功", task_id)
+        else:
+            logger.warning("定时任务 {} 执行失败: {}", task_id, message[:100])
         return success, message
 
     # ── 内部执行方法 ──
 
-    def _execute_script(self, script_id: str, timeout: int) -> tuple[bool, str]:
+    def _execute_script(
+        self, script_id: str, timeout: int, cancel_event: threading.Event | None = None
+    ) -> tuple[bool, str]:
         """执行自定义脚本任务。"""
-        if not self._registry:
-            return False, "任务服务未初始化"
-
         task = self._registry.get_task(script_id)
         if not task or task.get("type") != "script":
             return False, f"脚本任务不存在: {script_id}"
 
         # 获取脚本路径（通过 registry 的 TaskManager）
-        script_path = self._get_script_path(script_id)
+        script_path = self._registry.get_script_path(script_id)
         if not script_path or not script_path.exists():
             return False, f"脚本文件不存在: {script_id}"
 
         # 延迟导入：避免顶层导入 playwright/script_runner 的启动开销
         from app.workers.script_runner import ScriptRunner
+
+        if cancel_event is not None and cancel_event.is_set():
+            return False, "任务已被取消"
 
         runner = ScriptRunner(
             script_path,
@@ -315,10 +343,21 @@ class TaskExecutor:
         if not task or task.get("type") != "browser":
             return False, f"浏览器任务不存在: {task_id}"
 
-        config = self._get_runtime_config() if self._get_runtime_config else RuntimeConfig()
+        if cancel_event is not None and cancel_event.is_set():
+            return False, "任务已被取消"
+
+        config = (
+            self._get_runtime_config() if self._get_runtime_config else RuntimeConfig()
+        )
+        # 将定时任务的 task_id 注入到 active_task，让 LoginAttempt 加载正确任务
+        if task_id and task_id != config.active_task:
+            config = config.model_copy(update={"active_task": task_id})
+
         handle = self._login_orchestrator.submit(
-            source="browser", config=config,
-            cancel_event=cancel_event, timeout=timeout,
+            source="browser",
+            config=config,
+            cancel_event=cancel_event,
+            timeout=timeout,
         )
 
         if handle.rejected_reason is not None:
@@ -330,19 +369,26 @@ class TaskExecutor:
         return False, msg or "浏览器任务执行失败"
 
     def _execute_shell(
-        self, command: str, timeout: int, shell_path: str = ""
+        self, command: str, timeout: int, shell_path: str = "",
+        cancel_event: threading.Event | None = None,
     ) -> tuple[bool, str]:
         """执行 Shell 命令。"""
         if not command.strip():
             return False, "命令为空"
+        if cancel_event is not None and cancel_event.is_set():
+            return False, "任务已被取消"
 
         # 如果没有指定 shell，使用全局配置或默认值
         if not shell_path:
             try:
-                config = self._get_runtime_config() if self._get_runtime_config else RuntimeConfig()
-                shell_path = config.shell_path
+                config = (
+                    self._get_runtime_config()
+                    if self._get_runtime_config
+                    else RuntimeConfig()
+                )
+                shell_path = config.app_settings.shell_path
             except Exception:
-                logger.debug("获取运行时 shell_path 失败，使用默认值", exc_info=True)
+                logger.warning("获取 shell_path 失败，使用默认值", exc_info=True)
 
         if not shell_path:
             shell_path = get_default_shell()
@@ -379,24 +425,50 @@ class TaskExecutor:
 
     # ── 辅助方法 ──
 
-    def _get_script_path(self, script_id: str):
-        """获取脚本任务的文件路径。
-
-        委托 TaskRegistry.get_script_path() 查找。
-        """
-        if hasattr(self._registry, "get_script_path"):
-            return self._registry.get_script_path(script_id)
-        return None
-
     # ── 生命周期 ──
 
-    def shutdown(self, wait: bool = True) -> None:
+    async def wait_for_callbacks(self, timeout: float = 10) -> None:
+        """等待所有进行中的任务完成回调。
+
+        在 engine.shutdown() 之后、task_executor.shutdown() 之前调用，
+        确保 in-flight 任务的 done 回调在关闭下游服务之前执行完毕，
+        避免回调触及已关闭的组件。
+
+        Args:
+            timeout: 最大等待时间（秒），超时后放弃等待。
+        """
+        with self._running_tasks_lock:
+            pending = [f for f, _ in self._running_tasks.values() if not f.done()]
+
+        if not pending:
+            return
+
+        logger.debug("等待 {} 个进行中的任务回调完成", len(pending))
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + timeout
+
+        async def _wait_one(future: Future) -> None:
+            remaining = max(0.0, deadline - loop.time())
+            with contextlib.suppress(Exception):
+                await loop.run_in_executor(None, future.result, remaining)
+
+        await asyncio.gather(*[_wait_one(f) for f in pending])
+        logger.debug("所有任务回调已完成")
+
+    def shutdown(self, wait: bool = True, timeout: float | None = None) -> None:
         """关闭线程池。"""
-        logger.info("TaskExecutor 开始关闭...")
+        logger.debug("任务执行器开始关闭")
         if self._task_pool is not None:
-            self._task_pool.shutdown(wait=wait)
+            if timeout is not None:
+                self._task_pool.shutdown(wait=wait, timeout=timeout)
+            else:
+                self._task_pool.shutdown(wait=wait)
+        if timeout is not None:
+            self._login_executor.shutdown(wait=wait, timeout=timeout)
+        else:
+            self._login_executor.shutdown(wait=wait)
         with self._running_tasks_lock:
             self._running_tasks.clear()
         if self._login_orchestrator is not None:
             self._login_orchestrator.shutdown(wait=wait)
-        logger.info("TaskExecutor 已关闭")
+        logger.info("任务执行器已关闭")

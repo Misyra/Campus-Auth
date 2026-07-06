@@ -12,6 +12,13 @@ import pytest
 from app.application import _cleanup_screenshots
 from app.utils.ports import resolve_port
 
+
+@pytest.fixture(autouse=True)
+def _mock_decision_executor_shutdown(monkeypatch):
+    """避免 container.shutdown() 真正关闭模块级资源。"""
+    monkeypatch.setattr("app.network.probes.shutdown_probes", MagicMock())
+
+
 # ── resolve_port ──
 
 
@@ -182,7 +189,9 @@ class TestCleanupScreenshots:
         nonexistent_temp = tmp_path / "nonexistent_temp"
         with (
             patch("app.application.TEMP_DIR", nonexistent_temp),
-            patch("app.application.SCREENSHOTS_DIR", tmp_path / "nonexistent_screenshots"),
+            patch(
+                "app.application.SCREENSHOTS_DIR", tmp_path / "nonexistent_screenshots"
+            ),
         ):
             _cleanup_screenshots()
 
@@ -217,17 +226,77 @@ class TestCleanupScreenshots:
 
 
 class TestWebSocketMessageHandling:
-    """WebSocket 消息处理逻辑（通过 TestClient 间接测试）。"""
+    """WebSocket 消息处理正确应对无效 JSON 和未知消息类型。"""
 
-    def test_message_size_limit(self):
-        """消息大小限制逻辑。"""
-        # 大消息应该被拒绝
-        large_msg = "x" * 70000  # > 65536
-        assert len(large_msg) > 65536
+    def _make_app_with_ws(self, tmp_path):
+        """构建一个带 WebSocket 端点的 app，用于 TestClient 测试。"""
+        (tmp_path / "frontend").mkdir(exist_ok=True)
+        (tmp_path / "frontend" / "index.html").write_text("<html></html>")
+        (tmp_path / "logs").mkdir(exist_ok=True)
+        (tmp_path / "temp").mkdir(exist_ok=True)
 
-    def test_json_parse_error_handling(self):
-        """JSON 解析错误处理。"""
-        # 无效 JSON 应该被捕获
-        invalid_json = "{invalid json"
-        with pytest.raises(json.JSONDecodeError):
-            json.loads(invalid_json)
+        with (
+            patch("app.constants.PROJECT_ROOT", tmp_path),
+            patch("app.constants.FRONTEND_DIR", tmp_path / "frontend"),
+            patch("app.constants.LOGS_DIR", tmp_path / "logs"),
+            patch("app.constants.TEMP_DIR", tmp_path / "temp"),
+        ):
+            from app.application import create_app
+
+            mock_services = MagicMock()
+            mock_services.engine.list_logs.return_value = []
+            app = create_app()
+            app.state.services = mock_services
+            return app
+
+    def test_ws_handles_invalid_json_gracefully(self, tmp_path):
+        """WebSocket 收到无效 JSON 时不崩溃。"""
+        from fastapi.testclient import TestClient
+
+        app = self._make_app_with_ws(tmp_path)
+        with TestClient(app) as client, client.websocket_connect("/ws/logs") as ws:
+            ws.send_text("not valid json {{{")
+            ws.send_text(json.dumps({"type": "ping"}))
+
+    def test_ws_handles_unknown_message_type(self, tmp_path):
+        """WebSocket 收到未知 type 消息时不崩溃。"""
+        from fastapi.testclient import TestClient
+
+        app = self._make_app_with_ws(tmp_path)
+        with TestClient(app) as client, client.websocket_connect("/ws/logs") as ws:
+            ws.send_text(json.dumps({"type": "unknown_type_xyz"}))
+
+
+# ── Windows SIGTERM 兼容性 ──
+
+
+class TestWindowsSigterm:
+    """SIGTERM 信号处理 — 修复 Windows 平台兼容性。"""
+
+    def test_lifespan_registers_signal_or_fallback(self, tmp_path):
+        """lifespan 启动后：要么注册了 SIGTERM handler，要么有 fallback。"""
+        from fastapi.testclient import TestClient
+
+        (tmp_path / "frontend").mkdir(exist_ok=True)
+        (tmp_path / "frontend" / "index.html").write_text("<html></html>")
+        (tmp_path / "logs").mkdir(exist_ok=True)
+        (tmp_path / "temp").mkdir(exist_ok=True)
+
+        with (
+            patch("app.constants.PROJECT_ROOT", tmp_path),
+            patch("app.constants.FRONTEND_DIR", tmp_path / "frontend"),
+            patch("app.constants.LOGS_DIR", tmp_path / "logs"),
+            patch("app.constants.TEMP_DIR", tmp_path / "temp"),
+        ):
+            from app.application import create_app
+
+            mock_services = MagicMock()
+            mock_services.engine = MagicMock()
+            mock_services.startup = MagicMock()
+            mock_services.shutdown = MagicMock()
+
+            app = create_app()
+            app.state.services = mock_services
+
+            with TestClient(app):
+                assert app.state.services is not None

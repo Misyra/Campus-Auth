@@ -8,7 +8,7 @@ from app.utils.logging import get_logger
 
 from .models import TASK_ID_PATTERN, StepType
 
-logger = get_logger("task_validator", source="task")
+logger = get_logger("task_validator", source="backend")
 
 
 class TaskValidator:
@@ -53,7 +53,10 @@ class TaskValidator:
 
         variables = config.get("variables")
         if variables is not None and not isinstance(variables, dict):
-            errors.append("'variables' 必须是对象（dict），当前值类型: " + type(variables).__name__)
+            errors.append(
+                "'variables' 必须是对象（dict），当前值类型: "
+                + type(variables).__name__
+            )
 
         timeout = config.get("timeout")
         if timeout is not None and (
@@ -83,7 +86,7 @@ class TaskValidator:
         step_id = step.get("id", "")
         if not isinstance(step_id, str) or not TASK_ID_PATTERN.fullmatch(step_id):
             errors.append(
-                f"{prefix} 步骤ID格式无效，须以字母开头且仅包含字母、数字和下划线（如 step_01）"
+                f"{prefix} 步骤ID格式无效，只能包含字母、数字、下划线和连字符，长度不超过64"
             )
 
         # 验证步骤类型

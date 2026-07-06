@@ -1,5 +1,7 @@
 import { TIMING, LIMITS } from '../constants.js';
 
+const NOTIFY_CATEGORY_LABELS = { login: '登录', monitor: '监控', network: '网络', update: '更新', security: '安全', install: '安装' };
+
 export const uiMethods = {
   // 弹窗焦点陷阱：将焦点限制在指定容器内
   _trapFocus(container) {
@@ -78,9 +80,22 @@ export const uiMethods = {
     const s = String(now.getSeconds()).padStart(2, '0');
     return `${now.getMonth() + 1}/${now.getDate()} ${h}:${m}:${s}`;
   },
-  _notifyCategoryLabel(category) {
-    const labels = { login: '登录', monitor: '监控', network: '网络', update: '更新', security: '安全', install: '安装' };
-    return labels[category] || '';
+  // 通知下拉菜单：切换 + 点击外部关闭
+  toggleNotifications() {
+    this.showNotifications = !this.showNotifications;
+    if (this.showNotifications) {
+      this.unreadNotifications = 0;
+      document.addEventListener('mousedown', this._onNotifyOutsideClick);
+    } else {
+      document.removeEventListener('mousedown', this._onNotifyOutsideClick);
+    }
+  },
+  _onNotifyOutsideClick(e) {
+    const wrapper = document.querySelector('.notification-wrapper');
+    if (wrapper && !wrapper.contains(e.target)) {
+      this.showNotifications = false;
+      document.removeEventListener('mousedown', this._onNotifyOutsideClick);
+    }
   },
   notify(success, message, category, action) {
     const entry = {
@@ -89,7 +104,7 @@ export const uiMethods = {
       time: this._formatNotifyTime(),
       category: category || '',
       icon: this._notifyCategoryIcon(category),
-      label: this._notifyCategoryLabel(category),
+      label: NOTIFY_CATEGORY_LABELS[category] || '',
       action: action || null,
     };
     this.notifications.unshift(entry);
@@ -101,11 +116,7 @@ export const uiMethods = {
   async fetchBrowsers() {
     this.browserLoading = true;
     try {
-      const response = await fetch('/api/browsers');
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-      const data = await response.json();
+      const data = await this.$apiService.browsers.fetch();
       this.availableBrowsers = data.browsers;
       // 只在已有选择时同步，向导模式下默认不选择
       if (this.selectedBrowser) {
@@ -113,7 +124,7 @@ export const uiMethods = {
         this.config.browser.browser_channel = data.current;
       }
     } catch (error) {
-      console.error('获取浏览器列表失败:', error);
+      this.frontendLogger.error('browser', '获取浏览器列表失败', error);
     } finally {
       this.browserLoading = false;
     }
@@ -122,37 +133,11 @@ export const uiMethods = {
   selectBrowser(channel) {
     this.selectedBrowser = channel;
     this.config.browser.browser_channel = channel;
-    this.onConfigChange('browser_channel', channel, 'toggle');
-  },
-  // 辅助方法：获取浏览器信息
-  getBrowser(channel) {
-    return this.availableBrowsers.find(b => b.channel === channel) || { channel, installed: false };
-  },
-  // 辅助方法：获取浏览器图标
-  getBrowserIcon(channel) {
-    const browser = this.availableBrowsers.find(b => b.channel === channel);
-    return browser ? browser.icon : '';
-  },
-  // 辅助方法：检查浏览器是否已安装
-  isBrowserInstalled(channel) {
-    const browser = this.availableBrowsers.find(b => b.channel === channel);
-    return browser ? browser.installed : false;
-  },
-  // 辅助方法：获取其他浏览器（排除 Playwright）
-  getOtherBrowsers() {
-    return this.availableBrowsers.filter(b => b.channel !== 'playwright');
   },
   // 浏览器选择共享 partial 辅助：返回当前活跃的浏览器 channel
   getActiveBrowserChannel() {
     // wizard 模式用 selectedBrowser，settings 模式用 config.browser.browser_channel
     return this.selectedBrowser || this.config.browser.browser_channel;
-  },
-  // 浏览器选择共享 partial 辅助：自定义路径输入处理
-  onBrowserCustomPathInput() {
-    // settings 模式下需要触发配置保存
-    if (this.onConfigChange) {
-      this.onConfigChange('browser_custom_path', this.config.browser.browser_custom_path, 'input');
-    }
   },
   // 处理浏览器点击
   handleBrowserClick(browser) {
@@ -197,11 +182,7 @@ export const uiMethods = {
     this.frontendLogger.info('browser', '开始下载 Playwright Chromium');
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 600000); // 10 分钟超时
-    fetch('/api/browsers/install-playwright', {
-      method: 'POST',
-      signal: controller.signal,
-    })
-      .then(res => { if (!res.ok) throw new Error(`HTTP ${res.status}`); return res.json(); })
+    this.$apiService.browsers.installPlaywright({ signal: controller.signal, timeout: 600000 })
       .then(data => {
         if (data.success) {
           this.frontendLogger.info('browser', 'Playwright Chromium 安装成功');
@@ -213,7 +194,7 @@ export const uiMethods = {
         }
       })
       .catch(error => {
-        if (error.name === 'AbortError') {
+        if (error.name === 'AbortError' || error.name === 'CanceledError') {
           this.frontendLogger.error('browser', '安装超时（超过 10 分钟）');
           this.notify(false, '安装超时，请检查网络后重试', 'install');
         } else {
@@ -227,6 +208,7 @@ export const uiMethods = {
       });
   },
   setSettingsTab(tabId) {
+    if (this.currentSettingsTab === tabId) return;
     this.currentSettingsTab = tabId;
   },
   // 编辑器关闭确认
@@ -243,61 +225,16 @@ export const uiMethods = {
     this.newLogCount = 0;
   },
   // 导航到指定页面
-  navigateTo(page) {
+  navigateTo(page, keepMoreMenu = false) {
+    if (this.currentPage === 'settings' && page !== 'settings' && this.configDirty) {
+      if (!confirm('当前设置有未保存的修改，确定要离开吗？\n离开后未保存的修改将丢失。')) return;
+      const snapshot = JSON.parse(this._lastSavedConfig);
+      this.config = snapshot;
+      this.saveFailed = false;
+      this.editingPassword = false;
+    }
     this.currentPage = page;
-    this.showMoreNav = false;
-  },
-  addCustomVar() {
-    // 确保 custom_variables 是对象
-    if (!this.config.custom_variables || typeof this.config.custom_variables !== 'object') {
-      this.config.custom_variables = {};
-    }
-    // 生成默认变量名
-    let index = 1;
-    let key = `var_${index}`;
-    while (Object.hasOwn(this.config.custom_variables, key)) {
-      index++;
-      key = `var_${index}`;
-    }
-    this.config.custom_variables[key] = '';
-  },
-  removeCustomVar(key) {
-    if (this.config.custom_variables && key in this.config.custom_variables) {
-      const newVars = { ...this.config.custom_variables };
-      delete newVars[key];
-      this.config.custom_variables = newVars;
-    }
-  },
-  updateCustomVarKey(oldKey, newKey) {
-    if (!newKey || oldKey === newKey) return;
-    newKey = newKey.trim();
-    if (!newKey) return;
-    // 验证新变量名格式
-    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(newKey)) {
-      this.frontendLogger.warn('config', '自定义变量名格式无效: ' + newKey);
-      this.toastOnly(false, '变量名必须以字母或下划线开头，只能包含字母、数字和下划线');
-      // 恢复原值
-      this.$nextTick(() => {
-        const input = document.querySelector('.custom-var-item input[data-var-key="' + CSS.escape(oldKey) + '"]');
-        if (input) input.value = oldKey;
-      });
-      return;
-    }
-    if (Object.hasOwn(this.config.custom_variables, newKey)) {
-      this.frontendLogger.warn('config', '自定义变量名已存在: ' + newKey);
-      this.toastOnly(false, '变量名已存在');
-      return;
-    }
-    // 创建新键并复制值
-    const newVars = {};
-    for (const [k, v] of Object.entries(this.config.custom_variables)) {
-      if (k === oldKey) {
-        newVars[newKey] = v;
-      } else {
-        newVars[k] = v;
-      }
-    }
-    this.config.custom_variables = newVars;
+    if (!keepMoreMenu) this.showMoreNav = false;
   },
   _isViewerAtBottom() {
     const logViewer = this.$refs?.logViewer;
@@ -305,9 +242,13 @@ export const uiMethods = {
     return logViewer.scrollTop + logViewer.clientHeight >= logViewer.scrollHeight - LIMITS.SCROLL_BOTTOM_THRESHOLD;
   },
   _appendLogs(entries) {
-    this.logs.push(...entries);
+    const wasAtBottom = this._isViewerAtBottom();
+    this.logs.push(...entries.map(e => Object.freeze(e)));
     if (this.logs.length > LIMITS.LOG_MAX_ENTRIES) {
       this.logs = this.logs.slice(-LIMITS.LOG_MAX_ENTRIES);
+    }
+    if (!wasAtBottom) {
+      this.newLogCount += entries.length;
     }
     this.$nextTick(() => {
       if (this.autoScroll) {
@@ -349,7 +290,7 @@ export const uiMethods = {
         this.ws.onerror = null;
         this.ws.close();
       }
-      await this.$api.post('/api/shutdown');
+      await this.$apiService.system.shutdown();
       // 显示退出提示页面
       this._showExitOverlay();
     } catch (error) {

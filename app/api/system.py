@@ -4,16 +4,23 @@ from __future__ import annotations
 
 import asyncio
 import os
+import sys
 import time
 
 import httpx
 import psutil
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 
 from app.constants import AUTH_DATA_DIR, PROJECT_ROOT
-from app.deps import get_monitor_service
-from app.schemas import ActionResponse
-from app.services.engine import ScheduleEngine
+from app.deps import MonitorServiceDep
+from app.schemas import (
+    ApiResponse,
+    HealthResponse,
+    InitStatusResponse,
+    UninstallItem,
+    UninstallRequest,
+    UpdateCheckResponse,
+)
 from app.utils.logging import get_logger
 from app.version import compare_versions, get_project_version
 
@@ -30,44 +37,49 @@ _update_lock = asyncio.Lock()
 # ── 健康检查 / 更新检测 ──
 
 
-def _safe_psutil_call(fn, default=-1):
+def _safe_psutil_call(fn, default=None):
     """安全调用 psutil 方法，受限环境返回默认值。"""
+    if default is None:
+        default = []
     try:
         return fn()
     except (psutil.AccessDenied, psutil.ZombieProcess, psutil.NoSuchProcess):
         return default
 
 
-@router.get("/api/health")
-def health() -> dict:
+@router.get("/api/health", response_model=HealthResponse)
+def health() -> HealthResponse:
     proc = psutil.Process(os.getpid())
     mem = proc.memory_info()
-    return {
-        "status": "ok",
-        "version": get_project_version(PROJECT_ROOT),
-        "python_version": f"{os.sys.version_info.major}.{os.sys.version_info.minor}.{os.sys.version_info.micro}",
-        "memory": {
+    return HealthResponse(
+        status="ok",
+        version=get_project_version(PROJECT_ROOT),
+        python_version=f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
+        memory={
             "rss_mb": round(mem.rss / 1024 / 1024, 1),
             "vms_mb": round(mem.vms / 1024 / 1024, 1),
         },
-        "process": {
+        process={
             "threads": _safe_psutil_call(proc.threads),
             "open_files": _safe_psutil_call(proc.open_files),
             "pid": proc.pid,
         },
-    }
+    )
 
 
-@router.get("/api/check-update")
-async def check_update() -> dict:
+@router.get("/api/check-update", response_model=UpdateCheckResponse)
+async def check_update() -> UpdateCheckResponse:
     global _update_cache, _update_cache_time
 
     current = get_project_version(PROJECT_ROOT)
 
     async with _update_lock:
         # 缓存命中直接返回
-        if _update_cache and (time.monotonic() - _update_cache_time) < _UPDATE_CACHE_TTL:
-            return {**_update_cache, "current": current}
+        if (
+            _update_cache
+            and (time.monotonic() - _update_cache_time) < _UPDATE_CACHE_TTL
+        ):
+            return UpdateCheckResponse(**_update_cache, current=current)
 
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
@@ -81,42 +93,43 @@ async def check_update() -> dict:
             resp.raise_for_status()
             data = resp.json()
             tag = data.get("tag_name", "").lstrip("v")
-            result = {
-                "current": current,
-                "latest": tag,
-                "has_update": compare_versions(tag, current) > 0,
-                "url": data.get("html_url", ""),
-                "body": data.get("body", ""),
-                "published_at": data.get("published_at", ""),
-            }
-            # 更新缓存
-            _update_cache = result
+            result = UpdateCheckResponse(
+                current=current,
+                latest=tag,
+                has_update=compare_versions(tag, current) > 0,
+                url=data.get("html_url", ""),
+                body=data.get("body", ""),
+                published_at=data.get("published_at", ""),
+            )
+            # 更新缓存（排除 current，避免重建时重复传参）
+            _update_cache = result.model_dump(exclude={"current"})
             _update_cache_time = time.monotonic()
             return result
         except Exception as e:
+            api_logger.warning("检查更新失败: {}", e)
             # 请求失败但有旧缓存，返回旧缓存 + 错误信息
             if _update_cache:
-                return {
+                return UpdateCheckResponse(
                     **_update_cache,
-                    "current": current,
-                    "cached": True,
-                    "error": str(e),
-                }
-            return {
-                "current": current,
-                "latest": None,
-                "has_update": False,
-                "error": str(e),
-            }
+                    current=current,
+                    cached=True,
+                    error=str(e),
+                )
+            return UpdateCheckResponse(
+                current=current,
+                latest=None,
+                has_update=False,
+                error=str(e),
+            )
 
 
 # ── 初始化状态 ──
 
 
-@router.get("/api/init-status")
+@router.get("/api/init-status", response_model=InitStatusResponse)
 def get_init_status(
-    svc: ScheduleEngine = Depends(get_monitor_service),
-) -> dict:
+    svc: MonitorServiceDep,
+) -> InitStatusResponse:
     from app.utils.crypto import has_decryption_error
 
     config = svc.get_runtime_config()
@@ -126,40 +139,40 @@ def get_init_status(
     agree_file = svc.project_root / "config" / ".agree"
     agreed = agree_file.exists()
 
-    return {
-        "initialized": is_initialized,
-        "agreed": agreed,
-        "password_decryption_failed": has_decryption_error(),
-    }
+    return InitStatusResponse(
+        initialized=is_initialized,
+        agreed=agreed,
+        password_decryption_failed=has_decryption_error(),
+    )
 
 
-@router.post("/api/agree", response_model=ActionResponse)
+@router.post("/api/agree", response_model=ApiResponse)
 def agree_to_terms(
-    svc: ScheduleEngine = Depends(get_monitor_service),
-) -> ActionResponse:
+    svc: MonitorServiceDep,
+) -> ApiResponse:
     """用户同意使用协议，生成 .agree 标记文件。"""
     try:
         agree_file = svc.project_root / "config" / ".agree"
         agree_file.parent.mkdir(parents=True, exist_ok=True)
         agree_file.write_text("", encoding="utf-8")
         api_logger.info("用户已同意使用协议")
-        return ActionResponse(success=True, message="已同意协议")
+        return ApiResponse(success=True, message="已同意协议")
     except Exception as exc:
-        api_logger.error("保存协议同意状态失败: {}", exc)
+        api_logger.warning("保存协议同意状态失败: {}", exc)
         raise HTTPException(status_code=500, detail=f"保存失败: {exc}") from exc
 
 
 # ── 关机 ──
 
 
-@router.post("/api/shutdown", response_model=ActionResponse)
+@router.post("/api/shutdown", response_model=ApiResponse)
 def shutdown_server(
     request: Request,
     bg_tasks: BackgroundTasks,
-    svc: ScheduleEngine = Depends(get_monitor_service),
-) -> ActionResponse:
+    svc: MonitorServiceDep,
+) -> ApiResponse:
     """关闭服务器 — 通过 shutdown_event 触发 lifespan 正常清理"""
-    api_logger.warning("收到关机请求")
+    api_logger.info("收到关机请求")
 
     # 停止监控服务
     try:
@@ -178,9 +191,7 @@ def shutdown_server(
     # 通过 shutdown_event 触发 lifespan 正常关闭
     bg_tasks.add_task(_trigger_shutdown_event, request)
 
-    return ActionResponse(
-        success=True, message="服务器正在关闭，请稍候，页面将自动断开"
-    )
+    return ApiResponse(success=True, message="服务器正在关闭，请稍候，页面将自动断开")
 
 
 def _trigger_shutdown_event(request: Request) -> None:
@@ -192,38 +203,38 @@ def _trigger_shutdown_event(request: Request) -> None:
 # ── 卸载 ──
 
 
-@router.get("/api/uninstall/detect")
-def uninstall_detect() -> list[dict]:
+@router.get("/api/uninstall/detect", response_model=list[UninstallItem])
+def uninstall_detect() -> list[UninstallItem]:
     """检测可清理的外部残留项目"""
     from app.services.uninstall import detect
 
     items = detect()
     return [
-        {
-            "key": it.key,
-            "label": it.label,
-            "exists": it.exists,
-            "path": it.path,
-            "size_mb": round(it.size_mb, 1),
-        }
+        UninstallItem(
+            key=it.key,
+            label=it.label,
+            exists=it.exists,
+            path=it.path,
+            size_mb=round(it.size_mb, 1),
+        )
         for it in items
     ]
 
 
-@router.post("/api/uninstall")
-def uninstall_perform(payload: dict) -> dict:
+@router.post("/api/uninstall", response_model=ApiResponse)
+def uninstall_perform(payload: UninstallRequest) -> ApiResponse:
     """执行卸载清理"""
     from app.services.uninstall import perform
 
-    keys = payload.get("keys", [])
-    if not isinstance(keys, list):
-        raise HTTPException(400, "keys 必须是列表")
-    api_logger.warning("收到卸载请求, keys={}", keys)
-    results = perform(keys)
-    return {
-        "success": all(r.success for r in results),
-        "results": [
-            {"key": r.key, "label": r.label, "success": r.success, "message": r.message}
-            for r in results
-        ],
-    }
+    api_logger.info("收到卸载请求, keys={}", payload.keys)
+    results = perform(payload.keys)
+    all_ok = all(r.success for r in results)
+    detail = [
+        {"key": r.key, "label": r.label, "success": r.success, "message": r.message}
+        for r in results
+    ]
+    return ApiResponse(
+        success=all_ok,
+        message=f"清理完成（{sum(1 for r in results if r.success)}/{len(results)}）",
+        data={"results": detail},
+    )

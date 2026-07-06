@@ -1,24 +1,26 @@
 <div v-if="currentSettingsTab === 'system'" class="settings-panel-grid">
   <section class="card settings-panel">
-    <div class="card-header">
+    <div class="settings-card-header">
+      <svg class="settings-card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><polyline points="14 2 14 8 20 8"/>
+      </svg>
       <h2>日志设置</h2>
     </div>
-    <div class="card-body settings-log-columns">
+    <div class="card-body settings-grid-2col">
       <div>
-        <h4 class="settings-section-heading">日志管理</h4>
         <div class="form-row">
           <div class="form-group">
             <div class="field-label-row">
               <label for="settings-log-retention">日志保留天数</label>
               <span class="field-help" tabindex="0" role="note" data-tip="日志和失败截图按天归档，超过设定天数的整日归档（含日志和截图）会自动清理。设为 7 可平衡排查需求与磁盘占用。">?</span>
             </div>
-            <input id="settings-log-retention" v-model.number="config.logging.log_retention_days" type="number" min="1" max="365" @input="onConfigChange('log_retention_days', config.logging.log_retention_days, 'input')" />
+            <input id="settings-log-retention" v-model.number="config.logging.log_retention_days" type="number" min="1" max="365" />
           </div>
         </div>
         <div class="toggle-group">
           <div class="toggle-with-help">
             <label class="toggle toggle-help-inline">
-              <input type="checkbox" v-model="config.logging.access_log" @change="onConfigChange('access_log', config.logging.access_log, 'toggle')" />
+              <input type="checkbox" v-model="config.logging.access_log" />
               <span class="toggle-slider"></span>
               <span class="toggle-label">显示 HTTP 请求日志</span>
               <span class="field-help" tabindex="0" role="note" data-tip="开启后会记录每次 API 请求的方法、路径和耗时。调试时有用，日常使用建议关闭以减少日志量。">?</span>
@@ -28,7 +30,6 @@
       </div>
 
       <div>
-        <h4 class="settings-section-heading">日志级别</h4>
         <div class="form-group">
           <div class="field-label-row">
             <label>全局日志级别</label>
@@ -37,7 +38,7 @@
           <custom-select
             v-model="config.logging.level"
             :options="logLevelOptions"
-            @change="(val) => { setSourceLevel('global', val); onConfigChange('log_level', val, 'toggle'); }"
+            @change="(val) => { setLogLevel(val); }"
           ></custom-select>
         </div>
       </div>
@@ -45,11 +46,13 @@
   </section>
 
   <section class="card settings-panel">
-    <div class="card-header">
-      <h2>启动与界面</h2>
+    <div class="settings-card-header">
+      <svg class="settings-card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/>
+      </svg>
+      <h2>启动行为</h2>
     </div>
     <div class="card-body">
-      <h4 class="settings-section-heading">启动行为</h4>
       <div class="form-group">
         <div class="field-label-row">
           <label for="settings-startup-action">启动后执行</label>
@@ -57,15 +60,12 @@
         </div>
         <custom-select
           id="settings-startup-action"
-          v-model="config.startup_action"
+          v-model="config.app_settings.startup_action"
           :options="loginActionOptions"
-          @change="(val) => onConfigChange('startup_action', val, 'toggle')"
         ></custom-select>
         <span class="hint">{{ startupActionHint }}</span>
       </div>
 
-      <div class="settings-section-divider"></div>
-      <h4 class="settings-section-heading">开机自启动</h4>
       <div class="toggle-group">
         <div class="toggle-with-help">
           <label class="toggle toggle-help-inline">
@@ -77,37 +77,56 @@
           </label>
         </div>
       </div>
-      <div class="form-group" v-if="autostart.enabled">
+    </div>
+  </section>
+
+  <section class="card settings-panel">
+    <div class="settings-card-header">
+      <svg class="settings-card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="3"/><path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72 1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+      </svg>
+      <h2>运行模式</h2>
+    </div>
+    <div class="card-body">
+      <div class="form-group">
         <div class="field-label-row">
-          <label>自启动模式</label>
+          <label>运行模式</label>
           <span class="field-help" tabindex="0" role="note" data-tip="轻量模式仅后台监控，不启动 Web 界面，可降低常态内存占用；完整模式启动 Web 管理界面。">?</span>
         </div>
         <custom-select
-          v-model="autostart.lightweight"
+          v-model="config.app_settings.runtime_mode"
           :options="autostartModeOptions"
           @change="setAutostartMode"
         ></custom-select>
       </div>
 
-      <template v-if="autostart.lightweight">
-        <div class="toggle-group" style="margin-top: 12px;">
+      <template v-if="config.app_settings.runtime_mode === 'lightweight'">
+        <div class="toggle-group settings-toggle-spacer">
           <div class="toggle-with-help">
             <label class="toggle toggle-help-inline">
-              <input type="checkbox" v-model="config.lightweight_tray" @change="onConfigChange('lightweight_tray', config.lightweight_tray, 'toggle')" />
+              <input type="checkbox" v-model="config.app_settings.lightweight_tray" @change="confirmLightweightTray" />
               <span class="toggle-slider"></span>
               <span class="toggle-label">轻量模式托盘开关</span>
-              <span class="field-help" tabindex="0" role="note" data-tip="开启后可以通过托盘打开管理界面，但是会增加 10MB 左右内存。关闭后无法进入 Web 界面，只能通过命令行管理。建议在完成所有配置后打开。">?</span>
+              <span class="field-help" tabindex="0" role="note" data-tip="开启后可以通过托盘打开管理界面，但是会增加 10MB 左右内存。关闭后将无法通过托盘打开 Web 界面，但仍可通过 exe 启动程序来打开管理界面。建议在完成所有配置后打开。">?</span>
             </label>
           </div>
         </div>
       </template>
+    </div>
+  </section>
 
-      <div class="settings-section-divider"></div>
-      <h4 class="settings-section-heading">界面行为</h4>
+  <section class="card settings-panel">
+    <div class="settings-card-header">
+      <svg class="settings-card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>
+      </svg>
+      <h2>界面行为</h2>
+    </div>
+    <div class="card-body">
       <div class="toggle-group">
         <div class="toggle-with-help">
           <label class="toggle toggle-help-inline">
-            <input type="checkbox" v-model="config.minimize_to_tray" :disabled="config.startup_action === 'login_once'" @change="onConfigChange('minimize_to_tray', config.minimize_to_tray, 'toggle')" />
+            <input type="checkbox" v-model="config.app_settings.minimize_to_tray" :disabled="config.app_settings.startup_action === 'login_once'" />
             <span class="toggle-slider"></span>
             <span class="toggle-label">最小化到系统托盘</span>
             <span class="field-help" tabindex="0" role="note" data-tip="关闭窗口时最小化到系统托盘，可通过托盘图标重新打开界面。关闭后可降低内存占用，但只能手动打开 Web 界面。">?</span>
@@ -117,7 +136,7 @@
       <div class="toggle-group">
         <div class="toggle-with-help">
           <label class="toggle toggle-help-inline">
-            <input type="checkbox" :checked="!config.auto_open_browser" @change="config.auto_open_browser = !$event.target.checked; onConfigChange('auto_open_browser', config.auto_open_browser, 'toggle')" />
+            <input type="checkbox" :checked="!config.app_settings.auto_open_browser" @change="config.app_settings.auto_open_browser = !$event.target.checked" />
             <span class="toggle-slider"></span>
             <span class="toggle-label">静默启动</span>
             <span
@@ -133,7 +152,10 @@
   </section>
 
   <section class="card settings-panel">
-    <div class="card-header">
+    <div class="settings-card-header">
+      <svg class="settings-card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/>
+      </svg>
       <h2>网络与端口</h2>
     </div>
     <div class="card-body">
@@ -145,11 +167,10 @@
           </div>
           <input
             id="settings-app-port"
-            v-model.number="config.app_port"
+            v-model.number="config.app_settings.app_port"
             type="number"
             min="1024"
             max="65535"
-            @input="onConfigChange('app_port', config.app_port, 'input')"
           />
         </div>
         <div class="form-group">
@@ -159,10 +180,9 @@
           </div>
           <input
             id="settings-proxy"
-            v-model.trim="config.proxy"
+            v-model.trim="config.app_settings.proxy"
             type="text"
             placeholder="留空不使用代理，例如 http://127.0.0.1:7897"
-            @input="onConfigChange('proxy', config.proxy, 'input')"
           />
         </div>
       </div>
@@ -171,13 +191,12 @@
           <label for="settings-shell">Shell 路径</label>
           <span class="field-help" tabindex="0" role="note" data-tip="定时任务执行 Shell 命令时使用的 Shell。留空使用系统默认（Windows 优先 PowerShell，Linux/macOS 使用 bash）。">?</span>
         </div>
-        <custom-select v-model="shellPathMode" :options="shellPathOptions" @change="(val) => onConfigChange('shell_path', config.shell_path, 'toggle')"></custom-select>
+        <custom-select v-model="shellPathMode" :options="shellPathOptions"></custom-select>
         <div v-if="shellPathMode === '__custom__' || shellCustomMode" class="shell-custom-input">
           <input
-            v-model.trim="config.shell_path"
+            v-model.trim="config.app_settings.shell_path"
             type="text"
             placeholder="输入 Shell 可执行文件的完整路径"
-            @input="onConfigChange('shell_path', config.shell_path, 'input')"
           />
           <button type="button" class="btn btn-sm btn-secondary" @click="$refs.shellFileInput.click()">浏览...</button>
           <input
@@ -188,8 +207,8 @@
             @change="onShellFileSelected"
           />
         </div>
-        <span class="hint" v-if="config.shell_path && shellPathMode !== '__custom__'">当前: {{ config.shell_path }}</span>
-        <span class="hint" v-else-if="!config.shell_path">默认: {{ defaultShell }}</span>
+        <span class="hint" v-if="config.app_settings.shell_path && shellPathMode !== '__custom__'">当前: {{ config.app_settings.shell_path }}</span>
+        <span class="hint" v-else-if="!config.app_settings.shell_path">默认: {{ defaultShell }}</span>
       </div>
     </div>
   </section>
