@@ -66,6 +66,18 @@
 
   const STORAGE_KEY = "ca_recorder_state";
 
+  // 截断长度 / 时间间隔等上限，避免魔法数字散落各处
+  const LIMITS = {
+    HTML_HIDDEN: 2000,                   // 隐藏输入框 outerHTML 截断
+    HTML_ELEMENT: 3000,                  // 元素 outerHTML / 父元素 innerHTML 截断
+    HTML_CONTAINER: 5000,                // 步骤容器 innerHTML 截断
+    HTML_CONTEXT: 12000,                 // generatePrompt 页面上下文 innerHTML 截断
+    STATE_TTL_MS: 2 * 60 * 60 * 1000,    // 录制状态保存有效期 2 小时
+    DOM_GUARD_INTERVAL_MS: 8000,         // domGuard 兜底巡检间隔
+    TOOLTIP_MAX_WIDTH: 420,              // showTooltip 右边界预留宽度
+    POPUP_MAX_WIDTH: 300,                // showRevealPopup 右边界预留宽度
+  };
+
   function saveState() {
     try {
       // 移除大字段防止超出油猴存储限制（通常 5MB）
@@ -82,14 +94,16 @@
         savedAt: Date.now(),
         url: window.location.href,
       });
-    } catch (_) {}
+    } catch (e) {
+      console.warn("[CA Recorder] saveState 失败:", e);
+    }
   }
 
   function loadState() {
     try {
       const data = GM_getValue(STORAGE_KEY, null);
       if (!data || !data.steps || data.steps.length === 0) return false;
-      if (Date.now() - (data.savedAt || 0) > 2 * 60 * 60 * 1000) {
+      if (Date.now() - (data.savedAt || 0) > LIMITS.STATE_TTL_MS) {
         clearSavedState();
         return false;
       }
@@ -106,13 +120,14 @@
         }
       });
       return data;
-    } catch (_) {
+    } catch (e) {
+      console.warn("[CA Recorder] loadState 失败:", e);
       return false;
     }
   }
 
   function clearSavedState() {
-    try { GM_deleteValue(STORAGE_KEY); } catch (_) {}
+    try { GM_deleteValue(STORAGE_KEY); } catch (e) { console.warn("[CA Recorder] clearSavedState 失败:", e); }
   }
 
   function restoreFromSaved(saved) {
@@ -1002,7 +1017,7 @@
       : "";
 
     state.tooltip.innerHTML = `${tag}${id}${cls}${iframeHint}<div class="ca-tt-hint">🖱️ 点击记录  |  ⏎ Enter 无click记录</div>`;
-    state.tooltip.style.left = `${Math.min(x + 12, window.innerWidth - 420)}px`;
+    state.tooltip.style.left = `${Math.min(x + 12, window.innerWidth - LIMITS.TOOLTIP_MAX_WIDTH)}px`;
     state.tooltip.style.top = `${Math.min(y + 12, window.innerHeight - 100)}px`;
     state.tooltip.style.display = "block";
   }
@@ -1541,7 +1556,7 @@
     try {
       const hiddenEl = document.querySelector(result.hiddenRealSelector);
       if (hiddenEl) {
-        result.hiddenRealHTML = hiddenEl.outerHTML.substring(0, 2000);
+        result.hiddenRealHTML = hiddenEl.outerHTML.substring(0, LIMITS.HTML_HIDDEN);
         result.hiddenRealTag = hiddenEl.tagName.toLowerCase();
         if (hiddenEl.parentElement === el.parentElement) {
           result.hiddenRealRelation = `同一 <${el.parentElement.tagName.toLowerCase()}> 内的兄弟元素`;
@@ -1551,7 +1566,9 @@
           result.hiddenRealRelation = `位于容器内，与点击元素不同分支`;
         }
       }
-    } catch (_) {}
+    } catch (e) {
+      console.warn("[CA Recorder] 隐藏输入框检测异常:", e);
+    }
     return result;
   }
 
@@ -1602,8 +1619,8 @@
       hiddenWarning,
       tipSelector,
       elementHTML: el.outerHTML,
-      elementParentContext: el.parentElement ? el.parentElement.innerHTML.substring(0, 3000) : "",
-      elementContainerHTML: findStepContainer(el)?.innerHTML.substring(0, 5000) || "",
+      elementParentContext: el.parentElement ? el.parentElement.innerHTML.substring(0, LIMITS.HTML_ELEMENT) : "",
+      elementContainerHTML: findStepContainer(el)?.innerHTML.substring(0, LIMITS.HTML_CONTAINER) || "",
     };
 
     state.steps.push(step);
@@ -1666,8 +1683,8 @@
       hiddenRealRelation,
       hiddenWarning,
       elementHTML: el.outerHTML,
-      elementParentContext: el.parentElement ? el.parentElement.innerHTML.substring(0, 3000) : "",
-      elementContainerHTML: findStepContainer(el)?.innerHTML.substring(0, 5000) || "",
+      elementParentContext: el.parentElement ? el.parentElement.innerHTML.substring(0, LIMITS.HTML_ELEMENT) : "",
+      elementContainerHTML: findStepContainer(el)?.innerHTML.substring(0, LIMITS.HTML_CONTAINER) || "",
     };
 
     state.steps.push(step);
@@ -1786,8 +1803,8 @@
       optionTag: info.tag,
       optionSelector: optionContainerSelector || info.selectors[0]?.value || "",
       elementHTML: el.outerHTML,
-      elementParentContext: el.parentElement ? el.parentElement.innerHTML.substring(0, 3000) : "",
-      elementContainerHTML: findStepContainer(el)?.innerHTML.substring(0, 5000) || "",
+      elementParentContext: el.parentElement ? el.parentElement.innerHTML.substring(0, LIMITS.HTML_ELEMENT) : "",
+      elementContainerHTML: findStepContainer(el)?.innerHTML.substring(0, LIMITS.HTML_CONTAINER) || "",
     };
 
     state.steps.push(step);
@@ -1859,8 +1876,8 @@
       allOptions: allOptions,
       containerSelector: groupContainerInfo.bestSelector || "",
       elementHTML: el.outerHTML,
-      elementParentContext: el.parentElement ? el.parentElement.innerHTML.substring(0, 3000) : "",
-      elementContainerHTML: findStepContainer(el)?.innerHTML.substring(0, 5000) || "",
+      elementParentContext: el.parentElement ? el.parentElement.innerHTML.substring(0, LIMITS.HTML_ELEMENT) : "",
+      elementContainerHTML: findStepContainer(el)?.innerHTML.substring(0, LIMITS.HTML_CONTAINER) || "",
     };
 
     state.steps.push(step);
@@ -1984,8 +2001,8 @@
         text: info.text,
         value: value || undefined,
         elementHTML: el.outerHTML,
-        elementParentContext: el.parentElement ? el.parentElement.innerHTML.substring(0, 3000) : "",
-        elementContainerHTML: findStepContainer(el)?.innerHTML.substring(0, 5000) || "",
+        elementParentContext: el.parentElement ? el.parentElement.innerHTML.substring(0, LIMITS.HTML_ELEMENT) : "",
+        elementContainerHTML: findStepContainer(el)?.innerHTML.substring(0, LIMITS.HTML_CONTAINER) || "",
       };
       state.steps.push(step);
       state.selectedEl?.classList.remove("ca-highlight-selected");
@@ -2357,7 +2374,7 @@
         common = common.parentElement;
       }
       if (common) {
-        prompt += `- 页面上下文 HTML:\n\`\`\`html\n${common.innerHTML.substring(0, 12000)}\n\`\`\`\n`;
+        prompt += `- 页面上下文 HTML:\n\`\`\`html\n${common.innerHTML.substring(0, LIMITS.HTML_CONTEXT)}\n\`\`\`\n`;
       }
     }
 
@@ -2374,7 +2391,7 @@
         prompt += `- 候选选择器: ${s.selectorCandidates.map(c => "`" + c + "`").join(", ")}\n`;
       }
       if (s.elementHTML) {
-        prompt += `- 元素 HTML:\n\`\`\`html\n${s.elementHTML.substring(0, 3000)}\n\`\`\`\n`;
+        prompt += `- 元素 HTML:\n\`\`\`html\n${s.elementHTML.substring(0, LIMITS.HTML_ELEMENT)}\n\`\`\`\n`;
       }
       if (s.attrs) {
         const extras = [];
@@ -2900,7 +2917,7 @@
       </div>
     `;
     // 定位
-    popup.style.left = Math.min(x, window.innerWidth - 300) + 'px';
+    popup.style.left = Math.min(x, window.innerWidth - LIMITS.POPUP_MAX_WIDTH) + 'px';
     popup.style.top = Math.min(y, window.innerHeight - 200) + 'px';
     document.body.appendChild(popup);
 
@@ -2944,8 +2961,8 @@
           text: info.text,
           visible: true,
           elementHTML: el.outerHTML,
-          elementParentContext: el.parentElement ? el.parentElement.innerHTML.substring(0, 3000) : '',
-          elementContainerHTML: findStepContainer(el)?.innerHTML.substring(0, 5000) || '',
+          elementParentContext: el.parentElement ? el.parentElement.innerHTML.substring(0, LIMITS.HTML_ELEMENT) : '',
+          elementContainerHTML: findStepContainer(el)?.innerHTML.substring(0, LIMITS.HTML_CONTAINER) || '',
           _revealRecorded: true,
         };
         state.steps.push(step);
@@ -3040,15 +3057,19 @@
     document.addEventListener("keydown", onKeyDown, true);
     attachAllFrameListeners();
     startSpaFormWatcher();
+    _globalListenersAttached = true;
+    if (state.panel) domGuard.register(state.panel);
   }
 
   function deactivate() {
+    if (!state.active) return;
     state.active = false;
     state.recording = false;
     state.carrierClickPhase = null;
     // 恢复被强制显示的隐藏输入框 + 移除面板和高亮
     hideRevealedInputs();
     state.revealEnabled = false;
+    if (state.panel) domGuard.unregister(state.panel);
     document.removeEventListener("mouseover", onHover, true);
     document.removeEventListener("click", onRevealedClick, true);
     document.removeEventListener("click", onClick, true);
@@ -3068,6 +3089,7 @@
       state.panel.remove();
       state.panel = null;
     }
+    _globalListenersAttached = false;
   }
 
   function onKeyDown(e) {
@@ -3152,12 +3174,12 @@
         if (!body) return;
         for (const el of this._elems) {
           if (el && !el.isConnected) {
-            try { body.appendChild(el); } catch (_) {}
+            try { body.appendChild(el); } catch (e) { console.warn("[CA Recorder] domGuard 恢复元素失败:", e); }
           }
         }
         // 面板激活状态也检查一下
         if (state.active && state.panel && !state.panel.isConnected && body) {
-          try { body.appendChild(state.panel); } catch (_) {}
+          try { body.appendChild(state.panel); } catch (e) { console.warn("[CA Recorder] domGuard 恢复面板失败:", e); }
         }
         // 如果面板还在，重新绑定事件（防止 body 被整体替换后事件代理失效）
         if (state.active && state.panel) {
@@ -3201,7 +3223,7 @@
             missing = true;
           }
           if (missing) this._restoreAll();
-        }, 8000);
+        }, LIMITS.DOM_GUARD_INTERVAL_MS);
       }
     },
 
@@ -3229,25 +3251,7 @@
 
   // ==================== 启动 ====================
 
-  // 修改 activate/deactivate 使用新的监听器管理和 DOM 守护
-  const _origActivate = activate;
-  const _origDeactivate = deactivate;
-
-  activate = function () {
-    if (state.active) return;
-    _origActivate();
-    _globalListenersAttached = true;  // _origActivate 内部已绑定事件
-    if (state.panel) domGuard.register(state.panel);
-  };
-
-  deactivate = function () {
-    if (!state.active) return;
-    if (state.panel) domGuard.unregister(state.panel);
-    _origDeactivate();
-    _globalListenersAttached = false;
-  };
-
-  // 检查是否有保存的录制状态，自动恢复（必须在 activate 重写之后，确保 domGuard 注册）
+  // 检查是否有保存的录制状态，自动恢复（activate 内部已注册 domGuard）
   const savedData = loadState();
   if (savedData) {
     restoreFromSaved(savedData);
