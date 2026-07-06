@@ -70,7 +70,7 @@ _VIRTUAL_NIC_KEYWORDS = (
 )
 
 
-def _is_virtual_nic(name: str) -> bool:
+def is_virtual_nic(name: str) -> bool:
     """判断接口名是否为虚拟网卡（候选过滤，非最终判定）。"""
     lower = name.lower()
     if lower.startswith(_VIRTUAL_NIC_PREFIXES):
@@ -98,7 +98,7 @@ def _get_candidate_interfaces(
             continue
         if name.lower().startswith("lo"):
             continue
-        if _is_virtual_nic(name):
+        if is_virtual_nic(name):
             continue
         # speed == 0 可能是虚拟网卡或半断开状态，跳过
         if stats.speed == 0:
@@ -237,7 +237,7 @@ async def is_network_available_socket(
     tasks = [_connect_one(h, p) for h, p in targets]
     return await _race_first_success_async(
         tasks,
-        timeout=timeout + 2,
+        timeout=timeout,
         label="TCP",
         success_prefix="TCP 连接",
         fail_prefix="TCP 连接",
@@ -303,7 +303,7 @@ async def is_network_available_url(
         tasks = [_check_url(url, exp) for url, exp in url_checks]
         return await _race_first_success_async(
             tasks,
-            timeout=timeout + 2,
+            timeout=timeout,
             label="网址响应检测",
             success_prefix="网址响应检测",
             fail_prefix="网址响应检测",
@@ -372,7 +372,7 @@ async def is_network_available_http(
         tasks = [_check_one(url) for url in urls]
         return await _race_first_success_async(
             tasks,
-            timeout=timeout + 2,
+            timeout=timeout,
             label="HTTP",
             success_prefix="HTTP 请求",
             fail_prefix="HTTP 请求",

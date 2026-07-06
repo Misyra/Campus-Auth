@@ -31,6 +31,7 @@ _ENC_PREFIX = "ENC:"
 
 _cached_raw_key: bytes | None = None
 _cached_fernet_key: bytes | None = None
+_cached_legacy_fernet_key: bytes | None = None
 _decryption_failed = threading.Event()
 _key_lock = threading.RLock()
 
@@ -125,7 +126,7 @@ def _get_or_create_key() -> bytes:
 
 
 def _derive_fernet_key() -> bytes:
-    """从原始密钥派生 Fernet 兼容的密钥（32 字节 URL-safe base64 编码）"""
+    """使用 HKDF 从原始密钥派生 Fernet 兼容的密钥（32 字节 URL-safe base64 编码）"""
     global _cached_fernet_key
     if _cached_fernet_key is not None:
         return _cached_fernet_key
@@ -134,12 +135,40 @@ def _derive_fernet_key() -> bytes:
         if _cached_fernet_key is not None:
             return _cached_fernet_key
 
+        from cryptography.hazmat.primitives import hashes
+        from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+
         raw_key = _get_or_create_key()
         # Fernet 密钥格式：32 字节原始数据（16 签名 + 16 加密）→ URL-safe base64 编码 → 44 字符字符串
+        # 使用 HKDF 派生标准 32 字节密钥
+        hkdf = HKDF(
+            algorithm=hashes.SHA256(),
+            length=32,
+            salt=None,
+            info=b"campus-auth-fernet-key",
+        )
+        derived = hkdf.derive(raw_key)
+        _cached_fernet_key = base64.urlsafe_b64encode(derived)
+        return _cached_fernet_key
+
+
+def _derive_legacy_fernet_key() -> bytes:
+    """旧版密钥派生（SHA-256 截断拼接），仅用于解密旧数据。"""
+    global _cached_legacy_fernet_key
+    if _cached_legacy_fernet_key is not None:
+        return _cached_legacy_fernet_key
+
+    with _key_lock:
+        if _cached_legacy_fernet_key is not None:
+            return _cached_legacy_fernet_key
+
+        raw_key = _get_or_create_key()
         signing_key = hashlib.sha256(raw_key + b":signing").digest()[:16]
         encryption_key = hashlib.sha256(raw_key + b":encryption").digest()[:16]
-        _cached_fernet_key = base64.urlsafe_b64encode(signing_key + encryption_key)
-        return _cached_fernet_key
+        _cached_legacy_fernet_key = base64.urlsafe_b64encode(
+            signing_key + encryption_key
+        )
+        return _cached_legacy_fernet_key
 
 
 def encrypt_password(plaintext: str) -> str:
@@ -194,9 +223,16 @@ def decrypt_password(ciphertext: str) -> str:
             _crypto_missing_warned = False
             _crypto_missing_decrypt_warned = False
 
+        # 优先使用 HKDF 密钥解密
         key = _derive_fernet_key()
         f = Fernet(key)
-        result = f.decrypt(encrypted_data.encode("ascii")).decode("utf-8")
+        try:
+            result = f.decrypt(encrypted_data.encode("ascii")).decode("utf-8")
+        except (InvalidToken, ValueError):
+            # HKDF 密钥解密失败，回退到旧版密钥（向后兼容）
+            legacy_key = _derive_legacy_fernet_key()
+            f_legacy = Fernet(legacy_key)
+            result = f_legacy.decrypt(encrypted_data.encode("ascii")).decode("utf-8")
         # 解密成功，清除之前的解密失败标记（按活跃方案粒度，避免误清其他方案）
         _clear_decryption_error()
         return result

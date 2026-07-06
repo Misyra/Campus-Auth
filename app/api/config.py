@@ -12,6 +12,7 @@ from app.schemas import (
     AppSettings,
     BrowserSettings,
     ConfigPatchRequest,
+    ConfigResponse,
     ConfigSaveRequest,
     LoggingSettings,
     LogLevelRequest,
@@ -82,11 +83,11 @@ def set_log_level(payload: LogLevelRequest, request: Request) -> ApiResponse:
     return ApiResponse(success=True, message=f"已设置全局日志级别为 {actual}")
 
 
-@router.get("/api/config")
+@router.get("/api/config", response_model=ConfigResponse)
 def get_config(
     svc: MonitorServiceDep,
     profile_svc: ProfileServiceDep,
-) -> dict:
+) -> ConfigResponse:
     data = profile_svc.load()
     cfg = profile_svc.build_runtime_config(data)
 
@@ -94,22 +95,21 @@ def get_config(
     carrier = profile.carrier or "无"
     isp = "" if carrier == "无" else carrier
 
-    return {
-        "browser": cfg.browser.model_dump(),
-        "monitor": cfg.monitor.model_dump(),
-        "retry": cfg.retry.model_dump(),
-        "pause": cfg.pause.model_dump(),
-        "logging": cfg.logging.model_dump(),
-        "app_settings": cfg.app_settings.model_dump(),
-        # 凭据平铺（与 ConfigSaveRequest 对齐）
-        "username": cfg.credentials.username,
-        "password": "",  # 始终返回空串，前端以空串表示"未修改"
-        "has_password": bool(profile.password),  # 密码是否已设置（前端用于掩码回显）
-        "auth_url": cfg.credentials.auth_url,
-        "isp": isp,
-        "carrier_custom": cfg.credentials.carrier_custom,
-        "active_task": cfg.active_task,
-    }
+    return ConfigResponse(
+        browser=cfg.browser.model_dump(),
+        monitor=cfg.monitor.model_dump(),
+        retry=cfg.retry.model_dump(),
+        pause=cfg.pause.model_dump(),
+        logging=cfg.logging.model_dump(),
+        app_settings=cfg.app_settings.model_dump(),
+        username=cfg.credentials.username,
+        password="",
+        has_password=bool(profile.password),
+        auth_url=cfg.credentials.auth_url,
+        isp=isp,
+        carrier_custom=cfg.credentials.carrier_custom,
+        active_task=cfg.active_task,
+    )
 
 
 @router.get("/api/config/default-stealth-script", response_model=StealthScriptResponse)

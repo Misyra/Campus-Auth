@@ -56,8 +56,8 @@ def save_script(
     task_mgr: TaskManagerDep,
 ) -> ApiResponse:
     """保存自定义脚本任务。"""
-    payload["type"] = "script"
-    ok, message = task_mgr.save_task_with_validation(task_id, payload)
+    data = {**payload, "type": "script"}
+    ok, message = task_mgr.save_task_with_validation(task_id, data)
     if ok:
         api_logger.info("保存脚本 {} 成功", task_id)
     else:

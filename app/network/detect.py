@@ -100,7 +100,7 @@ def _parse_windows_route_print(output: str) -> str | None:
     return None
 
 
-def _parse_windows_all_routes(output: str) -> list[tuple[str, str]]:
+def parse_windows_all_routes(output: str) -> list[tuple[str, str]]:
     """解析 route print 输出，提取所有默认路由的 (网关IP, 接口IP) 对。
 
     用于按网卡名索引网关的场景：接口 IP 可通过 psutil 映射到网卡名。
@@ -115,7 +115,7 @@ def _parse_windows_all_routes(output: str) -> list[tuple[str, str]]:
     return routes
 
 
-def _parse_linux_route_entry(line: str) -> tuple[str, str] | None:
+def parse_linux_route_entry(line: str) -> tuple[str, str] | None:
     """解析 /proc/net/route 单行，提取默认路由的 (接口名, 网关IP)。
 
     复用 _parse_linux_gateway 提取网关 IP，额外返回接口名。
@@ -127,7 +127,7 @@ def _parse_linux_route_entry(line: str) -> tuple[str, str] | None:
     return (parts[0], ip)
 
 
-def _parse_darwin_netstat_routes(output: str) -> dict[str, str]:
+def parse_darwin_netstat_routes(output: str) -> dict[str, str]:
     """解析 netstat -rn 输出，提取 {接口名: 网关IP} 映射。
 
     macOS 的 netstat -rn 输出直接包含接口名（Netif 列），

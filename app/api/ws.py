@@ -35,7 +35,10 @@ async def websocket_logs_handler(websocket, ws_manager):
                     message_text = str(d.get("message", ""))[:10000]
                     scope = str(d.get("scope", "?"))[:200]
                     if message_text:
+                        _ALLOWED_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
                         level_name = str(d.get("level", "INFO")).upper()
+                        if level_name not in _ALLOWED_LEVELS:
+                            level_name = "INFO"
                         log_func = getattr(
                             _fe_logger, level_name.lower(), _fe_logger.info
                         )

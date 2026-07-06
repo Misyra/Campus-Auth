@@ -12,16 +12,11 @@ from __future__ import annotations
 import threading
 import time
 from concurrent.futures import Future
-from pathlib import Path
-from unittest.mock import MagicMock, PropertyMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from app.schemas import AppSettings, RuntimeConfig
-
-
-from app.services.task_registry import TaskRegistry
-
 
 # =====================================================================
 # TaskExecutor._get_script_path()
@@ -322,7 +317,10 @@ class TestTaskExecutorCRUD:
 
     def test_bind_runtime_config(self):
         executor = self._make_executor()
-        getter = lambda: {"key": "value"}
+
+        def getter():
+            return {"key": "value"}
+
         executor.bind_runtime_config(getter)
         assert executor._get_runtime_config is getter
 
@@ -376,7 +374,7 @@ class TestTaskExecutorExecuteTask:
 
         success, msg = executor.execute_task("t1")
         assert success is True
-        executor._execute_script.assert_called_once_with("s1", 30)
+        executor._execute_script.assert_called_once_with("s1", 30, None)
 
     def test_browser_task_dispatch(self):
         """browser 类型应分发到 _execute_browser。"""
@@ -390,7 +388,7 @@ class TestTaskExecutorExecuteTask:
 
         success, msg = executor.execute_task("t1")
         assert success is True
-        executor._execute_browser.assert_called_once_with("b1", 60)
+        executor._execute_browser.assert_called_once_with("b1", 60, None)
 
     def test_shell_task_dispatch(self):
         """shell 类型应分发到 _execute_shell。"""
@@ -405,7 +403,7 @@ class TestTaskExecutorExecuteTask:
 
         success, msg = executor.execute_task("t1")
         assert success is True
-        executor._execute_shell.assert_called_once_with("echo hello", 10, "/bin/bash")
+        executor._execute_shell.assert_called_once_with("echo hello", 10, "/bin/bash", None)
 
     def test_exception_during_execution(self):
         """执行异常应被捕获并记录。"""
@@ -433,7 +431,7 @@ class TestTaskExecutorExecuteTask:
         executor._execute_script = MagicMock(return_value=(True, "ok"))
 
         executor.execute_task("t1")
-        executor._execute_script.assert_called_once_with("s1", 60)
+        executor._execute_script.assert_called_once_with("s1", 60, None)
 
     def test_history_recorded_with_duration(self):
         """应记录执行时长。"""
@@ -983,7 +981,7 @@ class TestTaskExecutorTaskAsync:
             worker_getter=MagicMock(),
             login_orchestrator=MagicMock(),
         )
-        executor.execute_task = lambda task_id: (True, "ok")
+        executor.execute_task = lambda task_id, cancel_event=None: (True, "ok")
 
         future = executor.execute_task_async("t1")
         assert isinstance(future, Future)
@@ -1001,7 +999,7 @@ class TestTaskExecutorTaskAsync:
             login_orchestrator=MagicMock(),
         )
         assert executor._task_pool is None
-        executor.execute_task = lambda task_id: (True, "ok")
+        executor.execute_task = lambda task_id, cancel_event=None: (True, "ok")
         executor.execute_task_async("t1")
         assert executor._task_pool is not None
         executor._task_pool.shutdown(wait=False)
@@ -1012,7 +1010,7 @@ class TestTaskExecutorTaskAsync:
 
         barrier = threading.Event()
 
-        def slow_task(task_id):
+        def slow_task(task_id, cancel_event=None):
             barrier.wait(timeout=5)
             return (True, "ok")
 
@@ -1038,7 +1036,7 @@ class TestTaskExecutorTaskAsync:
 
         call_count = {"n": 0}
 
-        def counting_task(task_id):
+        def counting_task(task_id, cancel_event=None):
             call_count["n"] += 1
             return (True, f"run-{call_count['n']}")
 
@@ -1065,7 +1063,7 @@ class TestTaskExecutorTaskAsync:
 
         barrier = threading.Event()
 
-        def slow_task(task_id):
+        def slow_task(task_id, cancel_event=None):
             barrier.wait(timeout=5)
             return (True, task_id)
 
@@ -1092,7 +1090,7 @@ class TestTaskExecutorTaskAsync:
 
         barrier = threading.Event()
 
-        def slow_task(task_id):
+        def slow_task(task_id, cancel_event=None):
             barrier.wait(timeout=5)
             return (True, "ok")
 

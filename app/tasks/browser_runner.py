@@ -203,7 +203,6 @@ class BrowserTaskRunner:
                 logger.debug("URL 重定向: {} 至 {}", last_url, current)
                 last_url = current
                 redirects += 1
-                deadline = max(deadline, time.perf_counter() + timeout_ms / 1000)
 
     async def _reveal_hidden_inputs(self, page) -> int:
         """强制显示所有隐藏的表单输入框（含同源 iframe）。

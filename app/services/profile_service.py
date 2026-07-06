@@ -62,6 +62,11 @@ class ProfileService:
         try:
             raw = self._settings_path.read_text(encoding="utf-8")
             data = ProfilesData.model_validate(json.loads(raw))
+            if data.config_version != 5:
+                profile_logger.warning(
+                    "配置文件版本不匹配: 期望 5, 实际 {}",
+                    data.config_version,
+                )
             self._cache = data
             self._cache_mtime = current_mtime
             return data

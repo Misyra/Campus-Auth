@@ -242,9 +242,13 @@ export const uiMethods = {
     return logViewer.scrollTop + logViewer.clientHeight >= logViewer.scrollHeight - LIMITS.SCROLL_BOTTOM_THRESHOLD;
   },
   _appendLogs(entries) {
+    const wasAtBottom = this._isViewerAtBottom();
     this.logs.push(...entries.map(e => Object.freeze(e)));
     if (this.logs.length > LIMITS.LOG_MAX_ENTRIES) {
       this.logs = this.logs.slice(-LIMITS.LOG_MAX_ENTRIES);
+    }
+    if (!wasAtBottom) {
+      this.newLogCount += entries.length;
     }
     this.$nextTick(() => {
       if (this.autoScroll) {

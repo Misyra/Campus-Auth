@@ -84,10 +84,8 @@ class BoundedExecutor:
                 pending = list(self._futures)
             for fut in pending:
                 remaining = max(0.0, deadline - time.monotonic())
-                try:
+                with contextlib.suppress(Exception):
                     fut.result(timeout=remaining)
-                except Exception:
-                    pass
         else:
             self._executor.shutdown(wait=wait)
 
@@ -125,8 +123,8 @@ class TaskExecutor:
             max_workers=1, queue_size=2, thread_name_prefix="login-exec"
         )
 
-        # 定时任务去重
-        self._running_tasks: dict[str, Future] = {}
+        # 定时任务去重（Future + cancel_event 配对）
+        self._running_tasks: dict[str, tuple[Future, threading.Event]] = {}
         self._running_tasks_lock = threading.Lock()
 
         # Shell 安全策略
@@ -175,10 +173,13 @@ class TaskExecutor:
     def delete_task(self, task_id: str) -> tuple[bool, str]:
         """删除定时任务及其历史。"""
         with self._running_tasks_lock:
-            future = self._running_tasks.get(task_id)
-        if future is not None and not future.done():
-            future.cancel()
-            logger.warning("取消运行中任务: {}", task_id)
+            entry = self._running_tasks.get(task_id)
+        if entry is not None:
+            future, cancel_event = entry
+            if not future.done():
+                cancel_event.set()
+                future.cancel()
+                logger.warning("取消运行中任务: {}", task_id)
 
         success, message = self._registry.delete_task(task_id)
         if success:
@@ -200,23 +201,27 @@ class TaskExecutor:
         """
         with self._running_tasks_lock:
             existing = self._running_tasks.get(task_id)
-            if existing is not None and not existing.done():
+            if existing is not None and not existing[0].done():
                 logger.debug("定时任务 {} 已在执行中，跳过重复提交", task_id)
-                return existing
+                return existing[0]
 
+            cancel_event = threading.Event()
             try:
-                future = self._ensure_task_pool().submit(self.execute_task, task_id)
+                future = self._ensure_task_pool().submit(
+                    self.execute_task, task_id, cancel_event
+                )
             except RuntimeError:
                 logger.warning("提交任务 {} 失败: 队列已满", task_id)
                 f: Future = Future()
                 f.set_exception(RuntimeError(f"任务队列已满，无法提交任务 {task_id}"))
                 return f
-            self._running_tasks[task_id] = future
+            self._running_tasks[task_id] = (future, cancel_event)
 
         # 锁外注册清理回调
         def _cleanup(f: Future, tid=task_id):
             with self._running_tasks_lock:
-                if self._running_tasks.get(tid) is f:
+                entry = self._running_tasks.get(tid)
+                if entry is not None and entry[0] is f:
                     del self._running_tasks[tid]
 
         future.add_done_callback(_cleanup)
@@ -234,13 +239,22 @@ class TaskExecutor:
 
     # ── 同步执行接口 ──
 
-    def execute_task(self, task_id: str) -> tuple[bool, str]:
+    def execute_task(
+        self, task_id: str, cancel_event: threading.Event | None = None
+    ) -> tuple[bool, str]:
         """同步执行定时任务（在线程池工作线程中运行）。
 
         根据任务类型分发到 _execute_script / _execute_browser / _execute_shell。
         执行完成后记录历史和更新 last_run。
+
+        Args:
+            task_id: 任务 ID
+            cancel_event: 可选的取消事件，set 后任务应尽快终止
         """
         logger.debug("收到执行定时任务请求: {}", task_id)
+        if cancel_event is not None and cancel_event.is_set():
+            return False, "任务已被取消"
+
         task = self._registry.get_task(task_id)
         if not task:
             return False, "定时任务不存在"
@@ -250,17 +264,21 @@ class TaskExecutor:
         start = time.perf_counter()
 
         try:
+            if cancel_event is not None and cancel_event.is_set():
+                return False, "任务已被取消"
+
             if task_type == "script":
                 success, message = self._execute_script(
-                    task.get("target_id", ""), timeout
+                    task.get("target_id", ""), timeout, cancel_event
                 )
             elif task_type == "browser":
                 success, message = self._execute_browser(
-                    task.get("target_id", ""), timeout
+                    task.get("target_id", ""), timeout, cancel_event
                 )
             elif task_type == "shell":
                 success, message = self._execute_shell(
-                    task.get("command", ""), timeout, task.get("shell_path", "")
+                    task.get("command", ""), timeout,
+                    task.get("shell_path", ""), cancel_event
                 )
             else:
                 success, message = (
@@ -287,7 +305,9 @@ class TaskExecutor:
 
     # ── 内部执行方法 ──
 
-    def _execute_script(self, script_id: str, timeout: int) -> tuple[bool, str]:
+    def _execute_script(
+        self, script_id: str, timeout: int, cancel_event: threading.Event | None = None
+    ) -> tuple[bool, str]:
         """执行自定义脚本任务。"""
         task = self._registry.get_task(script_id)
         if not task or task.get("type") != "script":
@@ -301,6 +321,9 @@ class TaskExecutor:
         # 延迟导入：避免顶层导入 playwright/script_runner 的启动开销
         from app.workers.script_runner import ScriptRunner
 
+        if cancel_event is not None and cancel_event.is_set():
+            return False, "任务已被取消"
+
         runner = ScriptRunner(
             script_path,
             timeout=timeout,
@@ -313,11 +336,15 @@ class TaskExecutor:
         self,
         task_id: str,
         timeout: int,
+        cancel_event: threading.Event | None = None,
     ) -> tuple[bool, str]:
         """执行浏览器任务。委托 LoginOrchestrator，与登录共享去重。"""
         task = self._registry.get_task(task_id)
         if not task or task.get("type") != "browser":
             return False, f"浏览器任务不存在: {task_id}"
+
+        if cancel_event is not None and cancel_event.is_set():
+            return False, "任务已被取消"
 
         config = (
             self._get_runtime_config() if self._get_runtime_config else RuntimeConfig()
@@ -329,6 +356,7 @@ class TaskExecutor:
         handle = self._login_orchestrator.submit(
             source="browser",
             config=config,
+            cancel_event=cancel_event,
             timeout=timeout,
         )
 
@@ -341,11 +369,14 @@ class TaskExecutor:
         return False, msg or "浏览器任务执行失败"
 
     def _execute_shell(
-        self, command: str, timeout: int, shell_path: str = ""
+        self, command: str, timeout: int, shell_path: str = "",
+        cancel_event: threading.Event | None = None,
     ) -> tuple[bool, str]:
         """执行 Shell 命令。"""
         if not command.strip():
             return False, "命令为空"
+        if cancel_event is not None and cancel_event.is_set():
+            return False, "任务已被取消"
 
         # 如果没有指定 shell，使用全局配置或默认值
         if not shell_path:
@@ -411,7 +442,7 @@ class TaskExecutor:
             timeout: 最大等待时间（秒），超时后放弃等待。
         """
         with self._running_tasks_lock:
-            pending = [f for f in self._running_tasks.values() if not f.done()]
+            pending = [f for f, _ in self._running_tasks.values() if not f.done()]
 
         if not pending:
             return

@@ -215,16 +215,17 @@ def ensure_playwright_ready(log: Callable[[str], None] | None = None) -> bool:
                         log(f"Playwright {install_target} 下载完成")
 
                     # 安装完整性校验：确认二进制文件存在且可执行
-                    cache_dir = get_playwright_cache_dir()
-                    if cache_dir is not None and not _verify_chromium_install(
-                        cache_dir
-                    ):
-                        _BOOTSTRAP_DONE = False
-                        msg = "Chromium 安装完整性校验失败：未找到可执行的浏览器二进制"
-                        logger.error(msg)
-                        if log:
-                            log(msg)
-                        return False
+                    if install_target == "chromium":
+                        cache_dir = get_playwright_cache_dir()
+                        if cache_dir is not None and not _verify_chromium_install(
+                            cache_dir
+                        ):
+                            _BOOTSTRAP_DONE = False
+                            msg = "Chromium 安装完整性校验失败：未找到可执行的浏览器二进制"
+                            logger.error(msg)
+                            if log:
+                                log(msg)
+                            return False
 
                     logger.info("Playwright 浏览器就绪成功")
                     return True

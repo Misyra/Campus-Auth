@@ -17,6 +17,7 @@ class SystemTray:
         self._monitoring = False
         self._pystray = None
         self._Image = None
+        self._exit_event = threading.Event()
 
     def _load_icon(self):
         """加载托盘图标（需要先调用 start() 初始化模块）。"""
@@ -74,10 +75,9 @@ class SystemTray:
 
     def _quit(self, icon, item):
         logger.info("用户通过托盘菜单退出")
+        self._exit_event.set()
         if self.icon:
             self.icon.stop()
-        if self.on_exit:
-            self.on_exit()
 
     def start(self):
         if self._thread and self._thread.is_alive():

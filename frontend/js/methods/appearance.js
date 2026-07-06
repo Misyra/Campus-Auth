@@ -184,8 +184,16 @@ export const appearanceMethods = {
 
     // 背景色
     if (isLight) {
-      _p('--bg-primary', '#eef2f7');
-      _p('--bg-secondary', '#e4e9f0');
+      if (this.appearance.background_color) {
+        const bgRgb = hexToRgb(this.appearance.background_color);
+        if (bgRgb) {
+          _p('--bg-primary', this.appearance.background_color);
+          _p('--bg-secondary', `rgb(${Math.min(bgRgb.r + 15, 255)}, ${Math.min(bgRgb.g + 15, 255)}, ${Math.min(bgRgb.b + 15, 255)})`);
+        }
+      } else {
+        _p('--bg-primary', '#eef2f7');
+        _p('--bg-secondary', '#e4e9f0');
+      }
     } else if (this.appearance.background_color) {
       const bgRgb = hexToRgb(this.appearance.background_color);
       if (bgRgb) {

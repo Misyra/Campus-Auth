@@ -695,6 +695,19 @@ class PlaywrightWorker:
         "--disable-web-security",
     }
 
+    # 安全敏感参数黑名单：用户自定义 browser_args 中不允许出现
+    _BLOCKED_BROWSER_ARGS = {
+        "--remote-debugging-port",
+        "--remote-debugging-address",
+        "--user-data-dir",
+        "--load-extension",
+        "--disable-extensions-except",
+        "--enable-automation",
+        "--remote-allow-origins",
+        "--proxy-server",
+        "--proxy-bypass-list",
+    }
+
     @staticmethod
     def _get_user_data_dir(channel: str) -> Path:
         """获取持久化上下文的用户数据目录（按浏览器 channel 隔离）。"""
@@ -728,6 +741,11 @@ class PlaywrightWorker:
                 if not flag or flag.startswith("#"):
                     continue
                 if channel == "firefox" and flag in self._CHROMIUM_ONLY_FLAGS:
+                    continue
+                # 检查安全敏感参数黑名单（匹配 flag 名称部分，忽略 = 后的值）
+                flag_name = flag.split("=", 1)[0]
+                if flag_name in self._BLOCKED_BROWSER_ARGS:
+                    logger.warning("已过滤安全敏感浏览器参数: {}", flag_name)
                     continue
                 if flag not in args:
                     args.append(flag)

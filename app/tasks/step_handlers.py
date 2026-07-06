@@ -126,9 +126,13 @@ class StepHandler(ABC):
         # 策略1: 快速尝试可见元素
         wait_timeout = max(1500, int(timeout * 0.15))
         for candidate in candidates:
+            remaining = max(0, int((deadline - time.perf_counter()) * 1000))
+            if remaining <= 0:
+                break
             try:
                 loc = ctx.locator(candidate).first
-                await loc.wait_for(state="visible", timeout=wait_timeout)
+                actual_timeout = min(wait_timeout, remaining)
+                await loc.wait_for(state="visible", timeout=actual_timeout)
                 remaining_ms = max(500, int((deadline - time.perf_counter()) * 1000))
                 await action_fn(loc, remaining_ms)
                 logger.debug("{} 普通操作成功: {}", label, candidate)
@@ -821,22 +825,28 @@ class OcrHandler(StepHandler):
             logger.warning("[ocr] 保存验证码截图失败: {}", e)
 
         # OCR 识别（识别失败也需要 schedule_cleanup）
+        _tmp_ocr = None  # 临时实例引用，finally 中清理
         try:
             if char_range is not None:
                 # 有字符范围限制时创建独立实例，避免 set_ranges 污染缓存实例
                 import ddddocr
 
-                ocr = await asyncio.to_thread(ddddocr.DdddOcr, old=old, show_ad=False)
-                ocr.set_ranges(char_range)
+                _tmp_ocr = await asyncio.to_thread(
+                    ddddocr.DdddOcr, old=old, show_ad=False
+                )
+                _tmp_ocr.set_ranges(char_range)
+                ocr = _tmp_ocr
                 logger.debug("[ocr] set_ranges({})", char_range)
             else:
                 ocr = await asyncio.to_thread(self._get_ocr, old=old)
             result = await asyncio.to_thread(ocr.classification, img_bytes)
         except Exception as e:
+            if _tmp_ocr is not None:
+                del _tmp_ocr
             self.schedule_cleanup(old)
             return False, f"验证码识别失败: {e}"
 
-        # 识别成功后用 try/finally 确保 schedule_cleanup
+        # 识别成功后用 try/finally 确保 schedule_cleanup 和临时实例清理
         try:
             logger.debug("[ocr] 识别结果: '{}'", result)
 
@@ -870,6 +880,8 @@ class OcrHandler(StepHandler):
                 message += f" 截图: {screenshot_url}"
             return True, message
         finally:
+            if _tmp_ocr is not None:
+                del _tmp_ocr
             self.schedule_cleanup(old)
 
 

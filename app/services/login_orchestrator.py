@@ -251,6 +251,9 @@ class LoginOrchestrator:
                 elif source == "manual" and existing.source == "auto":
                     logger.debug("手动登录抢占自动登录 (source={})", existing.source)
                     existing.cancel()
+                elif source == "browser":
+                    logger.debug("浏览器任务取消现有登录 (source={})", existing.source)
+                    existing.cancel()
                 else:
                     self._link_cancel(cancel_event, existing.cancel_event)
                     return existing

@@ -255,13 +255,15 @@ class AutoStartService:
         # 用单引号包裹命令，确保路径含空格时 systemd 正确解析
         # 如果命令本身含单引号，用 '\'' 转义
         cmd = f"{self._start_command()} {_autostart_cli_args()}".replace("'", "'\\''")
+        # systemd 路径转义：空格替换为 \x20，反斜杠替换为 \x5c
+        escaped_root = str(self.project_root).replace("\\", "\\x5c").replace(" ", "\\x20")
         content = f"""[Unit]
 Description=Campus-Auth Auto Network Web Console
 After=network.target
 
 [Service]
 Type=simple
-WorkingDirectory={self.project_root}
+WorkingDirectory={escaped_root}
 ExecStart=/bin/sh -lc '{cmd}'
 Restart=on-failure
 RestartSec=5

@@ -73,10 +73,15 @@ def _terminate_process(pid: int) -> None:
                 creationflags=CREATE_NO_WINDOW_FLAG,
             )
     else:
-        os.kill(pid, signal.SIGTERM)
-        if not _wait_for_exit(pid, max_wait=5):
-            # SIGTERM 无效，使用 SIGKILL
-            os.kill(pid, signal.SIGKILL)
+        try:
+            os.kill(pid, signal.SIGTERM)
+            if not _wait_for_exit(pid, max_wait=5):
+                # SIGTERM 无效，使用 SIGKILL
+                os.kill(pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass  # 进程已退出
+        except PermissionError:
+            pass  # 无权限终止该进程
 
 
 # ==================== 公共 API ====================
@@ -144,6 +149,14 @@ def create_tray(
             on_open_console=on_open_console,
         )
         tray_icon.start()
+
+        # 监控托盘退出事件，在独立线程中调用 on_exit（而非 pystray 线程）
+        def _wait_and_exit():
+            tray_icon._exit_event.wait()
+            if on_exit:
+                on_exit()
+
+        threading.Thread(target=_wait_and_exit, daemon=True).start()
         return tray_icon
     except Exception as e:
         from app.utils.logging import get_logger

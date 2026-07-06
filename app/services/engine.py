@@ -59,6 +59,7 @@ class EngineCommand:
     data: dict = field(default_factory=dict)
     response_future: asyncio.Future | None = None  # engine loop 上创建，调用方 await
     response_data: Any = None  # 由消费者设置
+    cancelled: bool = False  # 超时时由派发方置 True，消费者跳过执行
 
 
 logger = get_logger("engine", source="backend")
@@ -236,7 +237,9 @@ class LoginBridge:
             if m.enable_local_check or m.check_auth_url:
                 from app.network.decision import check_login_prerequisites
 
-                ok, reason = await check_login_prerequisites(m, config.credentials.auth_url)
+                ok, reason = await check_login_prerequisites(
+                    m, config.credentials.auth_url
+                )
                 if not ok:
                     self._logger.warning("登录前置检查未通过: {}", reason)
                     if on_complete is not None:
@@ -534,6 +537,8 @@ class ScheduleEngine:
     async def _process_command_async(self, cmd: EngineCommand) -> None:
         """处理一个命令（async 版本）。response_future 由各处理器自行触发。"""
         try:
+            if cmd.cancelled:
+                return
             if cmd.type == EngineCmdType.START:
                 self._handle_start(cmd)
             elif cmd.type == EngineCmdType.STOP:
@@ -977,6 +982,7 @@ class ScheduleEngine:
             try:
                 return await asyncio.wait_for(cmd.response_future, timeout=timeout)
             except TimeoutError:
+                cmd.cancelled = True  # 标记命令已取消，消费者将跳过执行
                 return (False, f"操作超时 ({cmd_type.value})")
 
         # run_coroutine_threadsafe 返回 concurrent.futures.Future
@@ -1003,11 +1009,6 @@ class ScheduleEngine:
         with self._start_stop_lock:
             if self._is_monitoring:
                 return False, "监控已在运行中"
-
-            # 提前验证，立即返回错误信息（_handle_start 中也会验证）
-            valid, error = validate_env_config(self._runtime_config)
-            if not valid:
-                return False, f"配置无效: {error}"
 
             return self._dispatch_command(EngineCmdType.START, timeout=5.0)
 

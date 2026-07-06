@@ -38,15 +38,17 @@ export function createFrontendLogger(initialLevel = 'INFO') {
   const _flushBuffer = () => {
     if (!_ws || _ws.readyState !== WebSocket.OPEN || _logBuffer.length === 0) return;
     const batch = _logBuffer.splice(0, _logBuffer.length);
+    let sent = 0;
     try {
       for (const msg of batch) {
         _ws.send(JSON.stringify({
           type: 'frontend_log',
           data: { level: msg.level, scope: msg.scope, message: msg.message, meta: msg.meta },
         }));
+        sent++;
       }
     } catch (_) {
-      _logBuffer.unshift(...batch);
+      _logBuffer.unshift(...batch.slice(sent));
     }
   };
 

@@ -8,6 +8,7 @@ import threading
 import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
+
 from pydantic import BaseModel
 
 from app.utils.files import atomic_write
@@ -38,7 +39,6 @@ class LoginHistoryService:
         self._data_dir.mkdir(parents=True, exist_ok=True)
         self._history_path = data_dir / "login_history.jsonl"
         self._lock = threading.Lock()
-        self._cleanup_lock = threading.Lock()
         self._write_count = 0
 
     def add(
@@ -73,7 +73,7 @@ class LoginHistoryService:
                     need_cleanup = True
             except Exception as exc:
                 logger.warning("写入登录历史失败: {}", exc, exc_info=True)
-        # 清理在主写入锁外执行，避免长时间持有 _lock 阻塞并发写入
+        # 清理在主写入锁外触发，由 _cleanup_old 内部获取同一把锁
         if need_cleanup:
             self._cleanup_old(max_age_days=30)
 
@@ -133,10 +133,9 @@ class LoginHistoryService:
     def _cleanup_old(self, max_age_days: int = 30) -> None:
         """清理超过 max_age_days 天的旧记录，最多保留 MAX_HISTORY_SIZE 条。
 
-        使用独立的 _cleanup_lock 防止并发清理，且不持有主写入锁 _lock，
-        避免清理期间阻塞并发写入。
+        使用主写入锁 _lock 保证与 add() 的互斥，避免读写并发导致数据不一致。
         """
-        with self._cleanup_lock:
+        with self._lock:
             if not self._history_path.exists():
                 return
             cutoff = datetime.now() - timedelta(days=max_age_days)
