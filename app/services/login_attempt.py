@@ -16,7 +16,7 @@ from app.utils.env import build_login_template_vars
 from app.utils.exceptions import LoginCancelledError
 from app.utils.logging import get_logger
 
-# 用于从日志消息中移除截图路径的正则表达式
+# 从日志消息中提取截图 URL 的正则（前端 formatters.js 也使用同款格式）
 SCREENSHOT_URL_PATTERN = r"\s*截图[:：]\s*/\S+\.(?:png|jpg|jpeg|webp|gif)"
 
 # 登录成功后等待页面完成跳转和状态更新的时间（秒）
@@ -287,8 +287,7 @@ class LoginAttempt:
                     LOGIN_SUCCESS_SETTLE_SECONDS
                 )  # 登录成功后等待，让页面完成跳转和状态更新
                 return True, message
-            log_msg = re.sub(SCREENSHOT_URL_PATTERN, "", message)
-            self.logger.warning("登录失败: {} (耗时 {:.1f}s)", log_msg, total)
+            self.logger.warning("登录失败: {} (耗时 {:.1f}s)", message, total)
             return False, message
         finally:
             # 旧模式（自行创建）需要关闭浏览器；

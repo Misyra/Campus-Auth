@@ -661,7 +661,7 @@ class ScreenshotHandler(StepHandler):
             # 转为可访问的 URL
             filename = Path(result).name
             url = f"/debug/screenshots/{date_str}/{filename}"
-            logger.debug("[screenshot] path={}", url)
+            logger.info("截图: {}", url)
             return True, url
         return False, "截图失败"
 
