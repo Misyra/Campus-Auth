@@ -1,4 +1,4 @@
-import { DEFAULT_APPEARANCE, DEFAULT_CUSTOM_COLORS, ACCENT_COLORS, BG_COLORS, LIMITS } from '../constants.js';
+import { DEFAULT_APPEARANCE, DEFAULT_CUSTOM_COLORS, ACCENT_COLORS, DARK_BG_COLORS, LIGHT_BG_COLORS, LIMITS } from '../constants.js';
 import { hexToRgb, adjustColor } from './formatters.js';
 import { pickFile } from './utils.js';
 
@@ -25,7 +25,7 @@ export const appearanceMethods = {
     if (!hex || !DEFAULT_CUSTOM_COLORS.hasOwnProperty(type)) return;
     hex = hex.toLowerCase();
     // 去重：系统预设或已存在的自定义色不重复加入
-    const systemColors = type === 'accent' ? ACCENT_COLORS : type === 'bg' ? BG_COLORS : [];
+    const systemColors = type === 'accent' ? ACCENT_COLORS : type === 'bg' ? [...DARK_BG_COLORS, ...LIGHT_BG_COLORS] : [];
     if (systemColors.some(c => c.value.toLowerCase() === hex)) return;
     if (this.customColors[type].some(c => c.toLowerCase() === hex)) return;
     this.customColors[type].push(hex);
@@ -127,13 +127,33 @@ export const appearanceMethods = {
     event.target.addEventListener('touchmove', cancel);
   },
 
-  // 获取合并后的颜色列表（系统预设 + 自定义）
+  // 获取合并后的颜色列表（系统预设 + 自定义，bg 类型按主题切换）
   getColorList(type) {
-    const systemColors = type === 'accent' ? ACCENT_COLORS
-      : type === 'bg' ? BG_COLORS
-      : [];
+    let systemColors;
+    if (type === 'bg') {
+      const effectiveTheme = this.getEffectiveTheme();
+      systemColors = effectiveTheme === 'dark' ? DARK_BG_COLORS : LIGHT_BG_COLORS;
+    } else {
+      systemColors = type === 'accent' ? ACCENT_COLORS : [];
+    }
     const custom = (this.customColors[type] || []).map(hex => ({ value: hex, label: hex, custom: true }));
     return [...systemColors, ...custom];
+  },
+
+  // 获取当前生效的主题（解析 auto）
+  getEffectiveTheme() {
+    const themeMode = this.appearance.theme || 'light';
+    if (themeMode === 'auto') {
+      return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    }
+    return themeMode;
+  },
+
+  // 恢复当前主题的默认背景色
+  resetThemeBackground() {
+    this.appearance.background_color = '';
+    this.applyAppearance();
+    this.toastOnly(true, '已恢复默认背景色');
   },
 
   // 应用外观设置到页面
@@ -200,6 +220,9 @@ export const appearanceMethods = {
         _p('--bg-primary', this.appearance.background_color);
         _p('--bg-secondary', `rgb(${Math.min(bgRgb.r + 15, 255)}, ${Math.min(bgRgb.g + 15, 255)}, ${Math.min(bgRgb.b + 15, 255)})`);
       }
+    } else {
+      _p('--bg-primary', '#0f172a');
+      _p('--bg-secondary', '#1e293b');
     }
 
     // 卡片透明度与毛玻璃模糊

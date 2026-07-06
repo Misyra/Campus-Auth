@@ -118,7 +118,10 @@
       </div>
       <!-- 背景色 -->
       <div class="appearance-field">
-        <div class="appearance-field-label">背景颜色</div>
+        <div class="appearance-field-label">
+          背景颜色
+          <button v-if="appearance.background_color" type="button" class="appearance-reset-btn-inline" @click="resetThemeBackground">恢复默认</button>
+        </div>
         <div class="appearance-color-row">
           <div class="appearance-colors">
             <button
