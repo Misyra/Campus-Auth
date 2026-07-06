@@ -2128,32 +2128,27 @@
   function generatePrompt(url) {
     let prompt = `请根据以下校园网登录页面的元素信息，生成 Campus-Auth 的任务 JSON 配置。\n\n`;
     prompt += `任务编写规范请参考 Campus-Auth 项目中的 docs/guides/task-writing-guide.md 文档。\n\n`;
-    prompt += `页面地址: ${url}\n`;
-    prompt += `> **重要：不要填写 url 字段。** 任务 JSON 的 url 字段请留空或使用 "{{LOGIN_URL}}"，由用户自行在 Campus-Auth 系统设置中配置认证地址。硬编码 URL 会导致任务无法通用。\n`;
-    prompt += `> **隐藏输入框：** 执行器会在普通 fill/click 失败后自动降级到强制模式处理隐藏输入框，通常无需额外配置。如果自动降级不生效，再添加 \`"reveal_hidden": true\`。\n\n`;
-    prompt += `> **version 字段：** 请在任务 JSON 顶层添加 \`"version": "${VERSION}"\` 字段，标识此任务适用的 Campus-Auth 版本。\n`;
-
-    // on_success / on_failure 建议
-    prompt += `## 建议添加 on_success / on_failure 字段\n\n`;
-    prompt += `建议在任务 JSON 顶层添加以下字段以增强可用性：\n\n`;
-    prompt += `\`\`\`json\n{\n  "on_success": { "message": "登录成功" },\n  "on_failure": { "message": "登录失败", "screenshot": true }\n}\n\`\`\`\n\n`;
-    prompt += `其中 \`on_failure.screenshot: true\` 会在登录失败时自动保存页面截图，便于排查问题。\n\n`;
+    prompt += `## 输出要求\n\n`;
+    prompt += `1. 直接输出完整的任务 JSON（放在 \`\`\`json 代码块中），可附简短说明\n`;
+    prompt += `2. 然后询问用户：\`"任务是否成功？"\`\n`;
+    prompt += `3. 若用户反馈失败，提供一套使用 eval 步骤的备选任务（通过 JS 强制填值并提交，选择器按当前页面 HTML 适配）\n\n`;
+    prompt += `## 页面地址\n\n`;
+    prompt += `${url}\n`;
+    prompt += `> **不要填写 url 字段**：任务 JSON 的 url 字段留空或使用 \`"{{LOGIN_URL}}"\`，由用户在系统设置中配置。硬编码会导致任务无法通用。\n\n`;
+    prompt += `## 支持的变量占位符\n\n`;
+    prompt += `| 占位符 | 含义 | 用在 |\n`;
+    prompt += `|-------|------|------|\n`;
+    prompt += `| \`{{USERNAME}}\` | 账号 | input 步骤的 value |\n`;
+    prompt += `| \`{{PASSWORD}}\` | 密码 | input 步骤的 value |\n`;
+    prompt += `| \`{{ISP}}\` | 运营商 | select / click_select 步骤的 value |\n`;
+    prompt += `| \`{{LOGIN_URL}}\` | 认证地址 | url 字段（通常留空由系统填充） |\n\n`;
+    prompt += `## 任务 JSON 顶层结构\n\n`;
+    prompt += `\`\`\`json\n{\n  "version": "${VERSION}",\n  "url": "",\n  "steps": [ /* 见下方步骤类型映射 */ ],\n  "on_success": { "message": "登录成功" },\n  "on_failure": { "message": "登录失败", "screenshot": true }\n}\n\`\`\`\n\n`;
+    prompt += `> \`on_failure.screenshot: true\` 会在登录失败时自动保存页面截图，便于排查问题。\n`;
+    prompt += `> **隐藏输入框：** 执行器会在普通 fill/click 失败后自动降级到强制模式处理隐藏输入框，通常无需额外配置；若不生效再添加 \`"reveal_hidden": true\`。检测到的隐藏输入框见后文「隐藏输入框检测」。\n\n`;
 
     // 步骤类型映射表
-    prompt += `\n---\n\n**任务分享：** 如果你愿意将本任务分享给社区，请将生成的完整任务 JSON 发布至 GitHub Issues，格式要求如下：\n`;
-    prompt += `> 发布地址：https://github.com/Misyra/campus-auth-tasks/issues/new\n`;
-    prompt += `> \n`;
-    prompt += `> **标题格式：** \`[任务] 学校名称 - 校园网认证页面描述\`\n`;
-    prompt += `> \n`;
-    prompt += `> **正文要求：**\n`;
-    prompt += `> 1. 完整任务 JSON（放在代码块 \`\`\`json 中）\n`;
-    prompt += `> 2. 认证页面地址（URL）\n`;
-    prompt += `> 3. 页面截图（可选，有助于维护）\n`;
-    prompt += `> 4. 认证方式说明（如：Dr.com / 锐捷 / 天翼校园客户端 / 自研门户等）\n`;
-    prompt += `> 5. 运营商选择说明（如有，说明支持哪些运营商）\n`;
-    prompt += `> 6. 验证码说明（如：纯数字/字母+数字/数学运算/无需验证码）\n`;
-    prompt += `> 7. 已知问题或特殊说明（可选）\n\n`;
-    prompt += `## 步骤类型映射（录制器 → 任务JSON）\n\n`;
+    prompt += `\n---\n\n## 步骤类型映射（录制器 → 任务JSON）\n\n`;
     prompt += `| 录制器类型 | 任务JSON类型 | 说明 |\n`;
     prompt += `|-----------|-------------|------|\n`;
     prompt += `| username | input | value: {{USERNAME}} |\n`;
@@ -2183,7 +2178,7 @@
     prompt += `   - 如果有多个相似的输入框，选择器应指向登录用的那个，而非修改密码、确认密码等功能\n`;
     prompt += `4. **验证提交按钮** — 确认是登录/提交按钮（type="submit" 或包含"登录"文字），而非重置或其他按钮\n`;
     prompt += `5. **选择器优先级** — 优先使用 id 选择器，次选 name 属性选择器，避免使用易变的 class 选择器\n`;
-    prompt += `6. **隐藏输入框** — 执行器会自动处理隐藏/不可交互的输入框（先尝试普通填充，失败后自动降级为强制输入）。如果隐藏输入框的 selector 看起来不对（比如指向了不相关的 input），请根据上下文 HTML 手动修正。无需在 JSON 中设置 force 字段\n`;
+    prompt += `6. **隐藏输入框** — 若检测到的隐藏输入框 selector 看起来不对（指向了不相关的 input），请根据上下文 HTML 手动修正。无需在 JSON 中设置 force 字段（执行器自动降级处理，见开头说明）\n`;
     prompt += `\n`;
 
     // 隐藏输入框警告汇总
@@ -2247,8 +2242,9 @@
             prompt += `  "char_range": "0123456789+-*/=xX÷",\n`;
             prompt += `  "old": true\n`;
             prompt += `}\n`;
-            prompt += `\`\`\`\n\n`;
-            prompt += `字符范围说明：${charRangeDesc}\n\n`;
+    prompt += `\`\`\`\n\n`;
+    prompt += `> \`"old": true\` 表示使用 ddddocr 旧版 OCR 模型（\`DdddOcr(old=True)\`），对部分老式验证码识别效果更好；默认 false 用新版模型，不确定时省略该字段。\n\n`;
+    prompt += `字符范围说明：${charRangeDesc}\n\n`;
             prompt += `第二步：eval 步骤计算结果并填入\n`;
             prompt += `\n`;
             prompt += `eval 脚本采用多重匹配策略：\n`;
@@ -2332,6 +2328,7 @@
     }
 
     prompt += `## 录制到的元素 (${state.steps.length} 个步骤)\n\n`;
+    prompt += `> 建议为每个步骤添加语义化 \`id\` 字段（如 \`username_input\`、\`login_submit\`），便于调试与步骤间变量引用（如 ocr 的 \`store_as\` 被 eval 引用）。\n\n`;
 
     state.steps.forEach((s, i) => {
       const typeLabel = STEP_TYPES[s.type]?.label || s.type;
