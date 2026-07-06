@@ -110,6 +110,45 @@ python main.py --startup-action login_once  # 登录一次后退出
 python main.py --runtime-mode lightweight   # 轻量模式（无 Web UI）
 ```
 
+## 辅助工具
+
+项目根目录提供两个 Go 编译的辅助工具，无需安装 Go 运行时即可使用：
+
+### start.exe — 一键启动
+
+自动下载 uv、安装依赖并启动应用。适合首次部署或不想手动管理环境的用户。
+
+```bash
+# 启动应用（自动安装依赖）
+start.exe
+
+# 仅安装依赖，不启动应用
+start.exe --install-only
+
+# 透传参数给 main.py
+start.exe --no-browser --runtime-mode lightweight
+
+# 静默模式（CI 环境，不等待按键）
+start.exe --no-pause
+```
+
+工作流程：检测 PATH 中的 uv → 检查本地 `.uv/` 目录 → 从镜像源下载 uv → `uv sync` 安装依赖 → `uv run main.py` 启动应用。
+
+### update.exe — 仓库克隆/更新
+
+自动检测/安装 Git，从镜像源克隆或更新仓库。适合需要快速获取最新代码或部署多台机器的场景。
+
+```bash
+# 在项目根目录运行（已克隆则更新，未克隆则初始化）
+update.exe
+```
+
+功能特性：
+- 自动检测 PATH 中的 Git，未找到时下载便携版（仅 Windows）
+- 支持 4 个镜像源自动轮询（GitClone、CNPMJS、GHProxy、GitHub 官方）
+- 已有仓库：fetch + reset --hard 到远程最新，支持切换分支
+- 新目录：git init + remote add + fetch + reset，交互式选择分支
+
 ## 配置说明
 
 ### 配置来源
