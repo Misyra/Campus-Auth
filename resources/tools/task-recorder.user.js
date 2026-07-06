@@ -98,14 +98,13 @@
         return false;
       }
       // 迁移旧数据：code → script（兼容旧录制数据）
-      if (data.steps) {
-        data.steps.forEach(function(step) {
-          if (step.code !== undefined && step.script === undefined) {
-            step.script = step.code;
-            delete step.code;
-          }
-        });
-      }
+      // data.steps 在上方已校验非空，无需再次判断
+      data.steps.forEach(function(step) {
+        if (step.code !== undefined && step.script === undefined) {
+          step.script = step.code;
+          delete step.code;
+        }
+      });
       return data;
     } catch (_) {
       return false;
@@ -2905,13 +2904,25 @@
     popup.style.top = Math.min(y, window.innerHeight - 200) + 'px';
     document.body.appendChild(popup);
 
+    // 统一关闭：移除弹窗并清理「点击弹窗外关闭」监听器，避免监听器在弹窗被按钮关闭后残留
+    const closePopup = () => {
+      popup.remove();
+      document.removeEventListener('click', closePop, true);
+    };
+    // 点击弹窗外关闭（closePop 与 closePopup 互相引用，均为运行时调用，定义顺序无碍）
+    const closePop = (ev) => {
+      if (!popup.contains(ev.target)) closePopup();
+    };
+    // setTimeout 延迟注册，避免当前打开弹窗的点击事件立即触发关闭
+    setTimeout(() => document.addEventListener('click', closePop, true), 0);
+
     // 点击选项
     popup.querySelectorAll('button').forEach(btn => {
       btn.addEventListener('click', (ev) => {
         ev.stopPropagation();
         const stepType = btn.dataset.rpopType;
         if (stepType === 'dismiss') {
-          popup.remove();
+          closePopup();
           return;
         }
         const descMap = {
@@ -2948,7 +2959,7 @@
         });
         _revealedInputs = _revealedInputs.filter(r => r.el !== el);
         refreshRevealPanel();
-        popup.remove();
+        closePopup();
         setStatus(`✅ 已记录: ${descMap[stepType]} (${selector})`);
 
         if (_revealedInputs.length === 0) {
@@ -2961,17 +2972,6 @@
         }
       });
     });
-
-    // 点击弹窗外关闭
-    setTimeout(() => {
-      const closePop = (ev) => {
-        if (!popup.contains(ev.target)) {
-          popup.remove();
-          document.removeEventListener('click', closePop, true);
-        }
-      };
-      document.addEventListener('click', closePop, true);
-    }, 0);
   }
 
   // 揭示面板
@@ -3108,9 +3108,9 @@
         state.hoveredEl.classList.remove("ca-highlight");
         state.hoveredEl = null;
       }
+      // addStepFromElement / handleCarrierClickPhase 内部已完成 updateRecordedList + saveState，
+      // 此处仅覆盖状态提示，避免重复渲染列表与重复写存储
       if (type !== "carrier") {
-        updateRecordedList();
-        saveState();
         setStatus(`✅ Enter 记录: ${optText || info.tag}`);
       }
     }
@@ -3190,7 +3190,7 @@
         } catch (_) {}
       }
 
-      // 策略2: 每 2 秒兜底巡检
+      // 策略2: 每 8 秒兜底巡检（MutationObserver 已覆盖绝大多数场景，轮询仅作兜底，间隔不宜过短以减少空转）
       if (!this._interval) {
         this._interval = setInterval(() => {
           let missing = false;
@@ -3217,6 +3217,9 @@
   function ensureGlobalListeners() {
     if (_globalListenersAttached) return;
     document.addEventListener("mouseover", onHover, true);
+    // onRevealedClick 必须在 onClick 之前注册（capture 阶段按注册顺序执行），
+    // 否则 domGuard 恢复监听后「显示隐藏」模式的点击拦截会失效
+    document.addEventListener("click", onRevealedClick, true);
     document.addEventListener("click", onClick, true);
     document.addEventListener("keydown", onKeyDown, true);
     attachAllFrameListeners();
