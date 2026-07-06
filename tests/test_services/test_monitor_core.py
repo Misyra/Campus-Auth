@@ -11,7 +11,7 @@ from app.services.monitor_service import NetworkMonitorCore
 class TestProfileSwitchFlag:
     """测试自动切换方案的标志位逻辑。"""
 
-    def test_check_profile_switch_sets_flag(self):
+    async def test_check_profile_switch_sets_flag(self):
         """测试自动切换方案设置标志位"""
 
         core = NetworkMonitorCore(get_config=lambda: RuntimeConfig())
@@ -22,12 +22,12 @@ class TestProfileSwitchFlag:
         core._profile_service = mock_profile_service
         core._last_profile_id = "old_profile"
 
-        core._check_profile_switch()
+        await core._check_profile_switch()
 
         assert core._profile_switch_needed is True
         assert core._last_profile_id == "new_profile"
 
-    def test_check_profile_switch_no_change(self):
+    async def test_check_profile_switch_no_change(self):
         """测试方案未变化时不设置标志位"""
 
         core = NetworkMonitorCore(get_config=lambda: RuntimeConfig())
@@ -37,7 +37,7 @@ class TestProfileSwitchFlag:
         core._profile_service = mock_profile_service
         core._last_profile_id = "same_profile"
 
-        core._check_profile_switch()
+        await core._check_profile_switch()
 
         assert core._profile_switch_needed is False
 

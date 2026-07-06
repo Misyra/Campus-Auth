@@ -1326,14 +1326,13 @@ class TestStartStopMonitoring:
         assert "已在运行" in msg
 
     def test_start_monitoring_invalid_config(self, engine_factory):
+        """start_monitoring 不再校验配置（校验移至 _handle_start），仅派发命令。"""
         svc = engine_factory(raw=True)
-        with patch(
-            "app.services.engine.validate_env_config",
-            return_value=(False, "缺少认证地址"),
-        ):
+        svc._monitor_core = None
+        with patch.object(svc, "_dispatch_command", return_value=(True, "ok")):
             ok, msg = svc.start_monitoring()
-        assert ok is False
-        assert "配置无效" in msg
+        # 配置校验已移至引擎循环内的 _handle_start，start_monitoring 仅派发命令
+        assert ok is True
 
     def test_start_monitoring_no_loop(self, engine_factory):
         """engine loop 未启动时，start_monitoring 返回失败。"""

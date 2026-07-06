@@ -468,7 +468,7 @@ class TestWaitForCallbacks:
 
         future = executor._ensure_task_pool().submit(_slow_task)
         with executor._running_tasks_lock:
-            executor._running_tasks["task-1"] = future
+            executor._running_tasks["task-1"] = (future, threading.Event())
 
         asyncio.run(executor.wait_for_callbacks(timeout=5))
         assert completed.is_set(), "任务应在 wait_for_callbacks 返回前完成"
@@ -483,7 +483,7 @@ class TestWaitForCallbacks:
 
         future = executor._ensure_task_pool().submit(_very_slow_task)
         with executor._running_tasks_lock:
-            executor._running_tasks["task-slow"] = future
+            executor._running_tasks["task-slow"] = (future, threading.Event())
 
         start = time.monotonic()
         asyncio.run(executor.wait_for_callbacks(timeout=0.5))
@@ -499,7 +499,7 @@ class TestWaitForCallbacks:
         f: Future = Future()
         f.set_exception(RuntimeError("任务失败"))
         with executor._running_tasks_lock:
-            executor._running_tasks["task-fail"] = f
+            executor._running_tasks["task-fail"] = (f, threading.Event())
 
         asyncio.run(executor.wait_for_callbacks(timeout=5))
         # 不抛异常即通过

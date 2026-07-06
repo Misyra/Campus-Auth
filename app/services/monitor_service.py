@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import datetime
 import threading
 import time
@@ -283,7 +284,7 @@ class NetworkMonitorCore:
             )
 
         # 自动切换检测
-        self._check_profile_switch()
+        await self._check_profile_switch()
 
         return CheckOnceResult(
             paused=False,
@@ -395,20 +396,23 @@ class NetworkMonitorCore:
             result = parse_ping_targets(self.DEFAULT_PING_TARGETS)
         return result
 
-    def _check_profile_switch(self) -> None:
+    async def _check_profile_switch(self) -> None:
         """检测网关 IP 并自动切换方案。
 
         检测到方案变化时设置标志位并停止监控循环，由外部重启。
+        内部同步磁盘 IO 通过 asyncio.to_thread() 包装，避免阻塞事件循环。
         """
         if not self._profile_service:
             return
 
         try:
-            data = self._profile_service.load()
+            data = await asyncio.to_thread(self._profile_service.load)
             if not data.auto_switch:
                 return
 
-            matched_id = self._profile_service.detect_matching_profile(data)
+            matched_id = await asyncio.to_thread(
+                self._profile_service.detect_matching_profile, data
+            )
             if matched_id and matched_id != self._last_profile_id:
                 profile = data.profiles.get(matched_id)
                 profile_name = profile.name if profile else matched_id
@@ -423,10 +427,13 @@ class NetworkMonitorCore:
                 )
 
                 self._last_profile_id = matched_id
-                ok, msg = self._profile_service.set_active_profile(matched_id)
+                ok, msg = await asyncio.to_thread(
+                    self._profile_service.set_active_profile, matched_id
+                )
                 if not ok:
                     # 方案可能在检测后被删除，回退缓存状态
-                    self._last_profile_id = self._profile_service.load().active_profile
+                    reloaded = await asyncio.to_thread(self._profile_service.load)
+                    self._last_profile_id = reloaded.active_profile
                     self.log_message(f"方案切换失败: {matched_id}, {msg}", "WARNING")
                 else:
                     # 方案切换成功，设置标志位

@@ -38,5 +38,6 @@ async def interruptible_sleep(
     while time.monotonic() < deadline:
         if cancel_event.is_set():
             return False
-        await asyncio.sleep(poll_interval)
-    return True
+        remaining = deadline - time.monotonic()
+        await asyncio.sleep(min(poll_interval, remaining))
+    return not cancel_event.is_set()

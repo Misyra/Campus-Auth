@@ -83,12 +83,12 @@ class TestCompositeCancelEvent:
         cce.add_source(source)
         assert cce.is_set()
 
-        # clear 同时复位自身和源
+        # clear 复位自身并清除源引用（不清除外部源事件状态）
         cce.clear()
         assert not cce.is_set()
-        # 源列表仍保留（仅复位，不清除引用）
-        assert len(cce._sources) == 1
-        assert not source.is_set()
+        assert len(cce._sources) == 0
+        # 外部源事件不受影响
+        assert source.is_set()
 
     def test_is_set_caches_result(self) -> None:
         """is_set() 发现源 set 后会缓存结果（后续不再扫描）。"""

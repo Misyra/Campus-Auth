@@ -11,11 +11,11 @@ from dataclasses import dataclass
 import psutil
 
 from app.network.detect import (
-    _parse_darwin_netstat_routes,
-    _parse_linux_route_entry,
-    _parse_windows_all_routes,
+    parse_darwin_netstat_routes,
+    parse_linux_route_entry,
+    parse_windows_all_routes,
 )
-from app.network.probes import _is_virtual_nic
+from app.network.probes import is_virtual_nic
 from app.network.utils import is_routable_ip
 from app.utils.logging import get_logger
 from app.utils.platform import CREATE_NO_WINDOW_FLAG
@@ -57,7 +57,7 @@ class InterfaceManager:
         # Windows 的 snicstats 没有 isloopback 属性，通过名称判断
         if name.lower().startswith("lo"):
             return False
-        if _is_virtual_nic(name):
+        if is_virtual_nic(name):
             return False
         # 无 IPv4 的排除
         return bool(self._get_ipv4(name))
@@ -93,7 +93,7 @@ class InterfaceManager:
             )
             if result.returncode != 0:
                 return {}
-            routes = _parse_windows_all_routes(result.stdout)
+            routes = parse_windows_all_routes(result.stdout)
             gateways: dict[str, str] = {}
             for gw, iface_ip in routes:
                 name = ip_map.get(iface_ip)
@@ -110,7 +110,7 @@ class InterfaceManager:
             gateways: dict[str, str] = {}
             with open("/proc/net/route") as f:
                 for line in f:
-                    entry = _parse_linux_route_entry(line)
+                    entry = parse_linux_route_entry(line)
                     if entry is not None:
                         iface, gw = entry
                         if gw != "0.0.0.0":
@@ -131,7 +131,7 @@ class InterfaceManager:
             )
             if result.returncode != 0:
                 return {}
-            return _parse_darwin_netstat_routes(result.stdout)
+            return parse_darwin_netstat_routes(result.stdout)
         except Exception as exc:
             logger.debug("macOS 网关解析失败: {}", exc)
             return {}

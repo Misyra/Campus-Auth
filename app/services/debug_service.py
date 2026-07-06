@@ -190,12 +190,14 @@ class DebugSessionManager:
             async with self._lock:
                 await self._cancel_debug_timer()
                 await self._close_debug_browser()
+                self._session = DebugSession()
             raise
 
         if not response.success:
             async with self._lock:
                 await self._cancel_debug_timer()
                 await self._close_debug_browser()
+                self._session = DebugSession()
             debug_logger.warning(
                 "调试会话启动失败: task={}, {}", task_id, response.error
             )

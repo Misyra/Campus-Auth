@@ -12,12 +12,12 @@ from app.network.detect import (
     _get_windows_gateway_route_print,
     _hex_to_ipv4,
     _is_valid_ipv4,
-    _parse_darwin_netstat_routes,
     _parse_linux_gateway,
-    _parse_linux_route_entry,
-    _parse_windows_all_routes,
     _parse_windows_route_print,
     detect_gateway_ip,
+    parse_darwin_netstat_routes,
+    parse_linux_route_entry,
+    parse_windows_all_routes,
 )
 
 
@@ -606,7 +606,7 @@ class TestParseWindowsAllRoutes:
             "          0.0.0.0          0.0.0.0      192.168.1.1     192.168.1.100     25\n"
             "          0.0.0.0          0.0.0.0      10.0.0.254       10.0.0.100     30\n"
         )
-        routes = _parse_windows_all_routes(output)
+        routes = parse_windows_all_routes(output)
         assert len(routes) == 2
         assert routes[0] == ("192.168.1.1", "192.168.1.100")
         assert routes[1] == ("10.0.0.254", "10.0.0.100")
@@ -618,7 +618,7 @@ class TestParseWindowsAllRoutes:
             "          0.0.0.0          0.0.0.0          0.0.0.0     10.0.0.100     15\n"
             "          0.0.0.0          0.0.0.0      10.0.0.1      10.0.0.100     25\n"
         )
-        routes = _parse_windows_all_routes(output)
+        routes = parse_windows_all_routes(output)
         assert len(routes) == 1
         assert routes[0] == ("10.0.0.1", "10.0.0.100")
 
@@ -628,10 +628,10 @@ class TestParseWindowsAllRoutes:
             "Network Destination        Netmask          Gateway       Interface  Metric\n"
             "        127.0.0.0        255.0.0.0         On-link         127.0.0.1    331\n"
         )
-        assert _parse_windows_all_routes(output) == []
+        assert parse_windows_all_routes(output) == []
 
     def test_empty_output(self):
-        assert _parse_windows_all_routes("") == []
+        assert parse_windows_all_routes("") == []
 
 
 class TestParseLinuxRouteEntry:
@@ -639,32 +639,32 @@ class TestParseLinuxRouteEntry:
 
     def test_valid_default_route(self):
         line = "eth0\t00000000\t0101A8C0\t0001\t0\t0\t100\t00000000\t0\t0"
-        result = _parse_linux_route_entry(line)
+        result = parse_linux_route_entry(line)
         assert result == ("eth0", "192.168.1.1")
 
     def test_not_default_route(self):
         line = "eth0\t0000000A\t0101A8C0\t0001\t0\t0\t100\t00000000\t0\t0"
-        assert _parse_linux_route_entry(line) is None
+        assert parse_linux_route_entry(line) is None
 
     def test_too_few_fields(self):
-        assert _parse_linux_route_entry("eth0\t00000000") is None
+        assert parse_linux_route_entry("eth0\t00000000") is None
 
     def test_empty_line(self):
-        assert _parse_linux_route_entry("") is None
+        assert parse_linux_route_entry("") is None
 
     def test_short_fields(self):
         line = "eth0\t000000\t01A8C0\t0001"
-        assert _parse_linux_route_entry(line) is None
+        assert parse_linux_route_entry(line) is None
 
     def test_wlan_interface(self):
         line = "wlan0\t00000000\t0201A8C0\t0003\t0\t0\t600\t00000000\t0\t0"
-        result = _parse_linux_route_entry(line)
+        result = parse_linux_route_entry(line)
         assert result == ("wlan0", "192.168.1.2")
 
     def test_zero_gateway(self):
         """网关为 0.0.0.0 时仍返回（过滤由调用方负责）。"""
         line = "eth0\t00000000\t00000000\t0001"
-        result = _parse_linux_route_entry(line)
+        result = parse_linux_route_entry(line)
         assert result == ("eth0", "0.0.0.0")
 
 
@@ -681,7 +681,7 @@ default            192.168.1.1        UGScg          en0
 
 Internet6:
 """
-        routes = _parse_darwin_netstat_routes(output)
+        routes = parse_darwin_netstat_routes(output)
         assert routes == {"en0": "192.168.1.1"}
 
     def test_multiple_default_routes(self):
@@ -695,7 +695,7 @@ default            10.0.0.254         UGScIg         en1
 
 Internet6:
 """
-        routes = _parse_darwin_netstat_routes(output)
+        routes = parse_darwin_netstat_routes(output)
         assert routes.get("en0") == "192.168.1.1"
         assert routes.get("en1") == "10.0.0.254"
         assert "lo0" not in routes
@@ -705,10 +705,10 @@ Internet6:
 
 Internet6:
 """
-        assert _parse_darwin_netstat_routes(output) == {}
+        assert parse_darwin_netstat_routes(output) == {}
 
     def test_empty_output(self):
-        assert _parse_darwin_netstat_routes("") == {}
+        assert parse_darwin_netstat_routes("") == {}
 
     def test_zero_gateway_skipped(self):
         output = """Routing tables:
@@ -719,4 +719,4 @@ default            0.0.0.0            UGScg          en0
 
 Internet6:
 """
-        assert _parse_darwin_netstat_routes(output) == {}
+        assert parse_darwin_netstat_routes(output) == {}

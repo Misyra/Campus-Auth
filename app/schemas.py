@@ -428,6 +428,24 @@ class ConfigPatchRequest(BaseModel):
     active_task: str | None = None
 
 
+class ConfigResponse(BaseModel):
+    """GET /api/config 响应 — 完整配置快照。"""
+
+    browser: dict = Field(default_factory=dict)
+    monitor: dict = Field(default_factory=dict)
+    retry: dict = Field(default_factory=dict)
+    pause: dict = Field(default_factory=dict)
+    logging: dict = Field(default_factory=dict)
+    app_settings: dict = Field(default_factory=dict)
+    username: str = ""
+    password: str = ""
+    has_password: bool = False
+    auth_url: str = ""
+    isp: str = ""
+    carrier_custom: str = ""
+    active_task: str = ""
+
+
 class LogLevelRequest(BaseModel):
     level: str = Field(min_length=1, description="日志级别（DEBUG/INFO/WARNING/ERROR）")
 

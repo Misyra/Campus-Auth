@@ -121,7 +121,7 @@ export const configMethods = {
         active_task: c.active_task || '',
       };
       // 凭据字段：username/auth_url/isp/carrier_custom 空串表示清空
-      ['username', 'auth_url', 'isp', 'carrier_custom', 'active_task'].forEach(f => {
+      ['username', 'auth_url', 'isp', 'carrier_custom'].forEach(f => {
         payload[f] = c.credentials[f] ?? '';
       });
       // 密码字段：未编辑时传 null（不修改），编辑态传实际值（空串表示清空）

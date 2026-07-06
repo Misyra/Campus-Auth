@@ -5,6 +5,7 @@ package main
 import (
 	"bufio"
 	"compress/gzip"
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -291,6 +292,11 @@ func extractTar(r io.Reader, destDir string) error {
 
 		typeFlag := header[156]
 		target := filepath.Join(destDir, name)
+		// 路径穿越检查：确保解压目标在 destDir 内
+		if !strings.HasPrefix(filepath.Clean(target), filepath.Clean(destDir)+string(os.PathSeparator)) &&
+			filepath.Clean(target) != filepath.Clean(destDir) {
+			return fmt.Errorf("非法路径（Zip Slip）: %s", name)
+		}
 
 		switch typeFlag {
 		case '5': // 目录
@@ -341,30 +347,22 @@ func gitRun(gitPath, dir string, args ...string) (string, error) {
 
 // 测试远程仓库是否可达
 func isRemoteReachable(gitPath, url string) bool {
-	ctx := make(chan struct{})
-	go func() {
-		time.Sleep(remoteTimeout)
-		close(ctx)
-	}()
+	ctx, cancel := context.WithTimeout(context.Background(), remoteTimeout)
+	defer cancel()
 
-	cmd := exec.Command(gitPath, "ls-remote", "--exit-code", "-h", url)
-	done := make(chan error, 1)
-	go func() {
-		done <- cmd.Run()
-	}()
-
-	select {
-	case <-ctx:
-		cmd.Process.Kill()
+	cmd := exec.CommandContext(ctx, gitPath, "ls-remote", "--exit-code", "-h", url)
+	err := cmd.Run()
+	if ctx.Err() == context.DeadlineExceeded {
 		return false
-	case err := <-done:
-		return err == nil
 	}
+	return err == nil
 }
 
 // 获取所有远程分支
 func fetchBranches(gitPath, repoDir string) []string {
-	gitRun(gitPath, repoDir, "fetch", "--all", "--prune")
+	if _, err := gitRun(gitPath, repoDir, "fetch", "--all", "--prune"); err != nil {
+		fmt.Fprintf(os.Stderr, "警告: fetch 远程分支失败: %v\n", err)
+	}
 
 	out, _ := gitRun(gitPath, repoDir, "branch", "-r")
 	var branches []string
@@ -562,7 +560,10 @@ func doUpdate(gitPath, repoDir string) {
 	fmt.Printf("\n更新仓库: %s\n", repoDir)
 
 	// fetch + reset 到远程最新
-	gitRun(gitPath, repoDir, "fetch", "origin", branch)
+	if out, err := gitRun(gitPath, repoDir, "fetch", "origin", branch); err != nil {
+		fmt.Printf("  fetch 失败: %s\n", strings.TrimSpace(out))
+		os.Exit(1)
+	}
 	if _, err := gitRun(gitPath, repoDir, "reset", "--hard", "origin/"+branch); err != nil {
 		fmt.Printf("  更新失败: %v\n", err)
 		os.Exit(1)

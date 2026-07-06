@@ -20,7 +20,11 @@ api_logger = get_logger("api")
 
 # 背景图片目录
 BG_DIR = PROJECT_ROOT / "resources" / "background"
-BG_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _ensure_bg_dir() -> None:
+    """确保背景图片目录存在（延迟创建）。"""
+    BG_DIR.mkdir(parents=True, exist_ok=True)
 
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg"}
 MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
@@ -46,6 +50,7 @@ def _cleanup_old_backgrounds(exclude_filename: str) -> None:
 
 def _save_background(content: bytes, ext: str) -> dict:
     """保存背景图片并清理旧文件，返回 {filename, url}。"""
+    _ensure_bg_dir()
     filename = f"{uuid.uuid4().hex}{ext}"
     filepath = BG_DIR / filename
     filepath.write_bytes(content)
@@ -169,6 +174,7 @@ async def get_background(filename: str):
 @router.delete("/api/background/{filename}", response_model=ApiResponse)
 async def delete_background(filename: str) -> ApiResponse:
     """删除背景图片"""
+    _ensure_bg_dir()
     safe_name = Path(filename).name
     if safe_name != filename or not safe_name:
         raise HTTPException(status_code=400, detail="文件名包含非法字符")
