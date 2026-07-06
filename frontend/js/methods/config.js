@@ -98,13 +98,17 @@ export const configMethods = {
       this.frontendLogger.warn('config', '未启用任何网络检测方式，自动认证可能无法正常工作');
     }
 
+    // 单调递增序号用于 finally 排重（比 AbortController 引用比较更可靠）
+    this._saveSeq = (this._saveSeq || 0) + 1;
+    const currentSeq = this._saveSeq;
+
     // 取消上一次请求
     if (this._saveAbortController) {
       this._saveAbortController.abort();
     }
     this._saveAbortController = new AbortController();
-
     const controller = this._saveAbortController;
+
     this.busy.save = true;
     this.saveFailed = false;
     try {
@@ -132,7 +136,7 @@ export const configMethods = {
       }
 
       const data = await this.$apiService.config.patch(payload, {
-        signal: this._saveAbortController.signal,
+        signal: controller.signal,
       });
       if (data.success) {
         // 若本次提交了明文密码，标记密码已保存（驱动掩码回显）
@@ -158,7 +162,8 @@ export const configMethods = {
       this.toastOnly(false, msg);
       this.saveFailed = true;
     } finally {
-      if (this._saveAbortController === controller) {
+      // 仅当没有更新的 saveConfig 调用时才恢复按钮状态
+      if (this._saveSeq === currentSeq) {
         this.busy.save = false;
       }
     }
