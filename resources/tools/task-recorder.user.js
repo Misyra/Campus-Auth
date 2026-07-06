@@ -1866,278 +1866,262 @@
 
   // ==================== 弹窗 ====================
 
-  function showCaptchaModal(el, info) {
+  // 通用模态框工厂：统一 overlay 创建、字段渲染、cancel/ok/Esc/overlay 外点击关闭、首次聚焦
+  // fields: [{ name, kind: 'text'|'textarea'|'number'|'select', label?, placeholder?, value?, options?(select), min?, onChange?(values,setField), condition?(ctx) }]
+  //   - onChange: select change 时触发，setField(name,val) 可联动改其他字段
+  //   - condition: 返回 false 时该字段不渲染（用于条件字段，ctx 由调用方传入）
+  // onSubmit(values, { close }): 确定回调，返回 false 阻止关闭（用于校验失败）
+  // onCancel(): 取消回调（可选），默认 state.recording = true
+  function createModal({ title, fields, onSubmit, onCancel, ctx }) {
     const overlay = document.createElement("div");
     overlay.className = "ca-modal-overlay";
+
+    const renderField = (f) => {
+      if (f.condition && !f.condition(ctx)) return "";
+      const id = `ca-mf-${f.name}`;
+      const labelHtml = f.label ? `<label>${f.label}</label>` : "";
+      if (f.kind === "textarea") {
+        return `${labelHtml}<textarea class="ca-form-input" id="${id}" placeholder="${escHtml(f.placeholder || "")}">${escHtml(f.value || "")}</textarea>`;
+      }
+      if (f.kind === "select") {
+        const opts = (f.options || []).map(o => `<option value="${o.value}">${escHtml(o.label)}</option>`).join("");
+        return `${labelHtml}<select class="ca-form-input" id="${id}">${opts}</select>`;
+      }
+      const valAttr = f.value != null ? `value="${escHtml(String(f.value))}"` : "";
+      const phAttr = f.placeholder ? `placeholder="${escHtml(f.placeholder)}"` : "";
+      const minAttr = f.min != null ? `min="${f.min}"` : "";
+      return `${labelHtml}<input class="ca-form-input" type="${f.kind}" id="${id}" ${valAttr} ${phAttr} ${minAttr} />`;
+    };
+
     overlay.innerHTML = `
       <div class="ca-modal">
-        <h4>🖼️ 验证码设置</h4>
-        <label>验证码类型</label>
-        <select class="ca-form-input" id="ca-captcha-type">
-          ${CAPTCHA_TYPES.map(t => `<option value="${t.value}">${t.label}</option>`).join("")}
-        </select>
-        <label>OCR 字符范围 <span style="color:#999;font-size:12px">（限定识别字符，提高准确度）</span></label>
-        <input class="ca-form-input" type="text" id="ca-captcha-char-range" placeholder="如：纯数字、字母和数字、数字和运算符" />
-        <label>自定义描述（可选）</label>
-        <input class="ca-form-input" type="text" id="ca-captcha-desc" placeholder="如：四位数字验证码" />
+        <h4>${title}</h4>
+        ${fields.map(renderField).join("")}
         <div class="ca-modal-actions">
-          <button class="ca-btn ca-btn-secondary ca-btn-sm" id="ca-captcha-cancel">取消</button>
-          <button class="ca-btn ca-btn-primary ca-btn-sm" id="ca-captcha-ok">确定</button>
+          <button class="ca-btn ca-btn-secondary ca-btn-sm" id="ca-mf-cancel">取消</button>
+          <button class="ca-btn ca-btn-primary ca-btn-sm" id="ca-mf-ok">确定</button>
         </div>
       </div>
     `;
     state.panel.appendChild(overlay);
 
-    // 切换类型时自动填入默认字符范围
-    const typeSelect = overlay.querySelector("#ca-captcha-type");
-    const charRangeInput = overlay.querySelector("#ca-captcha-char-range");
-    typeSelect.addEventListener("change", () => {
-      const t = CAPTCHA_TYPES.find(c => c.value === typeSelect.value);
-      if (t && t.charRange !== "") charRangeInput.value = String(t.charRange);
+    const getFieldEl = (name) => overlay.querySelector(`#ca-mf-${name}`);
+    const getValues = () => {
+      const values = {};
+      for (const f of fields) {
+        if (f.condition && !f.condition(ctx)) continue;
+        const el = getFieldEl(f.name);
+        if (!el) continue;
+        values[f.name] = f.kind === "number" ? (parseInt(el.value) || 0) : el.value.trim();
+      }
+      return values;
+    };
+    const setField = (name, value) => {
+      const el = getFieldEl(name);
+      if (el) el.value = value;
+    };
+
+    // select 联动
+    fields.forEach(f => {
+      if (f.kind === "select" && f.onChange) {
+        const el = getFieldEl(f.name);
+        if (el) el.addEventListener("change", () => f.onChange(getValues(), setField));
+      }
     });
-    // 初始化：填入第一个类型的默认值
+
+    // 关闭与清理（Esc / overlay 外点击 / cancel / ok）
+    let closed = false;
+    function close() {
+      if (closed) return;
+      closed = true;
+      document.removeEventListener("keydown", onKey, true);
+      overlay.remove();
+    }
+    const defaultCancel = () => { state.recording = true; };
+    const onKey = (e) => {
+      if (e.key === "Escape") { close(); (onCancel || defaultCancel)(); }
+    };
+
+    overlay.addEventListener("click", (e) => {
+      if (e.target === overlay) { close(); (onCancel || defaultCancel)(); }
+    });
+    overlay.querySelector("#ca-mf-cancel").addEventListener("click", () => { close(); (onCancel || defaultCancel)(); });
+    overlay.querySelector("#ca-mf-ok").addEventListener("click", () => {
+      const result = onSubmit(getValues(), { close, ctx });
+      if (result !== false) close();
+    });
+    document.addEventListener("keydown", onKey, true);
+
+    // 首次聚焦第一个输入框
+    const firstInput = overlay.querySelector(".ca-form-input");
+    if (firstInput) setTimeout(() => firstInput.focus(), 0);
+
+    return { overlay, getValues, close };
+  }
+
+  function showCaptchaModal(el, info) {
+    const { overlay } = createModal({
+      title: "🖼️ 验证码设置",
+      fields: [
+        { name: "type", kind: "select", label: "验证码类型",
+          options: CAPTCHA_TYPES.map(t => ({ value: t.value, label: t.label })),
+          onChange: (values, setField) => {
+            const t = CAPTCHA_TYPES.find(c => c.value === values.type);
+            if (t && t.charRange !== "") setField("charRange", String(t.charRange));
+          } },
+        { name: "charRange", kind: "text",
+          label: "OCR 字符范围 <span style=\"color:#999;font-size:12px\">（限定识别字符，提高准确度）</span>",
+          placeholder: "如：纯数字、字母和数字、数字和运算符" },
+        { name: "desc", kind: "text", label: "自定义描述（可选）", placeholder: "如：四位数字验证码" },
+      ],
+      onCancel: () => {
+        state.recording = true;
+        setStatus("已取消验证码类型选择，可继续点击验证码输入框或按 Esc 停止", "recording");
+      },
+      onSubmit: (values) => {
+        const { type: captchaType, charRange, desc: customDesc } = values;
+        const desc = customDesc || CAPTCHA_TYPES.find(t => t.value === captchaType)?.label || captchaType;
+        addStepFromElement("captcha_input", el, info, `验证码输入: ${desc}`);
+
+        // 记录验证码类型和字符范围到最近的 captcha_img 步骤
+        const imgStep = [...state.steps].reverse().find(s => s.type === "captcha_img");
+        if (imgStep) {
+          imgStep.captchaType = captchaType;
+          if (charRange) imgStep.charRange = charRange;
+        }
+        const inputStep = state.steps[state.steps.length - 1];
+        if (inputStep) {
+          inputStep.captchaType = captchaType;
+          if (charRange) inputStep.charRange = charRange;
+        }
+      },
+    });
+    // 初始化：填入第一个类型的默认字符范围
     const initType = CAPTCHA_TYPES[0];
-    if (initType && initType.charRange !== "") charRangeInput.value = String(initType.charRange);
-
-    overlay.querySelector("#ca-captcha-cancel").addEventListener("click", () => {
-      overlay.remove();
-      state.recording = true;
-      setStatus("已取消验证码类型选择，可继续点击验证码输入框或按 Esc 停止", "recording");
-    });
-    overlay.querySelector("#ca-captcha-ok").addEventListener("click", () => {
-      const captchaType = overlay.querySelector("#ca-captcha-type").value;
-      const customDesc = overlay.querySelector("#ca-captcha-desc").value.trim();
-      const charRange = charRangeInput.value.trim();
-      overlay.remove();
-
-      const desc = customDesc || CAPTCHA_TYPES.find(t => t.value === captchaType)?.label || captchaType;
-      addStepFromElement("captcha_input", el, info, `验证码输入: ${desc}`);
-
-      // 记录验证码类型和字符范围到最近的 captcha_img 步骤
-      const imgStep = [...state.steps].reverse().find(s => s.type === "captcha_img");
-      if (imgStep) {
-        imgStep.captchaType = captchaType;
-        if (charRange) imgStep.charRange = charRange;
-      }
-      const inputStep = state.steps[state.steps.length - 1];
-      if (inputStep) {
-        inputStep.captchaType = captchaType;
-        if (charRange) inputStep.charRange = charRange;
-      }
-    });
+    if (initType && initType.charRange !== "") {
+      const charRangeEl = overlay.querySelector("#ca-mf-charRange");
+      if (charRangeEl) charRangeEl.value = String(initType.charRange);
+    }
   }
 
   function showCustomStepModal(type, el, info) {
-    const overlay = document.createElement("div");
-    overlay.className = "ca-modal-overlay";
-    overlay.innerHTML = `
-      <div class="ca-modal">
-        <h4>${STEP_TYPES[type]?.icon || "📝"} ${STEP_TYPES[type]?.label || type}</h4>
-        <label>步骤描述</label>
-        <input class="ca-form-input" type="text" id="ca-custom-desc" placeholder="描述这个步骤的作用" />
-        ${type === "click" ? "" : `<label>填入的值（如需要）</label><input class="ca-form-input" type="text" id="ca-custom-value" placeholder="留空则不填入" />`}
-        <label>自定义选择器（可选，留空则自动检测）</label>
-        <input class="ca-form-input" type="text" id="ca-custom-selector" placeholder="CSS 选择器" value="${escHtml(info.selectors[0]?.value || "")}" />
-        <div class="ca-modal-actions">
-          <button class="ca-btn ca-btn-secondary ca-btn-sm" id="ca-custom-cancel">取消</button>
-          <button class="ca-btn ca-btn-primary ca-btn-sm" id="ca-custom-ok">确定</button>
-        </div>
-      </div>
-    `;
-    state.panel.appendChild(overlay);
-
-    overlay.querySelector("#ca-custom-cancel").addEventListener("click", () => {
-      overlay.remove();
-      state.recording = true;
-    });
-    overlay.querySelector("#ca-custom-ok").addEventListener("click", () => {
-      const desc = overlay.querySelector("#ca-custom-desc").value.trim() || STEP_TYPES[type]?.label || type;
-      const valueEl = overlay.querySelector("#ca-custom-value");
-      const value = valueEl ? valueEl.value.trim() : "";
-      const customSelector = overlay.querySelector("#ca-custom-selector").value.trim();
-      overlay.remove();
-
-      const bestSelector = customSelector || info.selectors[0]?.value || "";
-      const step = {
-        type,
-        description: desc,
-        tag: info.tag,
-        bestSelector,
-        selectorCandidates: customSelector ? [customSelector] : info.selectors.map(s => s.value),
-        iframe: info.iframe,
-        shadowRoot: info.shadowRoot,
-        attrs: info.attrs,
-        text: info.text,
-        value: value || undefined,
-        elementHTML: el.outerHTML,
-        elementParentContext: el.parentElement ? el.parentElement.innerHTML.substring(0, LIMITS.HTML_ELEMENT) : "",
-        elementContainerHTML: findStepContainer(el)?.innerHTML.substring(0, LIMITS.HTML_CONTAINER) || "",
-      };
-      state.steps.push(step);
-      state.selectedEl?.classList.remove("ca-highlight-selected");
-      state.selectedEl = null;
-      updateRecordedList();
-      saveState();
-      setStatus(`已添加: ${desc}`);
-      state.recording = false;
-      state.panel.querySelectorAll(".ca-step-btn").forEach(b => b.classList.remove("active"));
+    createModal({
+      title: `${STEP_TYPES[type]?.icon || "📝"} ${STEP_TYPES[type]?.label || type}`,
+      ctx: { type },
+      fields: [
+        { name: "desc", kind: "text", label: "步骤描述", placeholder: "描述这个步骤的作用" },
+        { name: "value", kind: "text", label: "填入的值（如需要）", placeholder: "留空则不填入",
+          condition: (c) => c.type !== "click" },
+        { name: "selector", kind: "text", label: "自定义选择器（可选，留空则自动检测）",
+          placeholder: "CSS 选择器", value: info.selectors[0]?.value || "" },
+      ],
+      onSubmit: (values) => {
+        const description = values.desc || STEP_TYPES[type]?.label || type;
+        const customSelector = values.selector;
+        const bestSelector = customSelector || info.selectors[0]?.value || "";
+        const step = buildStepBase(type, el, info, description);
+        Object.assign(step, {
+          bestSelector,
+          selectorCandidates: customSelector ? [customSelector] : info.selectors.map(s => s.value),
+          value: values.value || undefined,
+        });
+        state.steps.push(step);
+        state.selectedEl?.classList.remove("ca-highlight-selected");
+        state.selectedEl = null;
+        updateRecordedList();
+        saveState();
+        setStatus(`已添加: ${description}`);
+        state.recording = false;
+        state.panel.querySelectorAll(".ca-step-btn").forEach(b => b.classList.remove("active"));
+      },
     });
   }
 
   function showEvalModal(_el, _info) {
-    const overlay = document.createElement("div");
-    overlay.className = "ca-modal-overlay";
-    overlay.innerHTML = `
-      <div class="ca-modal">
-        <h4>⚙️ 执行 JavaScript</h4>
-        <label>JS 代码（在页面上下文中执行）</label>
-        <textarea class="ca-form-input" id="ca-eval-code" placeholder="document.querySelector('#btn').click();"></textarea>
-        <label>步骤描述（可选）</label>
-        <input class="ca-form-input" type="text" id="ca-eval-desc" placeholder="执行自定义脚本" />
-        <div class="ca-modal-actions">
-          <button class="ca-btn ca-btn-secondary ca-btn-sm" id="ca-eval-cancel">取消</button>
-          <button class="ca-btn ca-btn-primary ca-btn-sm" id="ca-eval-ok">确定</button>
-        </div>
-      </div>
-    `;
-    state.panel.appendChild(overlay);
-
-    overlay.querySelector("#ca-eval-cancel").addEventListener("click", () => {
-      overlay.remove();
-      state.recording = true;
-    });
-    overlay.querySelector("#ca-eval-ok").addEventListener("click", () => {
-      const code = overlay.querySelector("#ca-eval-code").value.trim();
-      if (!code) {
-        setStatus("⚠️ 请输入要执行的 JavaScript 代码");
-        return;
-      }
-      const desc = overlay.querySelector("#ca-eval-desc").value.trim() || `执行 JS: ${code.substring(0, 40)}`;
-      overlay.remove();
-
-      state.steps.push({ type: "eval", description: desc, script: code });
-      updateRecordedList();
-      saveState();
-      setStatus(`已添加: ${desc}`);
-      state.recording = false;
-      state.panel.querySelectorAll(".ca-step-btn").forEach(b => b.classList.remove("active"));
+    createModal({
+      title: "⚙️ 执行 JavaScript",
+      fields: [
+        { name: "code", kind: "textarea", label: "JS 代码（在页面上下文中执行）", placeholder: "document.querySelector('#btn').click();" },
+        { name: "desc", kind: "text", label: "步骤描述（可选）", placeholder: "执行自定义脚本" },
+      ],
+      onSubmit: (values) => {
+        if (!values.code) {
+          setStatus("⚠️ 请输入要执行的 JavaScript 代码");
+          return false;
+        }
+        const description = values.desc || `执行 JS: ${values.code.substring(0, 40)}`;
+        state.steps.push({ type: "eval", description, script: values.code });
+        updateRecordedList();
+        saveState();
+        setStatus(`已添加: ${description}`);
+        state.recording = false;
+        state.panel.querySelectorAll(".ca-step-btn").forEach(b => b.classList.remove("active"));
+      },
     });
   }
 
   function showSleepModal(_el, _info) {
-    const overlay = document.createElement("div");
-    overlay.className = "ca-modal-overlay";
-    overlay.innerHTML = `
-      <div class="ca-modal">
-        <h4>⏳ 延时等待</h4>
-        <label>等待时长（毫秒）</label>
-        <input class="ca-form-input" type="number" id="ca-sleep-duration" placeholder="1000" value="1000" min="100" />
-        <label>描述（可选）</label>
-        <input class="ca-form-input" type="text" id="ca-sleep-desc" placeholder="等待页面加载" />
-        <div class="ca-modal-actions">
-          <button class="ca-btn ca-btn-secondary ca-btn-sm" id="ca-sleep-cancel">取消</button>
-          <button class="ca-btn ca-btn-primary ca-btn-sm" id="ca-sleep-ok">确定</button>
-        </div>
-      </div>
-    `;
-    state.panel.appendChild(overlay);
-
-    overlay.querySelector("#ca-sleep-cancel").addEventListener("click", () => {
-      overlay.remove();
-      state.recording = true;
-    });
-    overlay.querySelector("#ca-sleep-ok").addEventListener("click", () => {
-      const duration = parseInt(overlay.querySelector("#ca-sleep-duration").value) || 1000;
-      const desc = overlay.querySelector("#ca-sleep-desc").value.trim() || `等待 ${duration}ms`;
-      overlay.remove();
-
-      state.steps.push({ type: "sleep", description: desc, duration });
-      updateRecordedList();
-      saveState();
-      setStatus(`已添加: 延时等待 ${duration}ms`);
-      state.recording = false;
-      state.panel.querySelectorAll(".ca-step-btn").forEach(b => b.classList.remove("active"));
+    createModal({
+      title: "⏳ 延时等待",
+      fields: [
+        { name: "duration", kind: "number", label: "等待时长（毫秒）", placeholder: "1000", value: "1000", min: 100 },
+        { name: "desc", kind: "text", label: "描述（可选）", placeholder: "等待页面加载" },
+      ],
+      onSubmit: (values) => {
+        const duration = values.duration || 1000;
+        const description = values.desc || `等待 ${duration}ms`;
+        state.steps.push({ type: "sleep", description, duration });
+        updateRecordedList();
+        saveState();
+        setStatus(`已添加: 延时等待 ${duration}ms`);
+        state.recording = false;
+        state.panel.querySelectorAll(".ca-step-btn").forEach(b => b.classList.remove("active"));
+      },
     });
   }
 
   function showScreenshotModal(_el, _info) {
-    const overlay = document.createElement("div");
-    overlay.className = "ca-modal-overlay";
-    overlay.innerHTML = `
-      <div class="ca-modal">
-        <h4>📸 页面截图</h4>
-        <label>截图路径/名称（可选）</label>
-        <input class="ca-form-input" type="text" id="ca-screenshot-path" placeholder="debug/screenshot.png" />
-        <label>描述（可选）</label>
-        <input class="ca-form-input" type="text" id="ca-screenshot-desc" placeholder="页面截图" />
-        <div class="ca-modal-actions">
-          <button class="ca-btn ca-btn-secondary ca-btn-sm" id="ca-screenshot-cancel">取消</button>
-          <button class="ca-btn ca-btn-primary ca-btn-sm" id="ca-screenshot-ok">确定</button>
-        </div>
-      </div>
-    `;
-    state.panel.appendChild(overlay);
-
-    overlay.querySelector("#ca-screenshot-cancel").addEventListener("click", () => {
-      overlay.remove();
-      state.recording = true;
-    });
-    overlay.querySelector("#ca-screenshot-ok").addEventListener("click", () => {
-      const pathValue = overlay.querySelector("#ca-screenshot-path").value.trim();
-      const desc = overlay.querySelector("#ca-screenshot-desc").value.trim() || "页面截图";
-      overlay.remove();
-
-      const step = { type: "screenshot", description: desc };
-      if (pathValue) step.path = pathValue;
-      state.steps.push(step);
-      updateRecordedList();
-      saveState();
-      setStatus(`已添加: 页面截图`);
-      state.recording = false;
-      state.panel.querySelectorAll(".ca-step-btn").forEach(b => b.classList.remove("active"));
+    createModal({
+      title: "📸 页面截图",
+      fields: [
+        { name: "path", kind: "text", label: "截图路径/名称（可选）", placeholder: "debug/screenshot.png" },
+        { name: "desc", kind: "text", label: "描述（可选）", placeholder: "页面截图" },
+      ],
+      onSubmit: (values) => {
+        const description = values.desc || "页面截图";
+        const step = { type: "screenshot", description };
+        if (values.path) step.path = values.path;
+        state.steps.push(step);
+        updateRecordedList();
+        saveState();
+        setStatus(`已添加: 页面截图`);
+        state.recording = false;
+        state.panel.querySelectorAll(".ca-step-btn").forEach(b => b.classList.remove("active"));
+      },
     });
   }
 
   function showWaitUrlModal(_el, _info) {
-    const overlay = document.createElement("div");
-    overlay.className = "ca-modal-overlay";
-    overlay.innerHTML = `
-      <div class="ca-modal">
-        <h4>🔗 等待URL</h4>
-        <label>URL 正则表达式</label>
-        <input class="ca-form-input" type="text" id="ca-waiturl-pattern" placeholder=".*success.*" />
-        <label>超时（毫秒）</label>
-        <input class="ca-form-input" type="number" id="ca-waiturl-timeout" placeholder="10000" value="10000" min="1000" />
-        <label>描述（可选）</label>
-        <input class="ca-form-input" type="text" id="ca-waiturl-desc" placeholder="等待 URL 匹配" />
-        <div class="ca-modal-actions">
-          <button class="ca-btn ca-btn-secondary ca-btn-sm" id="ca-waiturl-cancel">取消</button>
-          <button class="ca-btn ca-btn-primary ca-btn-sm" id="ca-waiturl-ok">确定</button>
-        </div>
-      </div>
-    `;
-    state.panel.appendChild(overlay);
-
-    overlay.querySelector("#ca-waiturl-cancel").addEventListener("click", () => {
-      overlay.remove();
-      state.recording = true;
-    });
-    overlay.querySelector("#ca-waiturl-ok").addEventListener("click", () => {
-      const pattern = overlay.querySelector("#ca-waiturl-pattern").value.trim();
-      if (!pattern) {
-        setStatus("⚠️ 请输入 URL 正则表达式");
-        return;
-      }
-      const timeout = parseInt(overlay.querySelector("#ca-waiturl-timeout").value) || 10000;
-      const desc = overlay.querySelector("#ca-waiturl-desc").value.trim() || `等待 URL 匹配: ${pattern}`;
-      overlay.remove();
-
-      state.steps.push({ type: "wait_url", description: desc, pattern, timeout });
-      updateRecordedList();
-      saveState();
-      setStatus(`已添加: 等待URL匹配`);
-      state.recording = false;
-      state.panel.querySelectorAll(".ca-step-btn").forEach(b => b.classList.remove("active"));
+    createModal({
+      title: "🔗 等待URL",
+      fields: [
+        { name: "pattern", kind: "text", label: "URL 正则表达式", placeholder: ".*success.*" },
+        { name: "timeout", kind: "number", label: "超时（毫秒）", placeholder: "10000", value: "10000", min: 1000 },
+        { name: "desc", kind: "text", label: "描述（可选）", placeholder: "等待 URL 匹配" },
+      ],
+      onSubmit: (values) => {
+        if (!values.pattern) {
+          setStatus("⚠️ 请输入 URL 正则表达式");
+          return false;
+        }
+        const description = values.desc || `等待 URL 匹配: ${values.pattern}`;
+        state.steps.push({ type: "wait_url", description, pattern: values.pattern, timeout: values.timeout || 10000 });
+        updateRecordedList();
+        saveState();
+        setStatus(`已添加: 等待URL匹配`);
+        state.recording = false;
+        state.panel.querySelectorAll(".ca-step-btn").forEach(b => b.classList.remove("active"));
+      },
     });
   }
 
