@@ -14,12 +14,16 @@ import time
 
 from app.constants import AUTH_DATA_DIR
 
-from .exceptions import DecryptionError
 from .files import atomic_write
 from .logging import get_logger
 from .platform import CREATE_NO_WINDOW_FLAG, is_windows
 
 logger = get_logger("crypto", source="backend")
+
+
+class _DecryptionError(Exception):
+    """密码解密失败异常（密钥变更或数据损坏）"""
+
 
 _KEY_DIR = AUTH_DATA_DIR
 _KEY_FILE = _KEY_DIR / ".enc_key"
@@ -27,8 +31,25 @@ _ENC_PREFIX = "ENC:"
 
 _cached_raw_key: bytes | None = None
 _cached_fernet_key: bytes | None = None
+_cached_legacy_fernet_key: bytes | None = None
 _decryption_failed = threading.Event()
 _key_lock = threading.RLock()
+
+# 一次性告警标志：cryptography 缺失时避免重复刷日志
+_crypto_missing_warned = False
+_crypto_missing_decrypt_warned = False
+
+
+def _backup_key_file() -> None:
+    """备份密钥文件（密钥损坏或长度异常时调用）"""
+    backup_path = _KEY_FILE.with_suffix(f".bak.{int(time.time())}")
+    try:
+        _KEY_FILE.rename(backup_path)
+        logger.info("备份密钥文件成功: {}", backup_path)
+    except FileNotFoundError:
+        pass
+    except OSError as backup_err:
+        logger.warning("备份密钥文件失败: {}", backup_err)
 
 
 def _get_or_create_key() -> bytes:
@@ -52,20 +73,15 @@ def _get_or_create_key() -> bytes:
                     _cached_raw_key = key
                     return key
                 else:
-                    logger.warning("密钥文件长度异常: 期望 32 字节，实际 {} 字节", len(key))
+                    logger.warning(
+                        "密钥文件长度异常: 期望 32 字节，实际 {} 字节", len(key)
+                    )
+                    _backup_key_file()
             except Exception as exc:
-                logger.error("读取加密密钥失败: {}", exc)
-                # 备份损坏的密钥文件
-                backup_path = _KEY_FILE.with_suffix(f".bak.{int(time.time())}")
-                try:
-                    _KEY_FILE.rename(backup_path)
-                    logger.info("已备份损坏的密钥文件到: {}", backup_path)
-                except FileNotFoundError:
-                    pass  # 文件不存在，无需备份
-                except OSError as backup_err:
-                    logger.warning("备份密钥文件失败: {}", backup_err)
+                logger.warning("读取加密密钥失败: {}", exc)
+                _backup_key_file()
                 logger.warning(
-                    "将生成新密钥，此前保存的密码将无法自动恢复，请在设置中重新输入密码"
+                    "将生成新密钥，此前保存的密码将无法自动恢复，请重新输入密码"
                 )
 
         # 生成新密钥
@@ -84,6 +100,8 @@ def _get_or_create_key() -> bytes:
                 import subprocess
 
                 username = os.environ.get("USERNAME") or getpass.getuser()
+                # 域环境用户名格式为 DOMAIN\user，icacls 只需用户名部分
+                username = username.split("\\")[-1]
                 subprocess.run(
                     [
                         "icacls",
@@ -108,7 +126,7 @@ def _get_or_create_key() -> bytes:
 
 
 def _derive_fernet_key() -> bytes:
-    """从原始密钥派生 Fernet 兼容的密钥（32 字节 URL-safe base64 编码）"""
+    """使用 HKDF 从原始密钥派生 Fernet 兼容的密钥（32 字节 URL-safe base64 编码）"""
     global _cached_fernet_key
     if _cached_fernet_key is not None:
         return _cached_fernet_key
@@ -117,16 +135,45 @@ def _derive_fernet_key() -> bytes:
         if _cached_fernet_key is not None:
             return _cached_fernet_key
 
+        from cryptography.hazmat.primitives import hashes
+        from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+
         raw_key = _get_or_create_key()
         # Fernet 密钥格式：32 字节原始数据（16 签名 + 16 加密）→ URL-safe base64 编码 → 44 字符字符串
+        # 使用 HKDF 派生标准 32 字节密钥
+        hkdf = HKDF(
+            algorithm=hashes.SHA256(),
+            length=32,
+            salt=None,
+            info=b"campus-auth-fernet-key",
+        )
+        derived = hkdf.derive(raw_key)
+        _cached_fernet_key = base64.urlsafe_b64encode(derived)
+        return _cached_fernet_key
+
+
+def _derive_legacy_fernet_key() -> bytes:
+    """旧版密钥派生（SHA-256 截断拼接），仅用于解密旧数据。"""
+    global _cached_legacy_fernet_key
+    if _cached_legacy_fernet_key is not None:
+        return _cached_legacy_fernet_key
+
+    with _key_lock:
+        if _cached_legacy_fernet_key is not None:
+            return _cached_legacy_fernet_key
+
+        raw_key = _get_or_create_key()
         signing_key = hashlib.sha256(raw_key + b":signing").digest()[:16]
         encryption_key = hashlib.sha256(raw_key + b":encryption").digest()[:16]
-        _cached_fernet_key = base64.urlsafe_b64encode(signing_key + encryption_key)
-        return _cached_fernet_key
+        _cached_legacy_fernet_key = base64.urlsafe_b64encode(
+            signing_key + encryption_key
+        )
+        return _cached_legacy_fernet_key
 
 
 def encrypt_password(plaintext: str) -> str:
     """加密密码，返回 ENC: 前缀的密文字符串"""
+    global _crypto_missing_warned, _crypto_missing_decrypt_warned
     if not plaintext:
         return ""
 
@@ -136,22 +183,29 @@ def encrypt_password(plaintext: str) -> str:
         # cryptography 是 pyproject.toml 中的必需依赖（uv sync 会自动安装），
         # 正常部署下不可能缺失。此分支仅作为极端防御（如手动删除 .venv 中的包）。
         # 密码以明文写入 settings.json，已有 warning 日志提示用户。
-        logger.warning(
-            "cryptography 库未安装，密码将以明文存储，"
-            "建议通过 uv add cryptography 安装依赖以启用加密保护"
-        )
+        with _key_lock:
+            if not _crypto_missing_warned:
+                logger.warning(
+                    "cryptography 库未安装，密码将以明文存储，"
+                    "建议通过 uv add cryptography 安装依赖以启用加密保护"
+                )
+                _crypto_missing_warned = True
         return plaintext
+
+    # cryptography 可用，重置告警标志（依赖恢复后重新启用告警机制）
+    with _key_lock:
+        _crypto_missing_warned = False
+        _crypto_missing_decrypt_warned = False
 
     key = _derive_fernet_key()
     f = Fernet(key)
     encrypted = f.encrypt(plaintext.encode("utf-8"))
-    # 新密码加密成功，清除之前的解密失败标记
-    clear_decryption_error()
     return f"{_ENC_PREFIX}{encrypted.decode('ascii')}"
 
 
 def decrypt_password(ciphertext: str) -> str:
     """解密密码。如果不是加密格式（无 ENC: 前缀），原样返回（向后兼容明文）"""
+    global _crypto_missing_warned, _crypto_missing_decrypt_warned
     if not ciphertext:
         return ""
 
@@ -164,20 +218,36 @@ def decrypt_password(ciphertext: str) -> str:
     try:
         from cryptography.fernet import Fernet, InvalidToken
 
+        # cryptography 可用，重置告警标志（依赖恢复后重新启用告警机制）
+        with _key_lock:
+            _crypto_missing_warned = False
+            _crypto_missing_decrypt_warned = False
+
+        # 优先使用 HKDF 密钥解密
         key = _derive_fernet_key()
         f = Fernet(key)
-        return f.decrypt(encrypted_data.encode("ascii")).decode("utf-8")
+        try:
+            result = f.decrypt(encrypted_data.encode("ascii")).decode("utf-8")
+        except (InvalidToken, ValueError):
+            # HKDF 密钥解密失败，回退到旧版密钥（向后兼容）
+            legacy_key = _derive_legacy_fernet_key()
+            f_legacy = Fernet(legacy_key)
+            result = f_legacy.decrypt(encrypted_data.encode("ascii")).decode("utf-8")
+        # 解密成功，清除之前的解密失败标记（按活跃方案粒度，避免误清其他方案）
+        _clear_decryption_error()
+        return result
     except ImportError:
         _decryption_failed.set()
-        logger.error("cryptography 库未安装，无法解密密码，请安装依赖后重试")
-        raise DecryptionError("cryptography 库未安装，无法解密密码") from None
+        with _key_lock:
+            if not _crypto_missing_decrypt_warned:
+                logger.warning("cryptography 库未安装，无法解密密码，请安装依赖后重试")
+                _crypto_missing_decrypt_warned = True
+        raise _DecryptionError("cryptography 库未安装，无法解密密码") from None
     except (InvalidToken, ValueError, OSError) as e:
         # 解密失败：可能是密钥变更，记录错误并抛出异常
         _decryption_failed.set()
-        logger.error(
-            "密码解密失败（可能是密钥变更或数据损坏），请在设置页面重新输入密码"
-        )
-        raise DecryptionError("密码解密失败，请重新输入密码") from e
+        logger.warning("密码解密失败: 可能是密钥变更或数据损坏，请重新输入密码")
+        raise _DecryptionError("密码解密失败，请重新输入密码") from e
 
 
 def has_decryption_error() -> bool:
@@ -185,66 +255,24 @@ def has_decryption_error() -> bool:
     return _decryption_failed.is_set()
 
 
-def clear_decryption_error() -> None:
+def _clear_decryption_error() -> None:
     """清除解密失败标记（重新输入密码后调用）"""
     _decryption_failed.clear()
 
 
-def mask_password(value: str) -> str:
-    """密码脱敏：返回掩码用于前端显示"""
-    if not value:
-        return ""
-    return "••••••••"  # 统一长度掩码，不泄露密码长度
-
-
 def save_password_field(raw: str | None, existing_encrypted: str) -> str:
-    """处理前端提交的密码：掩码保留原值，ENC 原样返回，明文加密存储。
+    """处理前端提交的密码。
 
-    分支行为：
-    - raw is None （字段未传）→ 静默返回 existing_encrypted（无日志）
-    - raw == ""    （显式传空）→ 返回 existing_encrypted
-      + existing_encrypted 为空 → 警告 + 返回 ""
-      + existing_encrypted 有值 → 保留（无日志）
-    - raw startswith "•" （掩码）→ 同 raw=="" 行为
-    - raw startswith "ENC:" （已是加密值）→ 原样返回，不二次加密
-    - 其他（明文密码） → encrypt_password(raw) 加密后返回
-
-    Args:
-        raw: 前端传来的原始值。None = 未传（静默），"" = 显式置空
-        existing_encrypted: 数据库中已有的加密密码（ENC:xxx 或 ""）
-
-    Returns:
-        加密后的密码字符串（ENC: 前缀）或空字符串
+    语义：
+    - raw is None 或 "" → 不修改，返回 existing_encrypted
+    - raw startswith "ENC:" → 已是加密值，原样返回
+    - 其他（明文密码） → 加密后返回
     """
-    if raw is None:
-        # 未传密码 → 无操作，保留原值。不发警告（合法场景）
-        return existing_encrypted or ""
-    if raw.startswith("•"):
-        # 掩码 → 保留已有密码
-        # 已知限制：若用户真实密码以 • (U+2022) 开头会被误判为掩码。
-        # 实际不会发生：校园网密码格式为字母数字，不含 Unicode bullet 字符。
-        # 前端掩码固定为 "••••••••"（8 个 •），此处用 startswith 而非精确匹配
-        # 是为了兼容掩码长度可能变化的情况。
-        return existing_encrypted or ""
-    if raw == "":
-        # 显式置空 → 清除密码
-        return ""
+    if raw is None or raw == "":
+        return existing_encrypted
     if raw.startswith("ENC:"):
-        # 已是加密值（来自已保存的方案）→ 原样返回
         return raw
-    # 明文密码 → 加密存储
     return encrypt_password(raw)
-
-
-def safe_decrypt(ciphertext: str) -> tuple[str, bool]:
-    """解密密码。返回 (解密结果, 是否有错误)"""
-    if not ciphertext:
-        return ("", False)
-    try:
-        return (decrypt_password(ciphertext), False)
-    except DecryptionError:
-        logger.error("密码解密失败，使用空密码")
-        return ("", True)
 
 
 def decrypt_password_field(
@@ -265,10 +293,24 @@ def decrypt_password_field(
         (解密结果, 是否有错误)
     """
     if raw_pwd.startswith("ENC:"):
-        return safe_decrypt(raw_pwd)
+        try:
+            return (decrypt_password(raw_pwd), False)
+        except _DecryptionError as e:
+            if label:
+                logger.warning("{} 密码解密失败: {}", label, e)
+            else:
+                logger.warning("密码解密失败: {}", e)
+            return ("", True)
     elif raw_pwd.startswith("•"):
         if fallback_pwd:
-            return safe_decrypt(fallback_pwd)
+            try:
+                return (decrypt_password(fallback_pwd), False)
+            except _DecryptionError as e:
+                if label:
+                    logger.warning("{} 回退密码解密失败: {}", label, e)
+                else:
+                    logger.warning("回退密码解密失败: {}", e)
+                return ("", True)
         else:
             if label:
                 logger.warning("{} 密码为掩码但回退密码为空", label)
@@ -278,7 +320,11 @@ def decrypt_password_field(
     else:
         if fallback_pwd:
             if label:
-                logger.warning("{} 密码为空，使用回退密码", label)
-            return safe_decrypt(fallback_pwd)
+                logger.debug("{} 密码为空，使用回退密码", label)
+            try:
+                return (decrypt_password(fallback_pwd), False)
+            except _DecryptionError as e:
+                logger.warning("回退密码解密失败，使用空密码: {}", e)
+                return ("", True)
         else:
             return ("", False)

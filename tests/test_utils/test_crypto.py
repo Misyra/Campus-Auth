@@ -6,7 +6,6 @@
 - encrypt_password: 空字符串、正常加密、cryptography 未安装
 - decrypt_password: 空字符串、明文回退、正常解密、cryptography 未安装、解密失败
 - has_decryption_error / clear_decryption_error
-- mask_password
 - save_password_field: 全部分支
 """
 
@@ -17,7 +16,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 import app.utils.crypto as crypto_mod
-from app.utils.exceptions import DecryptionError
+from app.utils.crypto import _DecryptionError
 
 
 @pytest.fixture(autouse=True)
@@ -93,7 +92,7 @@ class TestCorruptedKeyFile:
         assert len(backups) == 1
 
     def test_corrupted_key_file_wrong_length(self, _reset_crypto_cache):
-        """base64 解码后长度不是 32 字节时也应重新生成。"""
+        """base64 解码后长度不是 32 字节时应备份并重新生成。"""
         crypto_mod = _reset_crypto_cache
         import base64
 
@@ -106,6 +105,9 @@ class TestCorruptedKeyFile:
             key = crypto_mod._get_or_create_key()
 
         assert len(key) == 32
+        # 长度异常时也应备份原文件
+        backups = list(crypto_mod._KEY_DIR.glob(".enc_key.bak.*"))
+        assert len(backups) == 1
 
     def test_backup_rename_file_not_found(self, _reset_crypto_cache):
         """备份时文件已不存在（竞态），应静默处理。"""
@@ -201,6 +203,65 @@ class TestIcaclsErrors:
         assert len(key) == 32
 
 
+# ── icacls 域用户名处理 ──
+
+
+class TestIcaclsDomainUsername:
+    """验证 Windows icacls 域环境用户名格式处理。"""
+
+    def test_domain_username_extracted(self, _reset_crypto_cache):
+        """域环境格式 DOMAIN\\user 应提取用户名部分。"""
+        crypto_mod = _reset_crypto_cache
+
+        mock_run = MagicMock(return_value=MagicMock(returncode=0))
+
+        with (
+            patch.object(crypto_mod, "is_windows", return_value=True),
+            patch("subprocess.run", mock_run),
+            patch.dict("os.environ", {"USERNAME": "CORP\\john.doe"}, clear=True),
+        ):
+            crypto_mod._get_or_create_key()
+
+        # 验证 icacls 命令中使用的是提取后的用户名
+        call_args = mock_run.call_args[0][0]
+        assert call_args[4] == "john.doe:F"
+
+    def test_normal_username_unchanged(self, _reset_crypto_cache):
+        """普通用户名（无反斜杠）应保持不变。"""
+        crypto_mod = _reset_crypto_cache
+
+        mock_run = MagicMock(return_value=MagicMock(returncode=0))
+
+        with (
+            patch.object(crypto_mod, "is_windows", return_value=True),
+            patch("subprocess.run", mock_run),
+            patch.dict("os.environ", {"USERNAME": "TestUser"}, clear=True),
+        ):
+            crypto_mod._get_or_create_key()
+
+        # 验证 icacls 命令中使用的是原始用户名
+        call_args = mock_run.call_args[0][0]
+        assert call_args[4] == "TestUser:F"
+
+    def test_fallback_getuser_domain_format(self, _reset_crypto_cache):
+        """getpass.getuser() 返回域格式 DOMAIN\\admin 时也应正确处理。"""
+        crypto_mod = _reset_crypto_cache
+
+        mock_run = MagicMock(return_value=MagicMock(returncode=0))
+
+        with (
+            patch.object(crypto_mod, "is_windows", return_value=True),
+            patch("subprocess.run", mock_run),
+            patch.dict("os.environ", {}, clear=True),  # 清除 USERNAME
+            patch("getpass.getuser", return_value="DOMAIN\\admin"),
+        ):
+            crypto_mod._get_or_create_key()
+
+        # 验证 icacls 命令中使用的是提取后的用户名
+        call_args = mock_run.call_args[0][0]
+        assert call_args[4] == "admin:F"
+
+
 # ── _derive_fernet_key 缓存命中（116行）──
 
 
@@ -282,7 +343,7 @@ class TestDecryptPassword:
         assert decrypted == "testpass"
 
     def test_decrypt_cryptography_not_installed(self, _reset_crypto_cache):
-        """cryptography 未安装时解密应抛出 DecryptionError。"""
+        """cryptography 未安装时解密应抛出 _DecryptionError。"""
         crypto_mod = _reset_crypto_cache
 
         import builtins
@@ -295,20 +356,20 @@ class TestDecryptPassword:
             return real_import(name, *args, **kwargs)
 
         with patch("builtins.__import__", side_effect=mock_import):
-            with pytest.raises(DecryptionError, match="cryptography"):
+            with pytest.raises(_DecryptionError, match="cryptography"):
                 crypto_mod.decrypt_password("ENC:somedata")
 
         assert crypto_mod.has_decryption_error()
 
     def test_decrypt_failure_sets_error_flag(self, _reset_crypto_cache):
-        """解密失败应设置失败标记并抛出 DecryptionError。"""
+        """解密失败应设置失败标记并抛出 _DecryptionError。"""
         crypto_mod = _reset_crypto_cache
         with patch.object(crypto_mod, "is_windows", return_value=False):
             # 先生成密钥
             crypto_mod._derive_fernet_key()
 
         # 使用无效的加密数据
-        with pytest.raises(DecryptionError, match="解密失败"):
+        with pytest.raises(_DecryptionError, match="解密失败"):
             crypto_mod.decrypt_password("ENC:invaliddata")
 
         assert crypto_mod.has_decryption_error()
@@ -317,7 +378,7 @@ class TestDecryptPassword:
 # ── has_decryption_error / clear_decryption_error ──
 
 
-class TestDecryptionErrorFlag:
+class Test_DecryptionErrorFlag:
     """验证解密失败标记的读写。"""
 
     def test_initial_state_no_error(self, _reset_crypto_cache):
@@ -328,29 +389,8 @@ class TestDecryptionErrorFlag:
         """设置后应能清除。"""
         crypto_mod._decryption_failed.set()
         assert crypto_mod.has_decryption_error()
-        crypto_mod.clear_decryption_error()
+        crypto_mod._clear_decryption_error()
         assert not crypto_mod.has_decryption_error()
-
-
-# ── mask_password ──
-
-
-class TestMaskPassword:
-    """验证密码脱敏逻辑。"""
-
-    def test_mask_empty(self):
-        assert crypto_mod.mask_password("") == ""
-
-    def test_mask_none(self):
-        assert crypto_mod.mask_password(None) == ""
-
-    def test_mask_normal(self):
-        assert crypto_mod.mask_password("secret") == "••••••••"
-
-    def test_mask_preserves_length(self):
-        """不论密码长度，掩码统一为 8 个点。"""
-        assert crypto_mod.mask_password("a") == "••••••••"
-        assert crypto_mod.mask_password("a" * 100) == "••••••••"
 
 
 # ── save_password_field ──
@@ -359,27 +399,24 @@ class TestMaskPassword:
 class TestSavePasswordField:
     """验证 save_password_field 的全部分支。"""
 
-    def test_raw_none_returns_existing(self):
+    def test_raw_none_returns_existing(self, _reset_crypto_cache):
         """raw=None 应返回 existing_encrypted。"""
         assert crypto_mod.save_password_field(None, "ENC:old") == "ENC:old"
 
-    def test_raw_none_existing_empty(self):
+    def test_raw_none_existing_empty(self, _reset_crypto_cache):
         """raw=None 且 existing 为空应返回空。"""
         assert crypto_mod.save_password_field(None, "") == ""
 
-    def test_raw_mask_returns_existing(self):
-        """掩码值应保留已有加密。"""
-        assert crypto_mod.save_password_field("••••••••", "ENC:old") == "ENC:old"
+    def test_raw_mask_gets_encrypted(self, _reset_crypto_cache):
+        """掩码值不再特殊处理，作为明文加密。"""
+        result = crypto_mod.save_password_field("••••••••", "ENC:old")
+        assert result.startswith("ENC:")
 
-    def test_raw_mask_existing_empty(self):
-        """掩码值且 existing 为空应返回空。"""
-        assert crypto_mod.save_password_field("••••••••", "") == ""
+    def test_raw_empty_preserves_existing(self, _reset_crypto_cache):
+        """空串应保留已有加密值。"""
+        assert crypto_mod.save_password_field("", "ENC:old") == "ENC:old"
 
-    def test_raw_empty_returns_empty(self):
-        """显式置空应返回空。"""
-        assert crypto_mod.save_password_field("", "ENC:old") == ""
-
-    def test_raw_enc_returns_same(self):
+    def test_raw_enc_returns_same(self, _reset_crypto_cache):
         """已加密值应原样返回。"""
         enc = "ENC:already_encrypted"
         assert crypto_mod.save_password_field(enc, "ENC:old") == enc
@@ -392,3 +429,49 @@ class TestSavePasswordField:
 
         assert result.startswith("ENC:")
         assert result != "newpassword"
+
+
+# ── Windows icacls 用户名来源 (from test_crypto_fix) ──
+
+
+class TestWindowsIcaclsUsername:
+    """测试 Windows icacls 命令中的用户名来源。"""
+
+    def test_icacls_uses_real_username_when_env_missing(self, _reset_crypto_cache):
+        """当 USERNAME 环境变量不存在时，应使用 getpass.getuser() 返回的真实用户名。"""
+        crypto_mod = _reset_crypto_cache
+        fake_username = "RealTestUser"
+
+        mock_run = MagicMock(return_value=MagicMock(returncode=0))
+
+        with (
+            patch.object(crypto_mod, "is_windows", return_value=True),
+            patch("subprocess.run", mock_run),
+            patch.dict("os.environ", {}, clear=True),
+            patch("getpass.getuser", return_value=fake_username),
+        ):
+            crypto_mod._get_or_create_key()
+
+        assert mock_run.called, "subprocess.run 应该被调用"
+        cmd = mock_run.call_args[0][0]
+        grant_arg = cmd[4]
+        assert grant_arg == f"{fake_username}:F", (
+            f"icacls 应使用真实用户名 '{fake_username}'，实际为 '{grant_arg}'"
+        )
+        assert "Users:F" not in cmd, "不应使用 'Users' 组名作为默认值"
+
+    def test_icacls_uses_env_username_when_present(self, _reset_crypto_cache):
+        """当 USERNAME 环境变量存在时，应优先使用环境变量中的值。"""
+        crypto_mod = _reset_crypto_cache
+        mock_run = MagicMock(return_value=MagicMock(returncode=0))
+
+        with (
+            patch.object(crypto_mod, "is_windows", return_value=True),
+            patch("subprocess.run", mock_run),
+            patch.dict("os.environ", {"USERNAME": "EnvUser"}, clear=True),
+        ):
+            crypto_mod._get_or_create_key()
+
+        assert mock_run.called
+        cmd = mock_run.call_args[0][0]
+        assert cmd[4] == "EnvUser:F"

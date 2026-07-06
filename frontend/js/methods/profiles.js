@@ -4,7 +4,7 @@ import { extractApiError } from './utils.js';
 export const profileMethods = {
   async fetchProfiles() {
     try {
-      const { data } = await this.$api.get('/api/profiles');
+      const data = await this.$apiService.profiles.list();
       this.profiles = data.profiles || {};
       this.activeProfileId = data.active_profile || 'default';
       this.autoSwitch = data.auto_switch !== false;
@@ -16,7 +16,7 @@ export const profileMethods = {
     this.editorDetectResult = null;
     if (profileId && this.profiles[profileId]) {
       try {
-        const { data } = await this.$api.get(`/api/profiles/${profileId}`);
+        const data = await this.$apiService.profiles.get(profileId);
         this.editingProfile = {
           id: profileId,
           ...data.settings,
@@ -54,7 +54,7 @@ export const profileMethods = {
     const { id, _isNew, ...settings } = this.editingProfile;
 
     try {
-      const { data } = await this.$api.put(`/api/profiles/${profileId}`, settings);
+      const data = await this.$apiService.profiles.save(profileId, settings);
       if (data.success) {
         this.frontendLogger.info('profiles', '方案保存成功: ' + profileId);
         this.toastOnly(true, data.message || '方案保存成功');
@@ -78,7 +78,7 @@ export const profileMethods = {
   async deleteProfile(profileId) {
     if (!confirm('确定要删除这个配置方案吗？')) return;
     try {
-      const { data } = await this.$api.delete(`/api/profiles/${profileId}`);
+      const data = await this.$apiService.profiles.delete(profileId);
       if (data.success) {
         this.frontendLogger.info('profiles', '方案删除成功: ' + profileId);
         this.toastOnly(true, '方案删除成功');
@@ -103,7 +103,7 @@ export const profileMethods = {
   async setActiveProfile(profileId) {
     if (this.autoSwitch) return;
     try {
-      const { data } = await this.$api.post(`/api/profiles/active/${profileId}`);
+      const data = await this.$apiService.profiles.setActive(profileId);
       if (data.success) {
         this.activeProfileId = profileId;
         this.frontendLogger.info('profiles', data.message || `已切换到方案 ${profileId}`);
@@ -122,7 +122,7 @@ export const profileMethods = {
     busyParent[busyKey] = true;
     this[resultKey] = null;
     try {
-      const { data } = await this.$api.post('/api/profiles/detect');
+      const data = await this.$apiService.profiles.detect();
       this[resultKey] = fullData ? data : { gateway_ip: data.gateway_ip, ssid: data.ssid };
       return fullData ? data : null;
     } catch (error) {
@@ -150,12 +150,12 @@ export const profileMethods = {
     this._autoSwitchInFlight = true;
     const newState = !this.autoSwitch;
     try {
-      const { data } = await this.$api.post('/api/profiles/auto-switch', { enabled: newState });
+      const data = await this.$apiService.profiles.toggleAutoSwitch(newState);
       if (data.success) {
         this.autoSwitch = newState;
-        // 更新活动方案
-        if (data.active_profile) {
-          this.activeProfileId = data.active_profile;
+        // 更新活动方案（ApiResponse 信封，active_profile 在 data.data 中）
+        if (data.data?.active_profile) {
+          this.activeProfileId = data.data.active_profile;
         }
         this.frontendLogger.info('profiles', data.message);
         this.toastOnly(true, data.message);

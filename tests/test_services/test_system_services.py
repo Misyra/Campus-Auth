@@ -232,19 +232,29 @@ class TestPlaywrightCacheDir:
 
 class TestDirSizeMb:
     def test_empty_dir(self, tmp_path):
-        assert _dir_size_mb(tmp_path) == 0.0
+        result = _dir_size_mb(tmp_path)
+        assert result.size_mb == 0.0
+        assert result.complete is True
 
     def test_with_files(self, tmp_path):
         # 写入超过 1MB 以确保 round(..., 1) 不为 0
         (tmp_path / "test.txt").write_bytes(b"x" * (1024 * 1024 + 1))
-        size = _dir_size_mb(tmp_path)
-        assert size > 0
+        result = _dir_size_mb(tmp_path)
+        assert result.size_mb > 0
+        assert result.complete is True
 
     def test_nonexistent_dir(self, tmp_path):
-        assert _dir_size_mb(tmp_path / "nonexistent") == 0.0
+        result = _dir_size_mb(tmp_path / "nonexistent")
+        assert result.size_mb == 0.0
+        assert result.complete is True
 
 
 class TestUninstallCheckAutostart:
+    def setup_method(self):
+        import app.services.uninstall as _um
+
+        _um._autostart_service = None
+
     @patch("app.services.autostart.AutoStartService")
     def test_enabled(self, mock_svc_class):
         mock_svc = MagicMock()

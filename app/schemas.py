@@ -1,15 +1,18 @@
 from __future__ import annotations
 
-import json
 import re
 from dataclasses import dataclass
 from enum import StrEnum
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from app.utils.logging import VALID_LOG_LEVELS
-
-_URL_PATTERN = re.compile(r"^https?://")
+from app.constants import (
+    DEFAULT_HTTP_TARGETS,
+    DEFAULT_NETWORK_TARGETS,
+    DEFAULT_URL_CHECK_URLS,
+    URL_PATTERN,
+    VALID_LOG_LEVELS,
+)
 
 
 class StartupAction(StrEnum):
@@ -42,7 +45,6 @@ class LaunchSource(StrEnum):
 
     MANUAL = "manual"
     AUTOSTART = "autostart"
-    UNKNOWN = "unknown"
 
 
 class StartupResult(StrEnum):
@@ -62,7 +64,6 @@ class LoginResult(StrEnum):
 
 @dataclass
 class AppConfig:
-    config_version: int = 2
     startup_action: StartupAction = StartupAction.NONE
     runtime_mode: RuntimeMode = RuntimeMode.FULL  # CLI --runtime-mode 覆盖
     minimize_to_tray: bool = True
@@ -73,10 +74,11 @@ class AppConfig:
     def from_runtime_config(cls, config: RuntimeConfig) -> AppConfig:
         """从 RuntimeConfig 统一派生 AppConfig，消除手动同步风险。"""
         return cls(
-            startup_action=StartupAction(config.startup_action),
-            minimize_to_tray=config.minimize_to_tray,
-            lightweight_tray=config.lightweight_tray,
-            auto_open_browser=config.auto_open_browser,
+            startup_action=StartupAction(config.app_settings.startup_action),
+            runtime_mode=RuntimeMode(config.app_settings.runtime_mode),
+            minimize_to_tray=config.app_settings.minimize_to_tray,
+            lightweight_tray=config.app_settings.lightweight_tray,
+            auto_open_browser=config.app_settings.auto_open_browser,
         )
 
 
@@ -100,7 +102,7 @@ class RuntimeFeatures:
 
 def _validate_auth_url(v: str) -> str:
     v = v.strip()
-    if v and not _URL_PATTERN.match(v):
+    if v and not URL_PATTERN.match(v):
         raise ValueError("认证地址必须以 http:// 或 https:// 开头")
     return v
 
@@ -120,10 +122,66 @@ _BROWSER_ARGS_DEFAULT = (
 )
 
 
+# ── GET 端点响应模型 ──
 
-class ActionResponse(BaseModel):
-    success: bool
-    message: str
+
+class ProfileSummary(BaseModel):
+    """方案列表中的单个方案摘要。"""
+
+    name: str = ""
+    match_gateway_ip: str = ""
+    match_ssid: str = ""
+    carrier: str = "无"
+    carrier_custom: str = ""
+    auth_url: str = ""
+    active_task: str = ""
+
+
+class ProfileListResponse(BaseModel):
+    """GET /api/profiles 响应。"""
+
+    profiles: dict[str, ProfileSummary] = Field(default_factory=dict)
+    active_profile: str = "default"
+    auto_switch: bool = False
+
+
+class ProfileDetailResponse(BaseModel):
+    """GET /api/profiles/{id} 响应。"""
+
+    profile_id: str
+    settings: Profile
+
+
+class BrowserInfo(BaseModel):
+    """浏览器信息。"""
+
+    channel: str
+    name: str
+    icon: str = ""
+    installed: bool = False
+    needs_download: bool = False
+    description: str = ""
+
+
+class BrowserListResponse(BaseModel):
+    """GET /api/browsers 响应。"""
+
+    browsers: list[BrowserInfo] = Field(default_factory=list)
+    current: str = "playwright"
+
+
+class TaskSummary(BaseModel):
+    """任务列表中的单个任务。"""
+
+    id: str = ""
+    name: str = ""
+    description: str = ""
+    type: str = ""
+    binary_path: str = ""
+
+
+class LogLevelResponse(BaseModel):
+    level: str = "INFO"
 
 
 class MonitorStatusResponse(BaseModel):
@@ -156,20 +214,21 @@ class AutoStartStatusResponse(BaseModel):
     enabled: bool
     method: str
     location: str
-    lightweight: bool = True
+    runtime_mode: str = "full"
 
 
-class Profile(BaseModel):
+class Profile(BaseModel, frozen=True):
     """认证方案 — 凭证 + 匹配规则。
 
     每个方案独立持有自己的凭证，不存在"留空回退到全局"语义。
     替代 AuthProfile，用于新的 ProfilesData 结构。
     """
+
     name: str = Field(default="默认方案")
     match_gateway_ip: str = ""
     match_ssid: str = ""
     username: str = ""
-    password: str = ""          # ENC: 加密存储
+    password: str | None = None  # None 表示不修改，"" 表示清空，"ENC:..." 表示已加密
     auth_url: str = ""
     carrier: str = "无"
     carrier_custom: str = ""
@@ -181,13 +240,11 @@ class Profile(BaseModel):
         return _validate_auth_url(v)
 
 
-# 向后兼容别名
-AuthProfile = Profile
-
-
 def get_runtime_features(
-    mode: RuntimeMode | str, minimize_to_tray: bool, auto_open_browser: bool,
-    lightweight_tray: bool = True
+    mode: RuntimeMode | str,
+    minimize_to_tray: bool,
+    auto_open_browser: bool,
+    lightweight_tray: bool = True,
 ) -> RuntimeFeatures:
     """根据运行模式派生特性标志"""
     if mode == RuntimeMode.LIGHTWEIGHT:
@@ -207,7 +264,7 @@ def get_runtime_features(
 
 
 class BrowserSettings(BaseModel, frozen=True):
-    """浏览器运行参数 — PlaywrightWorker / LoginAttemptHandler 消费。
+    """浏览器运行参数 — PlaywrightWorker / LoginAttempt 消费。
 
     字段名与旧 dict 键名保持兼容，最小化消费端迁移量。
     """
@@ -231,10 +288,11 @@ class BrowserSettings(BaseModel, frozen=True):
     browser_channel: BrowserChannel = BrowserChannel.MSEdge
     browser_custom_path: str = ""
     custom_browser_engine: str = "auto"
+    persistent_context: bool = False
 
 
 class LoginCredentials(BaseModel, frozen=True):
-    """登录凭证 — LoginAttemptHandler / LoginOrchestrator 消费。"""
+    """登录凭证 — LoginAttempt / LoginOrchestrator 消费。"""
 
     username: str = ""
     password: str = ""
@@ -243,49 +301,53 @@ class LoginCredentials(BaseModel, frozen=True):
     carrier_custom: str = ""
 
 
+def _parse_targets(raw: str) -> list[str]:
+    return [s.strip() for s in re.split(r"[,\n]", raw) if s.strip()]
+
+
 class MonitorSettings(BaseModel, frozen=True):
     """网络监控参数 — NetworkMonitorCore 消费。"""
 
     check_interval_seconds: int = Field(default=300, ge=10, le=86400)
     network_check_timeout: int = Field(default=2, ge=1, le=30)
-    ping_targets: list[str] = Field(default_factory=lambda: ["8.8.8.8:53", "114.114.114.114:53", "www.baidu.com:443"])
+    ping_targets: list[str] = Field(
+        default_factory=lambda: _parse_targets(DEFAULT_NETWORK_TARGETS)
+    )
     enable_tcp_check: bool = False
     enable_http_check: bool = False
     enable_local_check: bool = True
-    test_urls: list[str] = Field(default_factory=lambda: [
-        "https://connect.rom.miui.com/generate_204",
-        "https://connectivitycheck.platform.hicloud.com/generate_204",
-    ])
+    test_urls: list[str] = Field(
+        default_factory=lambda: _parse_targets(DEFAULT_HTTP_TARGETS)
+    )
     check_auth_url: bool = False
     auth_url_targets: list[str] = Field(default_factory=list)
-    url_check_urls: list[str] = Field(default_factory=lambda: [
-        "http://captive.apple.com/hotspot-detect.html|Success",
-        "http://www.msftconnecttest.com/connecttest.txt|Microsoft Connect Test",
-        "http://detectportal.firefox.com/success.txt|success",
-    ])
+    url_check_urls: list[str] = Field(
+        default_factory=lambda: _parse_targets(DEFAULT_URL_CHECK_URLS)
+    )
     script_timeout: int = Field(default=60, ge=5, le=600)
+    bind_interface_name: str = Field(
+        default="", description="绑定网卡名称，空串表示不绑定"
+    )
 
 
 class PauseSettings(BaseModel, frozen=True):
     """暂停时段配置 — check_pause() 消费。
 
-    start_hour == end_hour 语义为全天暂停（见 is_in_pause_period）。
+    start_hour == end_hour 且 start_minute == end_minute 语义为全天暂停。
     start_hour > end_hour 语义为跨天（如 23:00-06:00）。
     """
 
     enabled: bool = True
     start_hour: int = Field(default=0, ge=0, le=23)
+    start_minute: int = Field(default=0, ge=0, le=59)
     end_hour: int = Field(default=6, ge=0, le=23)
+    end_minute: int = Field(default=0, ge=0, le=59)
 
 
 class LoggingSettings(BaseModel, frozen=True):
-    """日志配置 — 日志初始化模块消费。"""
-
-    level: str = Field(default="INFO", pattern=r"^(DEBUG|INFO|WARNING|ERROR|CRITICAL)$")
-    frontend_level: str = Field(default="INFO", pattern=r"^(DEBUG|INFO|WARNING|ERROR|CRITICAL)$")
+    level: str = Field(default="INFO", pattern=r"^(DEBUG|INFO|WARNING|ERROR)$")
     log_retention_days: int = Field(default=7, ge=1, le=365)
     access_log: bool = False
-    source_levels: dict[str, str] = Field(default_factory=dict)
 
 
 class RetrySettings(BaseModel, frozen=True):
@@ -295,10 +357,237 @@ class RetrySettings(BaseModel, frozen=True):
     retry_interval: int = Field(default=5, ge=1, le=300)
 
 
+class AppSettings(BaseModel, frozen=True):
+    """应用级设置 — 全局共享，不含凭据。
+
+    被 GlobalConfig、RuntimeConfig 组合复用。
+    """
+
+    block_proxy: bool = True
+    shell_path: str = ""
+    startup_action: StartupAction = StartupAction.NONE
+    runtime_mode: RuntimeMode = RuntimeMode.FULL
+    lightweight_tray: bool = True  # 仅 runtime_mode=lightweight 时生效
+    minimize_to_tray: bool = True
+    auto_open_browser: bool = False
+    proxy: str = ""
+    app_port: int = Field(default=50721, ge=1, le=65535)
+
+
+# ── API 请求/响应模型 ──
+
+
+class ApiResponse(BaseModel):
+    """所有写操作的标准响应信封。
+
+    success=True 表示业务成功；success=False 表示业务失败（HTTP 200）。
+    data 可选，用于附加返回数据。
+    """
+
+    success: bool
+    message: str = ""
+    data: dict | None = None
+
+
+class ConfigSaveRequest(BaseModel):
+    """PUT /api/config 请求体 — 嵌套结构，与 RuntimeConfig 对齐。"""
+
+    browser: BrowserSettings = Field(default_factory=BrowserSettings)
+    monitor: MonitorSettings = Field(default_factory=MonitorSettings)
+    retry: RetrySettings = Field(default_factory=RetrySettings)
+    pause: PauseSettings = Field(default_factory=PauseSettings)
+    logging: LoggingSettings = Field(default_factory=LoggingSettings)
+    app_settings: AppSettings = Field(default_factory=AppSettings)
+    # 凭据（平铺）
+    username: str = ""
+    password: str | None = None  # None 表示不修改，"" 表示清空
+    auth_url: str = ""
+    isp: str = ""
+    carrier_custom: str = ""
+    active_task: str = ""
+
+
+class ConfigPatchRequest(BaseModel):
+    """PATCH /api/config 请求体 — 仅包含变更字段。
+
+    所有字段均为 Optional，未传的字段不修改。
+    """
+
+    browser: BrowserSettings | None = None
+    monitor: MonitorSettings | None = None
+    retry: RetrySettings | None = None
+    pause: PauseSettings | None = None
+    logging: LoggingSettings | None = None
+    app_settings: AppSettings | None = None
+    # 凭据字段：None 表示不修改
+    username: str | None = None
+    password: str | None = None
+    auth_url: str | None = None
+    isp: str | None = None
+    carrier_custom: str | None = None
+    active_task: str | None = None
+
+
+class ConfigResponse(BaseModel):
+    """GET /api/config 响应 — 完整配置快照。"""
+
+    browser: dict = Field(default_factory=dict)
+    monitor: dict = Field(default_factory=dict)
+    retry: dict = Field(default_factory=dict)
+    pause: dict = Field(default_factory=dict)
+    logging: dict = Field(default_factory=dict)
+    app_settings: dict = Field(default_factory=dict)
+    username: str = ""
+    password: str = ""
+    has_password: bool = False
+    auth_url: str = ""
+    isp: str = ""
+    carrier_custom: str = ""
+    active_task: str = ""
+
+
+class LogLevelRequest(BaseModel):
+    level: str = Field(min_length=1, description="日志级别（DEBUG/INFO/WARNING/ERROR）")
+
+
+class AutoSwitchRequest(BaseModel):
+    """POST /api/profiles/auto-switch 请求体。"""
+
+    enabled: bool = True
+
+
+class UninstallRequest(BaseModel):
+    """POST /api/uninstall 请求体。"""
+
+    keys: list[str] = Field(default_factory=list)
+
+
+class FetchUrlRequest(BaseModel):
+    """POST /api/background/fetch-url 请求体。"""
+
+    url: str = Field(min_length=1, description="图片 URL")
+
+
+class InitStatusResponse(BaseModel):
+    """GET /api/init-status 响应。"""
+
+    initialized: bool
+    agreed: bool
+    password_decryption_failed: bool = False
+
+
+class HealthResponse(BaseModel):
+    """GET /api/health 响应。"""
+
+    status: str = "ok"
+    version: str = ""
+    python_version: str = ""
+    memory: dict = Field(default_factory=dict)
+    process: dict = Field(default_factory=dict)
+
+
+class ShellInfo(BaseModel):
+    """Shell 信息。"""
+
+    name: str = ""
+    path: str = ""
+    description: str = ""
+
+
+class ShellListResponse(BaseModel):
+    """GET /api/shells 响应。"""
+
+    shells: list[ShellInfo] = Field(default_factory=list)
+    default: str = ""
+
+
+class DebugSessionResponse(BaseModel):
+    """调试会话状态响应（start/next/run-all/stop 共用）。"""
+
+    running: bool = False
+    task_id: str | None = None
+    current_step: int = 0
+    total_steps: int = 0
+    steps: list = Field(default_factory=list)
+    results: list = Field(default_factory=list)
+    screenshot_url: str | None = None
+    message: str = ""
+
+
+class AutostartModeRequest(BaseModel):
+    """POST /api/autostart/mode 请求体。"""
+
+    runtime_mode: RuntimeMode = RuntimeMode.FULL
+
+
+class TaskOrderRequest(BaseModel):
+    """POST /api/tasks/order 请求体。"""
+
+    order: list[str] = Field(default_factory=list, description="任务 ID 有序列表")
+
+
+class PureModeResponse(BaseModel):
+    """GET/POST /api/pure-mode 响应。"""
+
+    enabled: bool
+
+
+class StealthScriptResponse(BaseModel):
+    """GET /api/config/default-stealth-script 响应。"""
+
+    script: str = ""
+
+
+class NetworkDetectResponse(BaseModel):
+    """POST /api/profiles/detect 响应。"""
+
+    gateway_ip: str | None = None
+    ssid: str | None = None
+    matched_profile_id: str | None = None
+    matched_profile_name: str | None = None
+
+
+class BinaryInfo(BaseModel):
+    """可执行二进制信息。"""
+
+    path: str = ""
+    name: str = ""
+
+
+class OcrStatusResponse(BaseModel):
+    """GET /api/ocr/status 响应。"""
+
+    installed: bool = False
+    size_mb: float = 0.0
+
+
+class UpdateCheckResponse(BaseModel):
+    """GET /api/check-update 响应。"""
+
+    current: str = ""
+    latest: str | None = None
+    has_update: bool = False
+    url: str = ""
+    body: str = ""
+    published_at: str = ""
+    cached: bool = False
+    error: str | None = None
+
+
+class UninstallItem(BaseModel):
+    """可清理项目。"""
+
+    key: str
+    label: str
+    exists: bool = False
+    path: str = ""
+    size_mb: float = 0.0
+
+
 class RuntimeConfig(BaseModel, frozen=True):
     """运行时配置根模型 — 替代旧 dict[str, Any]。
 
-    组合所有子集模型 + 直接透传字段。
+    组合所有子集模型。
     frozen=True 保证线程安全，无需 deepcopy。
 
     注意：此模型仅存在于内存，不直接写盘。
@@ -310,22 +599,12 @@ class RuntimeConfig(BaseModel, frozen=True):
     pause: PauseSettings = Field(default_factory=PauseSettings)
     logging: LoggingSettings = Field(default_factory=LoggingSettings)
     retry: RetrySettings = Field(default_factory=RetrySettings)
+    app_settings: AppSettings = Field(default_factory=AppSettings)
 
-    # 直接透传字段
     active_task: str = ""
-    custom_variables: dict[str, str] = Field(default_factory=dict)
-    block_proxy: bool = True
-    shell_path: str = ""
-    minimize_to_tray: bool = True
-    startup_action: StartupAction = StartupAction.NONE
-    autostart_lightweight: bool = True
-    lightweight_tray: bool = True
-    auto_open_browser: bool = False
-    proxy: str = ""
-    app_port: int = Field(default=50721, ge=1, le=65535)
 
 
-class GlobalConfig(BaseModel):
+class GlobalConfig(BaseModel, frozen=True):
     """持久化配置 — 仅全局共享设置，不含凭据和 active_task。"""
 
     browser: BrowserSettings = Field(default_factory=BrowserSettings)
@@ -333,54 +612,13 @@ class GlobalConfig(BaseModel):
     retry: RetrySettings = Field(default_factory=RetrySettings)
     pause: PauseSettings = Field(default_factory=PauseSettings)
     logging: LoggingSettings = Field(default_factory=LoggingSettings)
-
-    # 透传字段
-    block_proxy: bool = True
-    shell_path: str = ""
-    minimize_to_tray: bool = True
-    startup_action: StartupAction = StartupAction.NONE
-    autostart_lightweight: bool = True
-    lightweight_tray: bool = True
-    auto_open_browser: bool = False
-    proxy: str = ""
-    app_port: int = Field(default=50721, ge=1, le=65535)
-    custom_variables: dict[str, str] = Field(default_factory=dict)
+    app_settings: AppSettings = Field(default_factory=AppSettings)
 
 
-class ConfigResponseDTO(BaseModel):
-    """API 响应专用 — 不暴露内部结构。"""
+class ProfilesData(BaseModel, frozen=True):
+    """settings.json 顶层结构（v5）"""
 
-    browser: BrowserSettings
-    monitor: MonitorSettings
-    retry: RetrySettings
-    pause: PauseSettings
-    logging: LoggingSettings
-
-    # 凭据（密码已掩码）
-    username: str = ""
-    password: str = ""          # "••••••••" 或空
-    auth_url: str = ""
-    isp: str = ""
-    carrier_custom: str = ""
-
-    active_task: str = ""
-
-    block_proxy: bool = True
-    shell_path: str = ""
-    minimize_to_tray: bool = True
-    startup_action: StartupAction = StartupAction.NONE
-    autostart_lightweight: bool = True
-    lightweight_tray: bool = True
-    auto_open_browser: bool = False
-    proxy: str = ""
-    app_port: int = 50721
-    custom_variables: dict[str, str] = Field(default_factory=dict)
-
-
-class ProfilesData(BaseModel):
-    """settings.json 顶层结构（v4）"""
-
-    config_version: int = Field(default=4)
+    config_version: int = Field(default=5)
     global_config: GlobalConfig = Field(default_factory=GlobalConfig)
     auto_switch: bool = Field(default=False, description="是否根据网关 IP 自动切换方案")
     active_profile: str = Field(default="default")
@@ -394,3 +632,30 @@ class ProfilesData(BaseModel):
         return self
 
 
+class ScheduleTime(BaseModel):
+    """定时任务执行时间。"""
+
+    hour: int = Field(ge=0, le=23)
+    minute: int = Field(ge=0, le=59)
+
+
+class ScheduledTaskConfig(BaseModel):
+    """定时任务配置 — 替代 scheduled_tasks.py 中的手写校验。"""
+
+    name: str = Field(min_length=1, description="任务名称")
+    description: str = ""
+    type: str = Field(pattern=r"^(script|browser|shell)$", description="任务类型")
+    target_id: str = ""
+    command: str = ""
+    shell_path: str = ""
+    enabled: bool = True
+    schedule: ScheduleTime
+    timeout: int = Field(default=60, ge=5, le=3600)
+
+    @model_validator(mode="after")
+    def validate_type_fields(self) -> ScheduledTaskConfig:
+        if self.type == "shell" and not self.command:
+            raise ValueError("Shell 命令不能为空")
+        if self.type in ("script", "browser") and not self.target_id:
+            raise ValueError("请选择目标任务")
+        return self

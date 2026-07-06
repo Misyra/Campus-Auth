@@ -6,11 +6,14 @@
       <circle cx="12" cy="7" r="4"/>
     </svg>
     <span>当前方案：<strong>{{ profiles[activeProfileId]?.name || activeProfileId || '默认方案' }}</strong></span>
-    <a href="#" @click.prevent="currentPage = 'profiles'" class="hint-link">管理方案</a>
+    <a href="#" @click.prevent="navigateTo('profiles')" class="hint-link">管理方案</a>
   </div>
 
   <section class="card settings-panel">
-    <div class="card-header">
+    <div class="settings-card-header">
+      <svg class="settings-card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+      </svg>
       <h2>账号配置</h2>
     </div>
     <div class="card-body">
@@ -23,23 +26,24 @@
           type="text"
           placeholder="学号/账号"
           autocomplete="username"
-          @input="onConfigChange('username', config.credentials.username, 'input')"
         />
       </div>
       <div class="form-group">
         <label for="settings-password">密码</label>
         <input
           id="settings-password"
-          v-model="config.credentials.password"
+          :value="passwordSaved && !editingPassword ? '••••••••••' : config.credentials.password"
+          @input="config.credentials.password = $event.target.value"
+          @focus="onPasswordFocus"
+          @blur="onPasswordBlur"
           name="password"
           type="password"
-          :placeholder="config.credentials.password && config.credentials.password.startsWith('•') ? '密码已加密保存，清空后输入新密码' : '输入密码'"
+          :placeholder="passwordSaved ? '输入新密码，留空不修改' : '输入密码'"
           autocomplete="current-password"
-          @focus="$event.target.select()"
-          @input="onConfigChange('password', config.credentials.password, 'input')"
         />
-        <span class="hint">密码不会随配置切换导出，仅在本机生效</span>
-        <span class="hint">密码本地存储，不保证意外删除后可恢复</span>
+        <span class="hint" v-if="passwordSaved && !editingPassword">密码已加密保存，点击修改</span>
+        <span class="hint" v-else-if="passwordSaved && editingPassword">留空保存则不修改原密码</span>
+        <span class="hint" v-else>密码本地存储，不保证意外删除后可恢复</span>
       </div>
       <div class="form-group">
         <div class="field-label-row">
@@ -56,7 +60,6 @@
           v-model.trim="config.credentials.auth_url"
           type="text"
           placeholder="http://"
-          @input="onConfigChange('auth_url', config.credentials.auth_url, 'input')"
         />
       </div>
       <div class="form-group">
@@ -69,7 +72,7 @@
             data-tip="校园网登录页面的运营商选择。选择&quot;无&quot;则跳过运营商步骤；选择&quot;自定义&quot;可输入关键字匹配登录页面的运营商列表，适用于非标准运营商名称。"
           >?</span>
         </div>
-        <custom-select v-model="config.credentials.isp" :options="carrierOptions" @change="(val) => onConfigChange('carrier', val, 'toggle')"></custom-select>
+        <custom-select v-model="config.credentials.isp" :options="carrierOptions" @change="(val) => { if (val !== '自定义') config.credentials.carrier_custom = ''; }"></custom-select>
       </div>
       <div v-if="config.credentials.isp === '自定义'" class="form-group">
         <label for="settings-carrier-custom">自定义运营商关键字</label>
@@ -79,7 +82,6 @@
           name="carrier_custom"
           type="text"
           placeholder="例如：校园专网、宿舍网、移动(新)"
-          @input="onConfigChange('carrier_custom', config.credentials.carrier_custom, 'input')"
         />
       </div>
     </div>
@@ -87,56 +89,14 @@
 
   <!-- 自定义变量 -->
   <section class="card settings-panel">
-    <div class="card-header">
+    <div class="settings-card-header">
+      <svg class="settings-card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>
+      </svg>
       <h2>自定义变量</h2>
     </div>
     <div class="card-body">
-      <p class="form-help-text">在任务模板中使用 <code v-pre>{{变量名}}</code> 引用这些变量</p>
-
-      <!-- 表头 -->
-      <div v-if="Object.keys(config.custom_variables || {}).length > 0" class="custom-vars-header">
-        <span class="header-name">变量名</span>
-        <span class="header-separator"></span>
-        <span class="header-value">变量值</span>
-        <span class="header-action"></span>
-      </div>
-
-      <div class="custom-vars-list">
-        <div v-for="(value, key) in config.custom_variables" :key="key" class="custom-var-item">
-          <div class="var-name-col">
-            <input
-              type="text"
-              :value="key"
-              :data-var-key="key"
-              @change="updateCustomVarKey(key, $event.target.value)"
-              placeholder="如：MY_VAR"
-            />
-          </div>
-          <span class="var-separator">:</span>
-          <div class="var-value-col">
-            <input
-              type="text"
-              v-model="config.custom_variables[key]"
-              placeholder="变量值"
-              @input="onConfigChange('custom_variables', config.custom_variables, 'input')"
-            />
-          </div>
-          <button type="button" class="btn btn-icon-only btn-danger btn-delete-var" @click="removeCustomVar(key)" title="删除">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="3 6 5 6 21 6"/>
-              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
-            </svg>
-          </button>
-        </div>
-      </div>
-
-      <button type="button" class="btn btn-secondary btn-sm" @click="addCustomVar">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <line x1="12" y1="5" x2="12" y2="19"/>
-          <line x1="5" y1="12" x2="19" y2="12"/>
-        </svg>
-        添加变量
-      </button>
+      <p class="form-help-text">自定义变量功能已移除。如需在任务中使用变量，请直接在任务 JSON 的 <code>variables</code> 字段中硬编码定义。</p>
     </div>
   </section>
 </div>

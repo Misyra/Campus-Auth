@@ -2,12 +2,18 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 
-from app.deps import get_monitor_service, get_profile_service
-from app.schemas import ActionResponse, Profile
-from app.services.engine import ScheduleEngine
-from app.services.profile_service import ProfileService
+from app.deps import MonitorServiceDep, ProfileServiceDep
+from app.schemas import (
+    ApiResponse,
+    AutoSwitchRequest,
+    NetworkDetectResponse,
+    Profile,
+    ProfileDetailResponse,
+    ProfileListResponse,
+    ProfileSummary,
+)
 from app.utils.logging import get_logger
 
 router = APIRouter()
@@ -19,104 +25,119 @@ def _safe_detect(func, label: str, default=None):
     try:
         return func()
     except Exception as exc:
-        api_logger.error("{}检测异常: {}", label, exc)
+        api_logger.exception("{}检测异常: {}", label, exc)
         return default
 
 
-@router.get("/api/profiles")
+@router.get("/api/profiles", response_model=ProfileListResponse)
 def list_profiles(
-    profile_svc: ProfileService = Depends(get_profile_service),
-) -> dict:
+    profile_svc: ProfileServiceDep,
+) -> ProfileListResponse:
     data = profile_svc.load()
-    result = {}
+    result: dict[str, ProfileSummary] = {}
     for pid, settings in data.profiles.items():
-        result[pid] = {
-            "name": settings.name,
-            "match_gateway_ip": settings.match_gateway_ip,
-            "match_ssid": settings.match_ssid,
-            "carrier": settings.carrier,
-            "carrier_custom": settings.carrier_custom,
-            "auth_url": settings.auth_url,
-            "active_task": settings.active_task,
-        }
-    return {
-        "profiles": result,
-        "active_profile": data.active_profile,
-        "auto_switch": data.auto_switch,
-    }
+        result[pid] = ProfileSummary(
+            name=settings.name,
+            match_gateway_ip=settings.match_gateway_ip,
+            match_ssid=settings.match_ssid,
+            carrier=settings.carrier,
+            carrier_custom=settings.carrier_custom,
+            auth_url=settings.auth_url,
+            active_task=settings.active_task,
+        )
+    return ProfileListResponse(
+        profiles=result,
+        active_profile=data.active_profile,
+        auto_switch=data.auto_switch,
+    )
 
 
-@router.get("/api/profiles/{profile_id}")
+@router.get("/api/profiles/{profile_id}", response_model=ProfileDetailResponse)
 def get_profile(
     profile_id: str,
-    profile_svc: ProfileService = Depends(get_profile_service),
-) -> dict:
+    profile_svc: ProfileServiceDep,
+) -> ProfileDetailResponse:
     data = profile_svc.load()
     profile = data.profiles.get(profile_id)
     if not profile:
         raise HTTPException(status_code=404, detail="方案不存在")
-    return {
-        "profile_id": profile_id,
-        "settings": profile.model_dump(),
-    }
+    # 不返回实际密码值，只返回空字符串（表示有密码时前端显示掩码）
+    safe_profile = profile.model_copy(update={"password": ""})
+    return ProfileDetailResponse(profile_id=profile_id, settings=safe_profile)
 
 
-@router.put("/api/profiles/{profile_id}", response_model=ActionResponse)
+@router.put("/api/profiles/{profile_id}", response_model=ApiResponse)
 def save_profile(
     profile_id: str,
     payload: Profile,
-    profile_svc: ProfileService = Depends(get_profile_service),
-    monitor_svc: ScheduleEngine = Depends(get_monitor_service),
-) -> ActionResponse:
+    profile_svc: ProfileServiceDep,
+    monitor_svc: MonitorServiceDep,
+) -> ApiResponse:
     ok, message = profile_svc.save_profile(profile_id, payload)
-    api_logger.info("保存方案 {} -> success={}, message={}", profile_id, ok, message)
+    if ok:
+        api_logger.info("保存方案 {} 成功", profile_id)
+    else:
+        api_logger.warning("保存方案 {} 失败: {}", profile_id, message)
     if ok:
         data = profile_svc.load()
         if data.active_profile == profile_id:
             try:
                 monitor_svc.apply_profile(profile_id)
             except Exception:
-                api_logger.warning("保存方案后应用方案失败", exc_info=True)
+                api_logger.warning(
+                    "保存方案后应用方案失败: profile_id={}", profile_id, exc_info=True
+                )
                 message = f"{message}（注意：方案已保存但应用到引擎失败，请手动重载）"
-    return ActionResponse(success=ok, message=message)
+    return ApiResponse(success=ok, message=message)
 
 
-@router.delete("/api/profiles/{profile_id}", response_model=ActionResponse)
+@router.delete("/api/profiles/{profile_id}", response_model=ApiResponse)
 def delete_profile(
     profile_id: str,
-    profile_svc: ProfileService = Depends(get_profile_service),
-    monitor_svc: ScheduleEngine = Depends(get_monitor_service),
-) -> ActionResponse:
+    profile_svc: ProfileServiceDep,
+    monitor_svc: MonitorServiceDep,
+) -> ApiResponse:
     ok, message = profile_svc.delete_profile(profile_id)
-    api_logger.info("删除方案 {} -> success={}, message={}", profile_id, ok, message)
-    # 删除成功后始终通知监控重载配置（安全做法，避免 TOCTOU 竞态）
+    if ok:
+        api_logger.info("删除方案 {} 成功", profile_id)
+    else:
+        api_logger.warning("删除方案 {} 失败: {}", profile_id, message)
+    # 删除成功后通知监控重载配置（安全做法，避免 TOCTOU 竞态）
     if ok:
         try:
             new_data = profile_svc.load()
-            monitor_svc.apply_profile(new_data.active_profile)
+            if new_data.active_profile is not None:
+                monitor_svc.apply_profile(new_data.active_profile)
+            else:
+                # 所有方案已删除，停止监控
+                monitor_svc.stop_monitoring()
+                message = f"{message}（所有方案已删除，监控已停止）"
         except Exception:
-            api_logger.warning("删除方案后应用方案失败", exc_info=True)
+            api_logger.warning(
+                "删除方案后应用方案失败: profile_id={}", profile_id, exc_info=True
+            )
             message = f"{message}（注意：方案已删除但引擎重载失败，请手动重载）"
-    return ActionResponse(success=ok, message=message)
+    return ApiResponse(success=ok, message=message)
 
 
-@router.post("/api/profiles/active/{profile_id}", response_model=ActionResponse)
+@router.post("/api/profiles/active/{profile_id}", response_model=ApiResponse)
 def set_active_profile(
     profile_id: str,
-    monitor_svc: ScheduleEngine = Depends(get_monitor_service),
-) -> ActionResponse:
+    monitor_svc: MonitorServiceDep,
+) -> ApiResponse:
     # apply_profile 内部已包含 set_active_profile，无需重复调用
     ok, message = monitor_svc.apply_profile(profile_id)
-    api_logger.info(
-        "切换活动方案 {} -> success={}, message={}", profile_id, ok, message
-    )
-    return ActionResponse(success=ok, message=message)
+    if ok:
+        api_logger.info("切换活动方案 {} 成功", profile_id)
+    else:
+        api_logger.warning("切换活动方案 {} 失败: {}", profile_id, message)
+    return ApiResponse(success=ok, message=message)
 
 
-@router.post("/api/profiles/detect")
+@router.post("/api/profiles/detect", response_model=NetworkDetectResponse)
 def detect_network_profile(
-    profile_svc: ProfileService = Depends(get_profile_service),
-) -> dict:
+    profile_svc: ProfileServiceDep,
+) -> NetworkDetectResponse:
     from app.network.detect import detect_gateway_ip, detect_wifi_ssid
 
     gateway = _safe_detect(detect_gateway_ip, "网关")
@@ -128,65 +149,58 @@ def detect_network_profile(
     if matched_id and matched_id in data.profiles:
         matched_name = data.profiles[matched_id].name
 
-    api_logger.info(
+    api_logger.debug(
         "网络检测结果: gateway={}, ssid={}, matched={}",
         gateway,
         ssid,
         matched_id,
     )
-    return {
-        "gateway_ip": gateway,
-        "ssid": ssid,
-        "matched_profile_id": matched_id,
-        "matched_profile_name": matched_name,
-    }
+    return NetworkDetectResponse(
+        gateway_ip=gateway,
+        ssid=ssid,
+        matched_profile_id=matched_id,
+        matched_profile_name=matched_name,
+    )
 
 
-@router.post("/api/profiles/auto-switch")
+@router.post("/api/profiles/auto-switch", response_model=ApiResponse)
 def toggle_auto_switch(
-    body: dict = Body(default={}),
-    profile_svc: ProfileService = Depends(get_profile_service),
-    monitor_svc: ScheduleEngine = Depends(get_monitor_service),
-) -> dict:
-    enabled = body.get("enabled", True)
-    if isinstance(enabled, str):
-        enabled_bool = enabled.strip().lower() in ("true", "1", "yes", "on")
-    else:
-        enabled_bool = bool(enabled)
-    profile_svc.set_auto_switch(enabled_bool)
-    state = "开启" if enabled_bool else "关闭"
-    api_logger.info("自动切换 {}", state)
+    body: AutoSwitchRequest,
+    profile_svc: ProfileServiceDep,
+    monitor_svc: MonitorServiceDep,
+) -> ApiResponse:
+    try:
+        profile_svc.set_auto_switch(body.enabled)
+    except Exception as exc:
+        api_logger.warning("切换自动切换失败: {}", exc)
+        raise HTTPException(
+            status_code=500,
+            detail=f"切换自动切换失败: {exc}",
+        ) from None
+    state = "开启" if body.enabled else "关闭"
+    api_logger.info("切换自动切换 {} 成功", state)
 
-    # 获取当前活动方案
     data = profile_svc.load()
     active_profile = data.active_profile
 
-    # 开启自动切换时，立即进行一次检测
     warning = None
-    if enabled_bool:
+    if body.enabled:
         try:
             matched_id = profile_svc.detect_matching_profile()
-            if matched_id:
-                if matched_id != data.active_profile:
-                    profile = data.profiles.get(matched_id)
-                    profile_name = profile.name if profile else matched_id
-                    api_logger.info("自动切换检测到匹配方案: {}", profile_name)
-                    # apply_profile 内部已包含 set_active_profile
-                    monitor_svc.apply_profile(matched_id)
-                    active_profile = matched_id
-                else:
-                    api_logger.info("当前方案已匹配，无需切换")
+            if matched_id and matched_id != data.active_profile:
+                profile = data.profiles.get(matched_id)
+                profile_name = profile.name if profile else matched_id
+                api_logger.info("自动切换匹配方案: {}", profile_name)
+                monitor_svc.apply_profile(matched_id)
+                active_profile = matched_id
             else:
-                api_logger.info("未检测到匹配方案，保持当前方案")
+                api_logger.debug("未检测到匹配方案或当前方案已匹配")
         except Exception as exc:
             api_logger.warning("自动切换检测失败: {}", exc)
             warning = f"首次检测失败: {exc}"
 
-    result = {
-        "success": True,
-        "message": f"自动切换已{state}",
-        "active_profile": active_profile,
-    }
+    result_data = {"active_profile": active_profile}
+    message = f"自动切换已{state}"
     if warning:
-        result["warning"] = warning
-    return result
+        message += f"（{warning}）"
+    return ApiResponse(success=True, message=message, data=result_data)

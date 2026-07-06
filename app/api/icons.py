@@ -10,7 +10,7 @@ from app.constants import PROJECT_ROOT
 router = APIRouter()
 
 # 图标目录
-ICONS_DIR = PROJECT_ROOT / "res" / "icons"
+ICONS_DIR = PROJECT_ROOT / "resources" / "icons"
 
 
 @router.get("/api/icons/{filename}")

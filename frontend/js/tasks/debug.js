@@ -4,7 +4,7 @@ export const debugTaskMethods = {
   async startDebug(taskId) {
     this.debugLoading = true;
     try {
-      const { data } = await this.$api.post('/api/debug/start', { task_id: taskId });
+      const data = await this.$apiService.debug.start(taskId);
       this.debugSession = data;
       // P1-FE-6: 构建 Map 加速步骤结果查询
       this._resultByIndex = new Map((data.results || []).map(r => [r.step_index, r]));
@@ -19,10 +19,10 @@ export const debugTaskMethods = {
     }
   },
 
-  async _debugAction(endpoint, errorMsg) {
+  async _debugAction(apiCall, errorMsg) {
     this.busy.debug = true;
     try {
-      const { data } = await this.$api.post(endpoint);
+      const data = await apiCall();
       this.debugSession = data;
       // P1-FE-6: 构建 Map 加速步骤结果查询
       this._resultByIndex = new Map((data.results || []).map(r => [r.step_index, r]));
@@ -36,17 +36,17 @@ export const debugTaskMethods = {
   },
 
   debugNextStep() {
-    return this._debugAction('/api/debug/next', '执行步骤失败');
+    return this._debugAction(() => this.$apiService.debug.next(), '执行步骤失败');
   },
 
   debugRunAll() {
-    return this._debugAction('/api/debug/run-all', '执行全部失败');
+    return this._debugAction(() => this.$apiService.debug.runAll(), '执行全部失败');
   },
 
   async debugStop() {
     this.closeModal();
     try {
-      const { data } = await this.$api.post('/api/debug/stop');
+      const data = await this.$apiService.debug.stop();
       this.frontendLogger.info('debug', '调试已停止');
       this.toastOnly(true, data.message || '调试已停止');
     } catch (error) {

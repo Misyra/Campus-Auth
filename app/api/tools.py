@@ -11,16 +11,33 @@ from fastapi import APIRouter, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
 from app.constants import PROJECT_ROOT
+from app.schemas import ApiResponse, FetchUrlRequest
+from app.utils.logging import get_logger
 from app.utils.repo_proxy import validate_url
 
 router = APIRouter()
+api_logger = get_logger("api")
 
 # 背景图片目录
-BG_DIR = PROJECT_ROOT / "frontend" / "background"
-BG_DIR.mkdir(parents=True, exist_ok=True)
+BG_DIR = PROJECT_ROOT / "resources" / "background"
+
+
+def _ensure_bg_dir() -> None:
+    """确保背景图片目录存在（延迟创建）。"""
+    BG_DIR.mkdir(parents=True, exist_ok=True)
 
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg"}
 MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
+
+
+def _serve_doc(relative_path: str, media_type: str, filename: str) -> FileResponse:
+    """检查文档文件存在性并返回 FileResponse。"""
+    doc_path = PROJECT_ROOT / relative_path
+    if not doc_path.exists():
+        raise HTTPException(
+            status_code=404, detail="文档文件缺失，可能需要重新安装或更新软件"
+        )
+    return FileResponse(doc_path, media_type=media_type, filename=filename)
 
 
 def _cleanup_old_backgrounds(exclude_filename: str) -> None:
@@ -31,10 +48,20 @@ def _cleanup_old_backgrounds(exclude_filename: str) -> None:
                 old_file.unlink()
 
 
+def _save_background(content: bytes, ext: str) -> dict:
+    """保存背景图片并清理旧文件，返回 {filename, url}。"""
+    _ensure_bg_dir()
+    filename = f"{uuid.uuid4().hex}{ext}"
+    filepath = BG_DIR / filename
+    filepath.write_bytes(content)
+    _cleanup_old_backgrounds(filename)
+    return {"filename": filename, "url": f"/api/background/{filename}"}
+
+
 @router.get("/api/tools/task-recorder.user.js")
 def download_task_recorder():
     """下载任务录制器用户脚本"""
-    script_path = PROJECT_ROOT / "res" / "tools" / "task-recorder.user.js"
+    script_path = PROJECT_ROOT / "resources" / "tools" / "task-recorder.user.js"
     if not script_path.exists():
         raise HTTPException(
             status_code=404, detail="任务录制器脚本文件缺失，可能需要重新安装或更新软件"
@@ -45,32 +72,22 @@ def download_task_recorder():
 @router.get("/api/docs/task-writing-guide")
 def download_task_writing_guide():
     """下载任务编写指南文档"""
-    doc_path = PROJECT_ROOT / "docs" / "task-writing-guide.md"
-    if not doc_path.exists():
-        raise HTTPException(
-            status_code=404, detail="文档文件缺失，可能需要重新安装或更新软件"
-        )
-    return FileResponse(
-        doc_path, media_type="text/markdown", filename="task-writing-guide.md"
+    return _serve_doc(
+        "docs/guides/task-writing-guide.md", "text/markdown", "task-writing-guide.md"
     )
 
 
 @router.get("/api/docs/task-manual")
 def download_task_manual():
     """下载任务手册文档"""
-    doc_path = PROJECT_ROOT / "docs" / "task-manual.md"
-    if not doc_path.exists():
-        raise HTTPException(
-            status_code=404, detail="文档文件缺失，可能需要重新安装或更新软件"
-        )
-    return FileResponse(doc_path, media_type="text/markdown", filename="task-manual.md")
+    return _serve_doc("docs/dev/architecture.md", "text/markdown", "task-manual.md")
 
 
 # ── 背景图片管理 ──
 
 
-@router.post("/api/background/upload")
-async def upload_background(file: UploadFile) -> dict:
+@router.post("/api/background/upload", response_model=ApiResponse)
+async def upload_background(file: UploadFile) -> ApiResponse:
     """上传背景图片"""
     ext = Path(file.filename or "").suffix.lower()
     if ext not in ALLOWED_EXTENSIONS:
@@ -80,21 +97,14 @@ async def upload_background(file: UploadFile) -> dict:
     if len(content) > MAX_FILE_SIZE:
         raise HTTPException(400, "文件大小不能超过 5MB")
 
-    filename = f"{uuid.uuid4().hex}{ext}"
-    filepath = BG_DIR / filename
-    filepath.write_bytes(content)
-
-    _cleanup_old_backgrounds(filename)
-
-    return {"filename": filename, "url": f"/api/background/{filename}"}
+    data = _save_background(content, ext)
+    return ApiResponse(success=True, message="背景图片已上传", data=data)
 
 
-@router.post("/api/background/fetch-url")
-async def fetch_background_url(body: dict) -> dict:
+@router.post("/api/background/fetch-url", response_model=ApiResponse)
+async def fetch_background_url(body: FetchUrlRequest) -> ApiResponse:
     """从远程 URL 下载图片并保存到本地"""
-    url = body.get("url", "").strip()
-    if not url:
-        raise HTTPException(400, "请提供图片 URL")
+    url = body.url.strip()
     validate_url(url)
 
     try:
@@ -138,18 +148,15 @@ async def fetch_background_url(body: dict) -> dict:
                         raise HTTPException(400, "图片大小超过 5MB 限制")
                     chunks.append(chunk)
                 content = b"".join(chunks)
-    except httpx.HTTPError as exc:
+    except httpx.HTTPError as e:
+        api_logger.warning("下载失败: url={}, error={}", url, e)
         raise HTTPException(
             400, "下载图片失败，请检查网络连接或确认地址是否正确"
-        ) from exc
+        ) from e
 
-    filename = f"{uuid.uuid4().hex}{ext}"
-    filepath = BG_DIR / filename
-    filepath.write_bytes(content)
-
-    _cleanup_old_backgrounds(filename)
-
-    return {"filename": filename, "url": f"/api/background/{filename}"}
+    data = _save_background(content, ext)
+    api_logger.info("下载背景图片成功: {}", data.get("filename"))
+    return ApiResponse(success=True, message="图片已下载", data=data)
 
 
 @router.get("/api/background/{filename}")
@@ -164,14 +171,22 @@ async def get_background(filename: str):
     return FileResponse(filepath)
 
 
-@router.delete("/api/background/{filename}")
-async def delete_background(filename: str) -> dict:
+@router.delete("/api/background/{filename}", response_model=ApiResponse)
+async def delete_background(filename: str) -> ApiResponse:
     """删除背景图片"""
+    _ensure_bg_dir()
     safe_name = Path(filename).name
     if safe_name != filename or not safe_name:
         raise HTTPException(status_code=400, detail="文件名包含非法字符")
     filepath = BG_DIR / safe_name
     if not filepath.exists():
         raise HTTPException(status_code=404, detail="文件不存在")
-    filepath.unlink()
-    return {"success": True, "message": "背景图片已删除"}
+    try:
+        filepath.unlink()
+    except PermissionError as exc:
+        raise HTTPException(
+            status_code=409, detail=f"文件被占用，无法删除: {exc}"
+        ) from exc
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"删除文件失败: {exc}") from exc
+    return ApiResponse(success=True, message="背景图片已删除")

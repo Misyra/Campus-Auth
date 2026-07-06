@@ -8,18 +8,15 @@ import threading
 import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from pydantic import BaseModel
 
 from app.utils.files import atomic_write
 from app.utils.logging import get_logger
 
-if TYPE_CHECKING:
-    from app.services.profile_service import ProfileService
-    from app.tasks.manager import TaskManager
-
 logger = get_logger("login_history", source="backend")
+
+MAX_HISTORY_SIZE = 200
 
 
 class LoginHistoryEntry(BaseModel):
@@ -42,44 +39,7 @@ class LoginHistoryService:
         self._data_dir.mkdir(parents=True, exist_ok=True)
         self._history_path = data_dir / "login_history.jsonl"
         self._lock = threading.Lock()
-        self._cleanup_lock = threading.Lock()
         self._write_count = 0
-
-    def record(
-        self,
-        success: bool,
-        duration_ms: int,
-        profile_service: ProfileService | None = None,
-        task_manager: TaskManager | None = None,
-        error: str = "",
-    ) -> None:
-        """记录登录历史，自动从服务对象提取 profile/task 名称。"""
-        profile_name = ""
-        if profile_service is not None:
-            try:
-                active = profile_service.get_active_profile()
-                if active:
-                    profile_name = getattr(active, "name", "")
-            except Exception:
-                logger.debug("获取当前方案名称失败（跳过方案记录）", exc_info=True)
-
-        task_name = ""
-        if task_manager is not None:
-            try:
-                task_id = task_manager.get_active_task()
-                task = task_manager.load_task(task_id)
-                if task:
-                    task_name = getattr(task, "name", task_id)
-            except Exception:
-                logger.debug("获取当前任务名称失败（跳过任务记录）", exc_info=True)
-
-        self.add(
-            success=success,
-            duration_ms=duration_ms,
-            profile_name=profile_name,
-            task_name=task_name,
-            error=error,
-        )
 
     def add(
         self,
@@ -100,6 +60,7 @@ class LoginHistoryService:
             task_name=task_name,
             error=error[:200] if error else "",
         )
+        need_cleanup = False
         with self._lock:
             try:
                 with open(self._history_path, "a", encoding="utf-8") as f:
@@ -109,11 +70,12 @@ class LoginHistoryService:
                 self._write_count += 1
                 # 每 50 次写入概率性清理旧记录
                 if self._write_count % 50 == 0:
-                    self._cleanup_old(max_age_days=30)
-            except Exception:
-                logger.warning(
-                    "写入登录历史失败: {}", self._history_path, exc_info=True
-                )
+                    need_cleanup = True
+            except Exception as exc:
+                logger.warning("写入登录历史失败: {}", exc, exc_info=True)
+        # 清理在主写入锁外触发，由 _cleanup_old 内部获取同一把锁
+        if need_cleanup:
+            self._cleanup_old(max_age_days=30)
 
     def list_recent(self, limit: int = 50) -> list[LoginHistoryEntry]:
         """读取最近 N 条登录记录（从新到旧）。"""
@@ -141,11 +103,11 @@ class LoginHistoryService:
                 try:
                     result.append(LoginHistoryEntry.model_validate_json(line))
                 except Exception:
-                    logger.debug("解析登录历史条目失败，跳过", exc_info=True)
+                    logger.warning("解析登录历史条目失败，跳过", exc_info=True)
                     continue
             return result
-        except Exception:
-            logger.warning("读取登录历史失败: {}", self._history_path, exc_info=True)
+        except Exception as exc:
+            logger.warning("读取登录历史失败: {}", exc, exc_info=True)
             return []
 
     def clear(self) -> int:
@@ -160,7 +122,7 @@ class LoginHistoryService:
                         if line.strip():
                             count += 1
                 atomic_write(str(self._history_path), "", encoding="utf-8")
-                logger.info("登录历史已清空，共删除 {} 条记录", count)
+                logger.info("清空登录历史成功: 删除 {} 条记录", count)
                 return count
             except Exception:
                 logger.warning(
@@ -169,30 +131,39 @@ class LoginHistoryService:
                 return 0
 
     def _cleanup_old(self, max_age_days: int = 30) -> None:
-        """清理超过 max_age_days 天的旧记录。"""
-        if not self._history_path.exists():
-            return
-        cutoff = datetime.now() - timedelta(days=max_age_days)
-        cutoff_str = cutoff.strftime("%Y-%m-%d %H:%M:%S")
-        try:
-            kept: list[str] = []
-            with open(self._history_path, encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        data = json.loads(line)
-                        if data.get("timestamp", "") >= cutoff_str:
+        """清理超过 max_age_days 天的旧记录，最多保留 MAX_HISTORY_SIZE 条。
+
+        使用主写入锁 _lock 保证与 add() 的互斥，避免读写并发导致数据不一致。
+        """
+        with self._lock:
+            if not self._history_path.exists():
+                return
+            cutoff = datetime.now() - timedelta(days=max_age_days)
+            cutoff_str = cutoff.strftime("%Y-%m-%d %H:%M:%S")
+            try:
+                kept: list[str] = []
+                with open(self._history_path, encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            data = json.loads(line)
+                            if data.get("timestamp", "") >= cutoff_str:
+                                kept.append(line)
+                        except Exception:
                             kept.append(line)
-                    except Exception:
-                        kept.append(line)
-            content = "\n".join(kept)
-            if kept:
-                content += "\n"
-            atomic_write(str(self._history_path), content, encoding="utf-8")
-            kept_count = len(kept)
-            if kept_count > 0:
-                logger.debug("登录历史清理完成，保留 {} 条记录", kept_count)
-        except Exception:
-            logger.warning("清理登录历史失败: {}", self._history_path, exc_info=True)
+                # 最多保留 MAX_HISTORY_SIZE 条（保留末尾，即最新记录）
+                if len(kept) > MAX_HISTORY_SIZE:
+                    kept = kept[-MAX_HISTORY_SIZE:]
+                content = "\n".join(kept)
+                if kept:
+                    content += "\n"
+                atomic_write(str(self._history_path), content, encoding="utf-8")
+                kept_count = len(kept)
+                if kept_count > 0:
+                    logger.debug("登录历史清理完成，保留 {} 条记录", kept_count)
+            except Exception:
+                logger.warning(
+                    "清理登录历史失败: {}", self._history_path, exc_info=True
+                )

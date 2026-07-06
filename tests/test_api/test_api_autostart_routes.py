@@ -34,7 +34,10 @@ class TestAutostartStatus:
     def test_autostart_status_returns_200(self, api_client):
         test_client, mock_services = api_client
         mock_services.autostart_service.status.return_value = {
-            "platform": "windows", "enabled": False, "method": "", "location": "",
+            "platform": "windows",
+            "enabled": False,
+            "method": "",
+            "location": "",
         }
         resp = test_client.get("/api/autostart/status")
         assert resp.status_code == 200
@@ -47,7 +50,10 @@ class TestAutostartStatus:
     def test_autostart_status_default_disabled(self, api_client):
         test_client, mock_services = api_client
         mock_services.autostart_service.status.return_value = {
-            "platform": "windows", "enabled": False, "method": "", "location": "",
+            "platform": "windows",
+            "enabled": False,
+            "method": "",
+            "location": "",
         }
         data = test_client.get("/api/autostart/status").json()
         assert data["enabled"] is False
@@ -85,23 +91,21 @@ class TestDisableAutostart:
 class TestAutostartCliArgs:
     """_autostart_cli_args 函数。"""
 
-    def test_lightweight_mode(self):
-        """轻量模式包含 --runtime-mode lightweight。"""
-        result = _autostart_cli_args(lightweight=True)
-        assert "--runtime-mode lightweight" in result
-        assert "--startup-action monitor" in result
+    def test_contains_required_args(self):
+        """包含 --no-browser 和 --source autostart。"""
+        result = _autostart_cli_args()
         assert "--no-browser" in result
         assert "--source autostart" in result
 
-    def test_full_mode(self):
-        """完整模式不包含 --runtime-mode。"""
-        result = _autostart_cli_args(lightweight=False)
+    def test_no_mode_args(self):
+        """不包含 --runtime-mode 和 --startup-action（由配置决定）。"""
+        result = _autostart_cli_args()
         assert "--runtime-mode" not in result
-        assert "--startup-action monitor" in result
+        assert "--startup-action" not in result
 
     def test_no_double_spaces(self):
         """结果中无连续空格。"""
-        result = _autostart_cli_args(lightweight=False)
+        result = _autostart_cli_args()
         assert "  " not in result
 
 
@@ -222,7 +226,9 @@ class TestAutoStartServiceStatus:
     @patch("app.services.autostart.is_linux", return_value=False)
     @patch("app.services.autostart.is_windows", return_value=False)
     @patch("app.services.autostart.get_platform", return_value="FreeBSD")
-    def test_status_unsupported(self, mock_gp, mock_win, mock_linux, mock_mac, tmp_path):
+    def test_status_unsupported(
+        self, mock_gp, mock_win, mock_linux, mock_mac, tmp_path
+    ):
         svc = AutoStartService(tmp_path)
         result = svc.status()
         assert result["enabled"] is False
@@ -236,7 +242,9 @@ class TestAutoStartServiceEnableDisable:
     @patch("app.services.autostart.is_linux", return_value=False)
     @patch("app.services.autostart.is_windows", return_value=False)
     @patch("app.services.autostart.get_platform", return_value="FreeBSD")
-    def test_enable_unsupported(self, mock_gp, mock_win, mock_linux, mock_mac, tmp_path):
+    def test_enable_unsupported(
+        self, mock_gp, mock_win, mock_linux, mock_mac, tmp_path
+    ):
         svc = AutoStartService(tmp_path)
         success, msg = svc.enable()
         assert success is False
@@ -246,7 +254,9 @@ class TestAutoStartServiceEnableDisable:
     @patch("app.services.autostart.is_linux", return_value=False)
     @patch("app.services.autostart.is_windows", return_value=False)
     @patch("app.services.autostart.get_platform", return_value="FreeBSD")
-    def test_disable_unsupported(self, mock_gp, mock_win, mock_linux, mock_mac, tmp_path):
+    def test_disable_unsupported(
+        self, mock_gp, mock_win, mock_linux, mock_mac, tmp_path
+    ):
         svc = AutoStartService(tmp_path)
         success, msg = svc.disable()
         assert success is False
@@ -274,7 +284,7 @@ class TestAutoStartServiceEnableDisable:
     def test_enable_windows_cjk_path(self, mock_linux, mock_mac, mock_win, tmp_path):
         cjk_path = tmp_path / "中文路径"
         svc = AutoStartService(cjk_path)
-        success, msg = svc.enable(lightweight=True)
+        success, msg = svc.enable()
         assert success is False
         assert "中文" in msg or "路径" in msg
 

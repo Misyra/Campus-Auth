@@ -8,25 +8,26 @@ from __future__ import annotations
 import threading
 import time
 from concurrent.futures import Future
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
-
-from app.network.decision import check_network_status
-from app.schemas import RuntimeConfig
+from app.schemas import AppSettings, LoginCredentials
 from app.workers.playwright_worker import WorkerResponse
 
 
 def _ensure_login_config(engine) -> None:
     """确保引擎运行时配置包含登录所需字段。"""
-    from app.schemas import LoginCredentials
     old = engine._runtime_config
-    engine._runtime_config = old.model_copy(update={
-        "credentials": LoginCredentials(
-            username="testuser", password="testpass", auth_url="http://10.0.0.1",
-            isp=old.credentials.isp, carrier_custom=old.credentials.carrier_custom,
-        ),
-    })
+    engine._runtime_config = old.model_copy(
+        update={
+            "credentials": LoginCredentials(
+                username="testuser",
+                password="testpass",
+                auth_url="http://10.0.0.1",
+                isp=old.credentials.isp,
+                carrier_custom=old.credentials.carrier_custom,
+            ),
+        }
+    )
 
 
 class TestLoginConnection:
@@ -34,28 +35,39 @@ class TestLoginConnection:
 
     def test_auto_login_success(self, integration_stack):
         """自动登录成功 → worker 被调用。"""
-        engine, profile_service, task_executor, mock_worker = integration_stack
+        engine, profile_service, task_executor, _, mock_worker = integration_stack
         _ensure_login_config(engine)
 
         mock_worker.submit.return_value = WorkerResponse(success=True, data="登录成功")
 
         # 网络异常 → check_once 返回 need_login → 触发登录
-        with patch(
-            "app.network.decision.check_network_status",
-            return_value=(False, "network_down", "none"),
+        with (
+            patch(
+                "app.network.decision.check_network_status",
+                new=AsyncMock(return_value=(False, "network_down", "none")),
+            ),
+            patch(
+                "app.network.decision.check_login_prerequisites",
+                new=AsyncMock(return_value=(True, "")),
+            ),
         ):
-            result = engine._do_async_login()
+            import asyncio
+            loop = asyncio.new_event_loop()
+            result = loop.run_until_complete(engine._do_async_login())
+            loop.close()
 
         assert result is True
 
         # 等待 login_pool 中的任务完成
-        time.sleep(0.5)
+        deadline = time.time() + 5
+        while time.time() < deadline and not mock_worker.submit.called:
+            time.sleep(0.05)
 
         mock_worker.submit.assert_called()
 
     def test_auto_login_retry(self, integration_stack):
         """登录失败 → 重试 → 最终成功。"""
-        engine, profile_service, task_executor, mock_worker = integration_stack
+        engine, profile_service, task_executor, _, mock_worker = integration_stack
         _ensure_login_config(engine)
 
         # 第一次失败，第二次成功
@@ -65,13 +77,16 @@ class TestLoginConnection:
         ]
 
         # 第一次登录
-        future1 = task_executor.execute_login_async()
+        config = engine.get_runtime_config()
+        handle1 = task_executor._login_orchestrator.submit(source="auto", config=config)
+        future1 = handle1.future
         ok1, msg1 = future1.result(timeout=5)
         assert ok1 is False
         assert "网络超时" in msg1
 
         # 重试登录
-        future2 = task_executor.execute_login_async()
+        handle2 = task_executor._login_orchestrator.submit(source="auto", config=config)
+        future2 = handle2.future
         ok2, msg2 = future2.result(timeout=5)
         assert ok2 is True
         assert "登录成功" in msg2
@@ -80,21 +95,34 @@ class TestLoginConnection:
 
     def test_retry_exhausted(self, integration_stack):
         """连续失败达阈值 → MonitoredPolicy._attempt 递增。"""
-        engine, profile_service, task_executor, mock_worker = integration_stack
+        engine, profile_service, task_executor, _, mock_worker = integration_stack
         _ensure_login_config(engine)
+
+        from app.schemas import MonitorSettings
+
+        engine._runtime_config = engine._runtime_config.model_copy(
+            update={
+                "monitor": MonitorSettings(
+                    enable_local_check=False, check_auth_url=False
+                ),
+            }
+        )
 
         mock_worker.submit.return_value = WorkerResponse(
             success=False, error="网络超时"
         )
 
         # 通过引擎的 _do_async_login 连续提交登录（走 done callback 路径）
+        import asyncio
         for i in range(3):
             future = Future()
             handle = MagicMock()
             handle.rejected_reason = None
             handle.future = future
             with patch.object(engine._orchestrator, "submit", return_value=handle):
-                result = engine._do_async_login()
+                loop = asyncio.new_event_loop()
+                result = loop.run_until_complete(engine._do_async_login())
+                loop.close()
             assert result is True
             future.set_result((False, "网络超时"))
             time.sleep(0.2)
@@ -104,7 +132,7 @@ class TestLoginConnection:
 
     def test_manual_preempt_auto(self, integration_stack):
         """手动登录取消卡住的自动登录。"""
-        engine, profile_service, task_executor, mock_worker = integration_stack
+        engine, profile_service, task_executor, _, mock_worker = integration_stack
         _ensure_login_config(engine)
 
         login_started = threading.Event()
@@ -118,7 +146,11 @@ class TestLoginConnection:
         mock_worker.submit.side_effect = blocking_login
 
         # 启动自动登录（异步）
-        future_auto = task_executor.execute_login_async()
+        config = engine.get_runtime_config()
+        handle_auto = task_executor._login_orchestrator.submit(
+            source="auto", config=config
+        )
+        future_auto = handle_auto.future
         login_started.wait(timeout=5)
 
         # 确认登录正在进行
@@ -129,7 +161,9 @@ class TestLoginConnection:
         login_release.set()
 
         # 等待自动登录结束
-        time.sleep(0.5)
+        deadline = time.time() + 5
+        while time.time() < deadline and task_executor.is_login_running():
+            time.sleep(0.05)
         assert task_executor.is_login_running() is False
 
         # 现在手动登录应该能成功提交
@@ -138,14 +172,17 @@ class TestLoginConnection:
             success=True, data="手动登录成功"
         )
 
-        future_manual = task_executor.execute_login_async()
+        handle_manual = task_executor._login_orchestrator.submit(
+            source="auto", config=config
+        )
+        future_manual = handle_manual.future
         ok, msg = future_manual.result(timeout=5)
         assert ok is True
         assert "手动登录成功" in msg
 
     def test_callback_updates_history(self, integration_stack):
         """登录完成 → 历史记录写入。"""
-        engine, profile_service, task_executor, mock_worker = integration_stack
+        engine, profile_service, task_executor, _, mock_worker = integration_stack
         _ensure_login_config(engine)
 
         login_done = threading.Event()
@@ -156,7 +193,9 @@ class TestLoginConnection:
 
         mock_worker.submit.side_effect = submit_with_event
 
-        future = task_executor.execute_login_async()
+        config = engine.get_runtime_config()
+        handle = task_executor._login_orchestrator.submit(source="auto", config=config)
+        future = handle.future
         login_done.wait(timeout=5)
         ok, msg = future.result(timeout=5)
 
@@ -168,7 +207,7 @@ class TestLoginConnection:
 
     def test_concurrent_dedup(self, integration_stack):
         """两个线程同时提交 → 只有一个实际执行。"""
-        engine, profile_service, task_executor, mock_worker = integration_stack
+        engine, profile_service, task_executor, _, mock_worker = integration_stack
         _ensure_login_config(engine)
 
         start_event = threading.Event()
@@ -185,11 +224,18 @@ class TestLoginConnection:
         mock_worker.submit.side_effect = blocking_submit
 
         # 线程 A 提交登录
-        future_a = task_executor.execute_login_async()
+        config = engine.get_runtime_config()
+        handle_a = task_executor._login_orchestrator.submit(
+            source="auto", config=config
+        )
+        future_a = handle_a.future
         start_event.wait(timeout=5)
 
         # 线程 B 尝试提交，应被去重（返回同一个 Future）
-        future_b = task_executor.execute_login_async()
+        handle_b = task_executor._login_orchestrator.submit(
+            source="auto", config=config
+        )
+        future_b = handle_b.future
 
         # 验证 submit 只调了一次
         assert call_count == 1
@@ -202,7 +248,7 @@ class TestLoginConnection:
 
     def test_reload_during_login(self, integration_stack):
         """登录进行中 → 保存配置 → reload → 旧登录正常结束，新配置已生效。"""
-        engine, profile_service, task_executor, mock_worker = integration_stack
+        engine, profile_service, task_executor, _, mock_worker = integration_stack
         _ensure_login_config(engine)
 
         login_done = threading.Event()
@@ -216,19 +262,22 @@ class TestLoginConnection:
         mock_worker.submit.side_effect = slow_login
 
         # 启动登录
-        future = task_executor.execute_login_async()
+        config = engine.get_runtime_config()
+        handle = task_executor._login_orchestrator.submit(source="auto", config=config)
+        future = handle.future
         login_done.wait(timeout=5)
 
         # 登录进行中，保存新配置
-        from app.schemas import ConfigResponseDTO
-        from app.services.config_service import save_global_and_profile
+        from app.schemas import ConfigSaveRequest
+        from app.services.profile_service import save_global_and_profile
 
-        payload = ConfigResponseDTO(
+        payload = ConfigSaveRequest(
             browser=engine._runtime_config.browser,
             monitor=engine._runtime_config.monitor,
             retry=engine._runtime_config.retry,
             pause=engine._runtime_config.pause,
             logging=engine._runtime_config.logging,
+            app_settings=AppSettings(),
         )
         result = save_global_and_profile(payload, profile_service, engine.reload_config)
 

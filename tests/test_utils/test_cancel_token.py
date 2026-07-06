@@ -74,8 +74,8 @@ class TestCompositeCancelEvent:
 
         assert len(cce._sources) == 1
 
-    def test_clear_resets_self_keeps_sources(self) -> None:
-        """clear() 清除自身标志但保留源列表。"""
+    def test_clear_resets_self_and_sources(self) -> None:
+        """clear() 清除自身标志并复位所有源事件。"""
         cce = CompositeCancelEvent()
         source = threading.Event()
         source.set()
@@ -83,12 +83,12 @@ class TestCompositeCancelEvent:
         cce.add_source(source)
         assert cce.is_set()
 
-        # clear 自身标志
+        # clear 复位自身并清除源引用（不清除外部源事件状态）
         cce.clear()
-        # 但源仍然 set，惰性扫描会再次发现
-        assert cce.is_set()
-        # 源列表仍保留
-        assert len(cce._sources) == 1
+        assert not cce.is_set()
+        assert len(cce._sources) == 0
+        # 外部源事件不受影响
+        assert source.is_set()
 
     def test_is_set_caches_result(self) -> None:
         """is_set() 发现源 set 后会缓存结果（后续不再扫描）。"""
@@ -163,9 +163,70 @@ class TestCompositeCancelEvent:
         src2.set()
         assert cce.is_set()
 
+    def test_clear_resets_all_sources(self) -> None:
+        """clear() 应同时复位自身标志和所有源事件。"""
+        cce = CompositeCancelEvent()
+        src = threading.Event()
+        cce.add_source(src)
+        src.set()
+        assert cce.is_set()
+        cce.clear()
+        assert not cce.is_set()
+
     def test_no_sources_is_set_false(self) -> None:
         """无任何源时，clear 后 is_set() 应为 False。"""
         cce = CompositeCancelEvent()
         cce.set()
         cce.clear()
         assert not cce.is_set()
+
+    def test_no_deadlock_wait_concurrent_with_is_set(self) -> None:
+        """wait() 和 is_set() 并发调用不应死锁。
+
+        死锁场景：is_set() 持有 _lock → 调用 super().set() 获取 _cond；
+        wait() 持有 _cond → 调用 is_set() 获取 _lock。
+        修复后 super().set() 在锁外调用，锁顺序不再颠倒。
+
+        测试策略：动态控制 source 事件，使 wait() 实际阻塞、is_set() 实际扫描，
+        产生真实的锁竞争。
+        """
+        cce = CompositeCancelEvent()
+        source = threading.Event()
+        cce.add_source(source)
+        # source 未设置，使 wait() 阻塞、is_set() 扫描源，产生真实锁竞争
+        errors: list[Exception] = []
+
+        def run_wait() -> None:
+            try:
+                for _ in range(100):
+                    cce.wait(timeout=0.5)
+            except Exception as e:
+                errors.append(e)
+
+        def run_is_set() -> None:
+            try:
+                for _ in range(100):
+                    cce.is_set()
+            except Exception as e:
+                errors.append(e)
+
+        threads = [
+            threading.Thread(target=run_wait),
+            threading.Thread(target=run_is_set),
+            threading.Thread(target=run_wait),
+            threading.Thread(target=run_is_set),
+        ]
+
+        for t in threads:
+            t.start()
+        # 让线程运行一段时间，期间 source 未设置，wait() 会阻塞、is_set() 会扫描
+        time.sleep(0.2)
+        # 设置 source 让所有线程完成
+        source.set()
+        # 超时 10 秒即判定死锁
+        for t in threads:
+            t.join(timeout=10)
+            if t.is_alive():
+                pytest.fail("死锁检测：线程未在 10 秒内完成，疑似死锁")
+
+        assert not errors, f"并发执行出错: {errors}"

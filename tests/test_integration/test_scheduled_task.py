@@ -54,13 +54,13 @@ def _make_executor(
     if history_store is None:
         history_store = MagicMock(spec=TaskHistoryStore)
 
+    from app.schemas import RuntimeConfig
+
     executor = TaskExecutor(
         registry=registry,
         history_store=history_store,
         worker_getter=kwargs.get("worker_getter", MagicMock()),
-        get_runtime_config=kwargs.get(
-            "get_runtime_config", lambda: {"browser_settings": {}}
-        ),
+        get_runtime_config=kwargs.get("get_runtime_config", lambda: RuntimeConfig()),
         login_orchestrator=kwargs.get("login_orchestrator", MagicMock()),
     )
     return executor
@@ -199,9 +199,7 @@ class TestTaskRegistrationAndExecution:
         """get_due_tasks 在正确时间返回到期任务。"""
         registry = TaskRegistry(tmp_path)
 
-        config = _make_task_config(
-            schedule={"hour": 14, "minute": 30}, enabled=True
-        )
+        config = _make_task_config(schedule={"hour": 14, "minute": 30}, enabled=True)
         registry.save_task("noon_task", config)
 
         due = registry.get_due_tasks(14, 30)
@@ -214,9 +212,7 @@ class TestTaskRegistrationAndExecution:
         """修改任务时间后调度索引同步更新。"""
         registry = TaskRegistry(tmp_path)
 
-        config = _make_task_config(
-            schedule={"hour": 10, "minute": 0}, enabled=True
-        )
+        config = _make_task_config(schedule={"hour": 10, "minute": 0}, enabled=True)
         registry.save_task("move_task", config)
         assert "move_task" in registry.get_due_tasks(10, 0)
 
@@ -371,7 +367,9 @@ class TestTaskExecutionWithVariableResolution:
         mock_handle.rejected_reason = None
         mock_orchestrator.submit.return_value = mock_handle
 
-        executor = _make_executor(registry=registry, login_orchestrator=mock_orchestrator)
+        executor = _make_executor(
+            registry=registry, login_orchestrator=mock_orchestrator
+        )
 
         success, message = executor._execute_browser("test_task", 30)
 
@@ -511,10 +509,10 @@ class TestTaskFailureHandling:
         store = TaskHistoryStore(tmp_path / "history")
 
         store.add_record("", "success", "ok", 1.0)
-        store.add_record("123bad", "success", "ok", 1.0)
+        store.add_record("bad id!", "success", "ok", 1.0)
 
         assert store.get_history("") == []
-        assert store.get_history("123bad") == []
+        assert store.get_history("bad id!") == []
 
     def test_multiple_failures_accumulate_history(self, tmp_path: Path):
         """多次失败累积历史记录。"""
@@ -544,40 +542,6 @@ class TestTaskFailureHandling:
 
 class TestTaskCancellation:
     """任务取消：取消事件传播、线程池行为。"""
-
-    def test_login_cancel_event(self):
-        """登录取消事件正确传播到 orchestrator。"""
-        mock_orchestrator = MagicMock()
-        mock_handle = MagicMock()
-        mock_handle.result.return_value = (False, "登录已取消")
-        mock_orchestrator.submit.return_value = mock_handle
-        executor = _make_executor(login_orchestrator=mock_orchestrator)
-
-        cancel_event = threading.Event()
-        cancel_event.set()
-
-        success, message = executor.execute_login(cancel_event=cancel_event)
-
-        assert success is False
-        assert "取消" in message
-        call_kwargs = mock_orchestrator.submit.call_args.kwargs
-        assert call_kwargs["cancel_event"] is cancel_event
-
-    def test_login_async_deduplication(self):
-        """登录异步委托到 orchestrator。"""
-        mock_orchestrator = MagicMock()
-        mock_future = Future()
-        mock_future.set_result((True, "登录成功"))
-        mock_handle = MagicMock()
-        mock_handle.future = mock_future
-        mock_orchestrator.submit.return_value = mock_handle
-
-        executor = _make_executor(login_orchestrator=mock_orchestrator)
-
-        future = executor.execute_login_async()
-        assert future is mock_future
-        result = future.result(timeout=5)
-        assert result[0] is True
 
     def test_bounded_executor_rejects_when_full(self):
         """BoundedExecutor 队列满时拒绝提交。"""
@@ -635,23 +599,6 @@ class TestTaskCancellation:
         assert results == [1, 2, 3]
 
         pool.shutdown(wait=True)
-
-    def test_execute_login_async_returns_future(self):
-        """execute_login_async 返回 orchestrator 的 Future 对象。"""
-        mock_orchestrator = MagicMock()
-        mock_future = Future()
-        mock_future.set_result((True, "ok"))
-        mock_handle = MagicMock()
-        mock_handle.future = mock_future
-        mock_orchestrator.submit.return_value = mock_handle
-
-        executor = _make_executor(login_orchestrator=mock_orchestrator)
-
-        future = executor.execute_login_async()
-
-        assert isinstance(future, Future)
-        result = future.result(timeout=5)
-        assert result[0] is True
 
     def test_task_pool_lazy_initialization(self, tmp_path: Path):
         """任务线程池懒初始化：无任务时不创建。"""

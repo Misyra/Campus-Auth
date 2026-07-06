@@ -63,7 +63,7 @@ wheels = [
 
 [[package]]
 name = "campus-auth"
-version = "4.0.6"
+version = "4.2.0"
 source = { virtual = "." }
 dependencies = [
     { name = "cairosvg" },

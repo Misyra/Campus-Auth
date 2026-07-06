@@ -19,21 +19,20 @@ from app.schemas import (
     ProfilesData,
     RuntimeConfig,
 )
-from app.services.config_builder import ConfigBuilder
+from app.services.config_builder import build_runtime_config
 from app.services.profile_service import ProfileService
 from app.services.debug_session import (
     DebugSession,
     _next_debug_gen,
     debug_to_response,
-    empty_debug_session,
 )
 from app.services.login_history_service import LoginHistoryService
 from app.services.profile_service import ProfileService
-from app.services.task_service import (
+from app.tasks.manager import (
     _DANGEROUS_STEP_TYPES,
-    TaskService,
     _check_dangerous_steps,
 )
+from app.tasks.manager import TaskManager
 
 # =====================================================================
 # _check_dangerous_steps
@@ -114,7 +113,7 @@ class TestCheckDangerousSteps:
 class TestTaskService:
     @pytest.fixture
     def service(self, tmp_path):
-        return TaskService(tmp_path)
+        return TaskManager(tmp_path / "tasks")
 
     @pytest.fixture
     def service_with_tasks(self, tmp_path):
@@ -134,7 +133,7 @@ class TestTaskService:
         (browser_dir / "custom_task.json").write_text(
             json.dumps(custom_task, ensure_ascii=False), encoding="utf-8"
         )
-        return TaskService(tmp_path)
+        return TaskManager(tmp_path / "tasks")
 
     def test_list_tasks(self, service_with_tasks):
         tasks = service_with_tasks.list_tasks()
@@ -146,23 +145,23 @@ class TestTaskService:
         assert service.list_tasks() == []
 
     def test_get_task(self, service_with_tasks):
-        task = service_with_tasks.get_task("default")
+        task = service_with_tasks.get_task_detail("default")
         assert task is not None
         assert task["name"] == "默认任务"
         assert task["id"] == "default"
 
     def test_get_task_nonexistent(self, service_with_tasks):
-        assert service_with_tasks.get_task("nonexistent") is None
+        assert service_with_tasks.get_task_detail("nonexistent") is None
 
     def test_get_task_invalid_id(self, service):
-        assert service.get_task("123bad") is None
+        assert service.get_task_detail("123bad") is None
 
     def test_save_task(self, service):
         data = {
             "name": "新任务",
             "steps": [{"id": "s1", "type": "click", "selector": "#btn"}],
         }
-        ok, msg = service.save_task("new_task", data)
+        ok, msg = service.save_task_with_validation("new_task", data)
         assert ok is True
         assert "成功" in msg
 
@@ -171,13 +170,13 @@ class TestTaskService:
             "name": "",
             "steps": [{"id": "s1", "type": "click", "selector": "#btn"}],
         }
-        ok, msg = service.save_task("task1", data)
+        ok, msg = service.save_task_with_validation("task1", data)
         assert ok is False
         assert "名称" in msg
 
     def test_save_task_no_steps(self, service):
         data = {"name": "test"}
-        ok, msg = service.save_task("task1", data)
+        ok, msg = service.save_task_with_validation("task1", data)
         assert ok is False
         assert "步骤" in msg
 
@@ -186,39 +185,39 @@ class TestTaskService:
             "name": "test",
             "steps": [{"id": "s1", "type": "click", "selector": "#btn"}],
         }
-        ok, msg = service.save_task("123bad", data)
+        ok, msg = service.save_task_with_validation("bad id!", data)
         assert ok is False
         assert "ID" in msg
 
     def test_delete_task(self, service_with_tasks):
-        ok, msg = service_with_tasks.delete_task("custom_task")
+        ok, msg = service_with_tasks.delete_task_with_validation("custom_task")
         assert ok is True
-        assert service_with_tasks.get_task("custom_task") is None
+        assert service_with_tasks.get_task_detail("custom_task") is None
 
     def test_delete_default_returns_false(self, service_with_tasks):
-        ok, msg = service_with_tasks.delete_task("default")
+        ok, msg = service_with_tasks.delete_task_with_validation("default")
         assert ok is False
         assert "默认" in msg
 
     def test_delete_nonexistent(self, service):
-        ok, msg = service.delete_task("nonexistent")
+        ok, msg = service.delete_task_with_validation("nonexistent")
         assert ok is False
 
     def test_get_active_task_default(self, service):
         assert service.get_active_task() == "default"
 
     def test_set_active_task(self, service_with_tasks):
-        ok, msg = service_with_tasks.set_active_task("custom_task")
+        ok, msg = service_with_tasks.set_active_task_with_validation("custom_task")
         assert ok is True
         assert service_with_tasks.get_active_task() == "custom_task"
 
     def test_set_active_task_nonexistent(self, service):
-        ok, msg = service.set_active_task("nonexistent")
+        ok, msg = service.set_active_task_with_validation("nonexistent")
         assert ok is False
         assert "不存在" in msg
 
     def test_set_active_task_invalid_id(self, service):
-        ok, msg = service.set_active_task("123bad")
+        ok, msg = service.set_active_task_with_validation("123bad")
         assert ok is False
 
     def test_save_and_reload(self, service):
@@ -227,8 +226,8 @@ class TestTaskService:
             "url": "http://test.com",
             "steps": [{"id": "s1", "type": "click", "selector": "#btn"}],
         }
-        service.save_task("persist_test", data)
-        loaded = service.get_task("persist_test")
+        service.save_task_with_validation("persist_test", data)
+        loaded = service.get_task_detail("persist_test")
         assert loaded is not None
         assert loaded["name"] == "持久化测试"
         assert loaded["url"] == "http://test.com"
@@ -312,13 +311,14 @@ class TestProfileServiceRuntimeConfig:
 
 
 # =====================================================================
-# ConfigBuilder.build
+# build_runtime_config
 # =====================================================================
 
 
 class TestConfigBuilderBuild:
     def test_basic(self):
         from app.schemas import Profile
+
         config = RuntimeConfig()
         profile = Profile(
             username="admin",
@@ -326,7 +326,7 @@ class TestConfigBuilderBuild:
             auth_url="http://10.0.0.1",
             carrier="移动",
         )
-        result = ConfigBuilder.build(config, profile)
+        result = build_runtime_config(config, profile)
         assert result.credentials.username == "admin"
         assert result.credentials.password == "testpass"
         assert result.credentials.auth_url == "http://10.0.0.1"
@@ -334,25 +334,27 @@ class TestConfigBuilderBuild:
 
     def test_carrier_custom(self):
         from app.schemas import Profile
+
         config = RuntimeConfig()
         profile = Profile(carrier="自定义", carrier_custom="校园网")
-        result = ConfigBuilder.build(config, profile)
+        result = build_runtime_config(config, profile)
         assert result.credentials.isp == "校园网"
 
     def test_carrier_none(self):
         from app.schemas import Profile
+
         config = RuntimeConfig()
         profile = Profile(carrier="无")
-        result = ConfigBuilder.build(config, profile)
+        result = build_runtime_config(config, profile)
         assert result.credentials.isp == ""
 
     def test_masked_password_returns_empty(self):
         from app.schemas import Profile
+
         config = RuntimeConfig()
         profile = Profile(password="••••••••")
-        result = ConfigBuilder.build(config, profile)
+        result = build_runtime_config(config, profile)
         assert result.credentials.password == ""
-
 
 
 # =====================================================================
@@ -667,8 +669,12 @@ class TestProfileService:
         )
         service.save(data)
 
-        def modifier(d: ProfilesData):
-            d.profiles["default"].username = "admin"
+        def modifier(d: ProfilesData) -> ProfilesData:
+            old = d.profiles["default"]
+            new_profile = old.model_copy(update={"username": "admin"})
+            return d.model_copy(
+                update={"profiles": {**d.profiles, "default": new_profile}}
+            )
 
         service.update(modifier)
         loaded = service.load()
@@ -789,14 +795,14 @@ class TestDebugSession:
 
 class TestEmptyDebugSession:
     def test_returns_fresh_session(self):
-        session = empty_debug_session()
+        session = DebugSession()
         assert isinstance(session, DebugSession)
         assert session.running is False
         assert session.task_id is None
 
     def test_returns_new_instance(self):
-        s1 = empty_debug_session()
-        s2 = empty_debug_session()
+        s1 = DebugSession()
+        s2 = DebugSession()
         assert s1 is not s2
 
 
@@ -826,7 +832,7 @@ class TestDebugToResponse:
         assert response["screenshot_url"] == "/temp/test.png"
 
     def test_empty_session(self):
-        session = empty_debug_session()
+        session = DebugSession()
         response = debug_to_response(session)
         assert response["running"] is False
         assert response["task_id"] is None
@@ -931,22 +937,22 @@ class TestWebSocketMaxSize:
 
 class TestSaveTaskOrder:
     @pytest.fixture
-    def service(self, tmp_path: Path) -> TaskService:
-        return TaskService(tmp_path)
+    def service(self, tmp_path: Path) -> TaskManager:
+        return TaskManager(tmp_path / "tasks")
 
-    def test_save_valid_order(self, service: TaskService):
+    def test_save_valid_order(self, service: TaskManager):
         order = {"browser": ["task_a", "task_b"], "scripts": ["script_1"]}
-        ok, msg = service.save_task_order(order)
+        ok, msg = service.save_order_with_validation(order)
         assert ok is True
         assert "成功" in msg
 
-    def test_save_invalid_order_type(self, service: TaskService):
-        ok, msg = service.save_task_order("not a dict")
+    def test_save_invalid_order_type(self, service: TaskManager):
+        ok, msg = service.save_order_with_validation("not a dict")
         assert ok is False
         assert "格式" in msg
 
-    def test_save_empty_order(self, service: TaskService):
-        ok, msg = service.save_task_order({})
+    def test_save_empty_order(self, service: TaskManager):
+        ok, msg = service.save_order_with_validation({})
         assert ok is True
 
 
@@ -957,13 +963,13 @@ class TestSaveTaskOrder:
 
 class TestListScripts:
     @pytest.fixture
-    def service(self, tmp_path: Path) -> TaskService:
-        return TaskService(tmp_path)
+    def service(self, tmp_path: Path) -> TaskManager:
+        return TaskManager(tmp_path / "tasks")
 
-    def test_list_scripts_empty(self, service: TaskService):
-        assert service.list_scripts() == []
+    def test_list_scripts_empty(self, service: TaskManager):
+        assert service.list_script_tasks() == []
 
-    def test_list_scripts_returns_scripts(self, service: TaskService, tmp_path: Path):
+    def test_list_scripts_returns_scripts(self, service: TaskManager, tmp_path: Path):
         scripts_dir = tmp_path / "tasks" / "scripts"
         scripts_dir.mkdir(parents=True, exist_ok=True)
         (scripts_dir / "my_script.json").write_text(
@@ -972,7 +978,7 @@ class TestListScripts:
             ),
             encoding="utf-8",
         )
-        scripts = service.list_scripts()
+        scripts = service.list_script_tasks()
         assert len(scripts) == 1
         assert scripts[0]["id"] == "my_script"
 
@@ -984,40 +990,40 @@ class TestListScripts:
 
 class TestSaveScriptTask:
     @pytest.fixture
-    def service(self, tmp_path: Path) -> TaskService:
-        return TaskService(tmp_path)
+    def service(self, tmp_path: Path) -> TaskManager:
+        return TaskManager(tmp_path / "tasks")
 
-    def test_save_script_success(self, service: TaskService):
+    def test_save_script_success(self, service: TaskManager):
         config = {"type": "script", "content": 'print("hello")', "name": "测试脚本"}
-        ok, msg = service.save_task("my_script", config)
+        ok, msg = service.save_task_with_validation("my_script", config)
         assert ok is True
         assert "脚本" in msg
 
-    def test_save_script_empty_content(self, service: TaskService):
+    def test_save_script_empty_content(self, service: TaskManager):
         config = {"type": "script", "content": "", "name": "空脚本"}
-        ok, msg = service.save_task("empty_script", config)
+        ok, msg = service.save_task_with_validation("empty_script", config)
         assert ok is False
         assert "内容" in msg
 
-    def test_save_script_whitespace_content(self, service: TaskService):
+    def test_save_script_whitespace_content(self, service: TaskManager):
         config = {"type": "script", "content": "   \n  ", "name": "空白脚本"}
-        ok, msg = service.save_task("ws_script", config)
+        ok, msg = service.save_task_with_validation("ws_script", config)
         assert ok is False
         assert "内容" in msg
 
-    def test_save_script_with_binary_path(self, service: TaskService):
+    def test_save_script_with_binary_path(self, service: TaskManager):
         config = {
             "type": "script",
             "content": 'print("custom binary")',
             "name": "自定义二进制",
             "binary_path": "/usr/bin/python3",
         }
-        ok, msg = service.save_task("custom_bin", config)
+        ok, msg = service.save_task_with_validation("custom_bin", config)
         assert ok is True
 
-    def test_save_script_invalid_id(self, service: TaskService):
+    def test_save_script_invalid_id(self, service: TaskManager):
         config = {"type": "script", "content": 'print("hi")'}
-        ok, msg = service.save_task("123bad", config)
+        ok, msg = service.save_task_with_validation("bad id!", config)
         assert ok is False
         assert "ID" in msg
 
@@ -1029,76 +1035,41 @@ class TestSaveScriptTask:
 
 class TestGetTaskScript:
     @pytest.fixture
-    def service(self, tmp_path: Path) -> TaskService:
-        return TaskService(tmp_path)
+    def service(self, tmp_path: Path) -> TaskManager:
+        return TaskManager(tmp_path / "tasks")
 
-    def test_get_script_task(self, service: TaskService):
+    def test_get_script_task(self, service: TaskManager):
         config = {"type": "script", "content": 'print("test")', "name": "测试"}
-        service.save_task("test_script", config)
-        task = service.get_task("test_script")
+        service.save_task_with_validation("test_script", config)
+        task = service.get_task_detail("test_script")
         assert task is not None
         assert task["type"] == "script"
         assert task["content"] == 'print("test")'
         assert task["name"] == "测试"
 
-    def test_get_script_task_with_binary(self, service: TaskService):
+    def test_get_script_task_with_binary(self, service: TaskManager):
         config = {
             "type": "script",
             "content": 'print("binary")',
             "name": "二进制脚本",
             "binary_path": "/usr/bin/python3",
         }
-        service.save_task("bin_script", config)
-        task = service.get_task("bin_script")
+        service.save_task_with_validation("bin_script", config)
+        task = service.get_task_detail("bin_script")
         assert task is not None
         assert task["binary_path"] == "/usr/bin/python3"
 
-    def test_get_browser_task(self, service: TaskService):
+    def test_get_browser_task(self, service: TaskManager):
         config = {
             "name": "浏览器任务",
             "url": "http://test.com",
             "steps": [{"id": "s1", "type": "click", "selector": "#btn"}],
         }
-        service.save_task("browser_task", config)
-        task = service.get_task("browser_task")
+        service.save_task_with_validation("browser_task", config)
+        task = service.get_task_detail("browser_task")
         assert task is not None
         assert task["type"] == "browser"
         assert task["name"] == "浏览器任务"
-
-
-# =====================================================================
-# LoginHistoryService — 异常日志
-# =====================================================================
-
-
-class TestLoginHistoryService:
-    def test_record_logs_warning_on_profile_error(self, caplog, tmp_path):
-        """record() 在获取 profile 名称失败时应记录 debug 日志。"""
-        svc = LoginHistoryService(tmp_path)
-
-        class BrokenProfile:
-            def get_active_profile(self):
-                raise RuntimeError("模拟错误")
-
-        with caplog.at_level("DEBUG"):
-            svc.record(success=True, duration_ms=100, profile_service=BrokenProfile())
-
-        debug_messages = [r.message for r in caplog.records if r.levelname == "DEBUG"]
-        assert any("方案名称" in m or "方案" in m for m in debug_messages)
-
-    def test_record_logs_warning_on_task_error(self, caplog, tmp_path):
-        """record() 在获取任务名称失败时应记录 debug 日志。"""
-        svc = LoginHistoryService(tmp_path)
-
-        class BrokenTaskManager:
-            def get_active_task(self):
-                raise RuntimeError("模拟错误")
-
-        with caplog.at_level("DEBUG"):
-            svc.record(success=True, duration_ms=100, task_manager=BrokenTaskManager())
-
-        debug_messages = [r.message for r in caplog.records if r.levelname == "DEBUG"]
-        assert any("任务名称" in m or "任务" in m for m in debug_messages)
 
 
 # ── ProfileService TOCTOU 修复 ──
@@ -1123,6 +1094,8 @@ class TestCorruptRenameEAFP:
         svc._profiles_dir = profiles_dir
         svc._lock = MagicMock()
         svc._data = None
+        svc._cache = None
+        svc._cache_mtime = None
 
         result = svc._load_unsafe()
 
@@ -1143,6 +1116,8 @@ class TestCorruptRenameEAFP:
         svc._profiles_dir = profiles_dir
         svc._lock = MagicMock()
         svc._data = None
+        svc._cache = None
+        svc._cache_mtime = None
 
         result = svc._load_unsafe()
 

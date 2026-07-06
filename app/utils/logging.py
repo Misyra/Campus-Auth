@@ -14,12 +14,15 @@ import os
 import sys
 import threading
 from collections import deque
+from collections.abc import Callable
 from datetime import datetime
+from itertools import islice
+from pathlib import Path
 from typing import Any
 
 from loguru import logger
 
-from app.constants import LOG_BUFFER_MAXLEN, STATUS_LOG_MAXLEN
+from app.constants import LOG_BUFFER_MAXLEN, STATUS_LOG_MAXLEN, VALID_LOG_LEVELS
 
 # 移除 loguru 默认的 stderr handler
 logger.remove()
@@ -70,7 +73,6 @@ def _to_std_logging(message):
         "INFO": logging.INFO,
         "WARNING": logging.WARNING,
         "ERROR": logging.ERROR,
-        "CRITICAL": logging.CRITICAL,
     }
     std_level = level_map.get(level, logging.INFO)
 
@@ -79,12 +81,11 @@ def _to_std_logging(message):
     std_logger.log(std_level, str(message).strip())
 
 
-# 添加标准 logging 桥接 sink
-logger.add(_to_std_logging, level="DEBUG", format="{message}")
+# 添加标准 logging 桥接 sink（仅测试环境）
+if "pytest" in sys.modules:
+    logger.add(_to_std_logging, level="DEBUG", format="{message}")
 
 # ==================== 日志级别标准化 ====================
-
-VALID_LOG_LEVELS = frozenset({"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"})
 
 
 def normalize_level(level: str | None, default: str = "INFO") -> str:
@@ -95,14 +96,14 @@ def normalize_level(level: str | None, default: str = "INFO") -> str:
 
 # ==================== 核心接口 ====================
 
-VALID_SOURCES = frozenset({"backend", "network", "task", "frontend", "debug"})
+VALID_SOURCES = frozenset({"backend", "frontend"})
 
 
 def get_logger(name: str, source: str = "backend") -> logger:
     """获取绑定 name 和 source 的 logger。
 
     返回的 logger 支持直接调用 .info()、.warning() 等方法。
-    source 可选值: backend, network, task, frontend, debug
+    source 可选值: backend, frontend
     非法 source 值自动降级为 "backend"。
     """
     if source not in VALID_SOURCES:
@@ -120,32 +121,29 @@ class DashboardSink:
     """
 
     _MAX_MSG_LEN = 2000  # 消息截断上限，防止单条日志携带大量 traceback
-    _MAX_SRC_LEN = 64  # source 字段防异常膨胀
 
-    def __init__(self, maxlen: int = LOG_BUFFER_MAXLEN, broadcast_maxlen: int = STATUS_LOG_MAXLEN):
+    def __init__(
+        self, maxlen: int = LOG_BUFFER_MAXLEN, broadcast_maxlen: int = STATUS_LOG_MAXLEN
+    ):
         self.buffer: deque[dict] = deque(maxlen=maxlen)
         self.broadcast_queue: deque[dict] = deque(maxlen=broadcast_maxlen)
         self._lock = threading.Lock()
-        # 获取配置中心实例
-        self._config_center = LogConfigCenter.get_instance()
+        self._drain_notifier: Callable[[], None] | None = None
+
+    def set_drain_notifier(self, notifier: Callable[[], None]) -> None:
+        """设置 drain 通知器（由 WebSocketManager 注入）。"""
+        self._drain_notifier = notifier
 
     def write(self, message) -> None:
         """loguru sink 接口 — 接收格式化后的消息。"""
         record = message.record
         name = record["extra"].get("name", record["name"])
-        source = str(record["extra"].get("source", "backend"))[: self._MAX_SRC_LEN]
+        source = str(record["extra"].get("source", "backend"))
         level = record["level"].name
-
-        # 根据 source 级别过滤
-        if not self._config_center.should_emit(source, level):
-            return
-
         text = str(message).strip()[: self._MAX_MSG_LEN]
-
         stamp = datetime.fromtimestamp(record["time"].timestamp()).strftime(
             "%Y-%m-%d %H:%M:%S"
         )
-
         entry = {
             "timestamp": stamp,
             "level": level,
@@ -153,20 +151,29 @@ class DashboardSink:
             "name": name,
             "message": text,
         }
-
         with self._lock:
             self.buffer.append(entry)
+            if (
+                self.broadcast_queue.maxlen is not None
+                and len(self.broadcast_queue) >= self.broadcast_queue.maxlen
+            ):
+                logging.getLogger(__name__).debug(
+                    "broadcast_queue 已满 (maxlen=%d)，新日志将丢弃最旧消息",
+                    self.broadcast_queue.maxlen,
+                )
             self.broadcast_queue.append(
                 {
                     "type": "log",
                     "data": entry,
                 }
             )
+        if self._drain_notifier is not None:
+            self._drain_notifier()
 
     def list_logs(self, limit: int = 200) -> list[dict]:
         """返回最近 limit 条日志（供 dashboard API 读取）。"""
         with self._lock:
-            return list(self.buffer)[-limit:]
+            return list(reversed(list(islice(reversed(self.buffer), limit))))
 
 
 # ==================== 日志配置中心 ====================
@@ -180,7 +187,6 @@ class LogConfigCenter:
 
     _instance = None
     _init_lock = threading.Lock()
-    _LEVEL_ORDER = {"DEBUG": 0, "INFO": 1, "WARNING": 2, "ERROR": 3, "CRITICAL": 4}
 
     DEFAULT_CONFIG = {
         "level": "INFO",
@@ -203,9 +209,6 @@ class LogConfigCenter:
         self._initialized = True
         self._file_sink_id: int | None = None
         self._frontend_file_sink_id: int | None = None
-        # source 级别配置（读写均需 _source_levels_lock 保护）
-        self._source_levels: dict[str, str] = {}
-        self._source_levels_lock = threading.Lock()
 
     @classmethod
     def get_instance(cls) -> LogConfigCenter:
@@ -231,12 +234,6 @@ class LogConfigCenter:
 
             self._configured = True
 
-    def get_logger(self, name: str, source: str | None = None) -> logger:
-        """获取配置好的日志器"""
-        if not self._configured:
-            self.initialize()
-        return get_logger(name, source or self._source)
-
     def set_level(self, level: str) -> None:
         """动态修改全局日志级别（热更新）。
 
@@ -245,14 +242,10 @@ class LogConfigCenter:
         """
         normalized = normalize_level(level)
         logger.level(normalized)
-        with self._source_levels_lock:
-            self._config["level"] = normalized
+        self._config["level"] = normalized
 
     def get_config(self) -> dict[str, Any]:
         return self._config.copy()
-
-    def is_initialized(self) -> bool:
-        return self._configured
 
     def add_file_handler(self, log_dir: str, retention_days: int = 7) -> None:
         """添加按日期存储的日志 sink（loguru 原生轮转）"""
@@ -270,7 +263,7 @@ class LogConfigCenter:
             os.makedirs(log_dir, exist_ok=True)
 
             # 后端日志 -> app.log
-            backend_path = os.path.join(log_dir, "app.log")
+            backend_path = str(Path(log_dir) / "app.log")
             self._file_sink_id = logger.add(
                 backend_path,
                 rotation="00:00",
@@ -282,7 +275,7 @@ class LogConfigCenter:
             )
 
             # 前端日志 -> frontend.log
-            frontend_path = os.path.join(log_dir, "frontend.log")
+            frontend_path = str(Path(log_dir) / "frontend.log")
             self._frontend_file_sink_id = logger.add(
                 frontend_path,
                 rotation="00:00",
@@ -293,51 +286,8 @@ class LogConfigCenter:
                 filter=lambda record: record["extra"].get("source") == "frontend",
             )
 
-            logger.info("日志系统启动 | 目录: {} | 保留 {} 天", log_dir, retention_days)
+            logger.info(
+                "日志系统启动成功 (目录={}, 保留={}天)", log_dir, retention_days
+            )
         except Exception as e:
-            logger.warning("无法启用文件日志 {}: {}", log_dir, e)
-
-    # ==================== source 级别管理 ====================
-
-    def set_source_level(self, source: str, level: str) -> None:
-        """设置指定 source 的日志级别
-
-        Args:
-            source: 日志来源（backend/network/task/frontend/debug）
-            level: 日志级别（DEBUG/INFO/WARNING/ERROR/CRITICAL）
-        """
-        if source not in VALID_SOURCES:
-            raise ValueError(f"无效的 source: {source}，有效值: {VALID_SOURCES}")
-        normalized = normalize_level(level)
-        with self._source_levels_lock:
-            self._source_levels[source] = normalized
-
-    def get_source_level(self, source: str) -> str:
-        """获取指定 source 的日志级别
-
-        如果未设置，返回全局级别
-        """
-        with self._source_levels_lock:
-            return self._source_levels.get(source, self._config.get("level", "INFO"))
-
-    def should_emit(self, source: str, level: str) -> bool:
-        """判断是否应该输出日志
-
-        Args:
-            source: 日志来源
-            level: 日志级别
-        Returns:
-            True 表示应该输出，False 表示应该过滤
-        """
-        source_level = self.get_source_level(source)
-        return self._LEVEL_ORDER.get(level, 0) >= self._LEVEL_ORDER.get(source_level, 0)
-
-    def remove_source_level(self, source: str) -> None:
-        """移除指定 source 的级别配置（回退到全局级别）"""
-        with self._source_levels_lock:
-            self._source_levels.pop(source, None)
-
-    def get_all_source_levels(self) -> dict[str, str]:
-        """获取所有 source 级别配置"""
-        with self._source_levels_lock:
-            return self._source_levels.copy()
+            logger.warning("启用文件日志失败: {}", e)

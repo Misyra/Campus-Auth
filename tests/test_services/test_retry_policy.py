@@ -1,67 +1,6 @@
-"""RetryPolicy 框架单元测试。"""
+"""MonitoredPolicy 重试策略单元测试。"""
 
-from app.services.retry_policy import ImmediatePolicy, MonitoredPolicy, RetryPolicy
-
-
-class TestRetryPolicyBase:
-    """RetryPolicy 抽象基类测试。"""
-
-    def test_cannot_instantiate_directly(self):
-        """不能直接实例化抽象基类。"""
-        import pytest
-
-        with pytest.raises(TypeError):
-            RetryPolicy()  # type: ignore[abstract]
-
-
-class TestImmediatePolicy:
-    """ImmediatePolicy 测试。"""
-
-    def test_default_params(self):
-        policy = ImmediatePolicy()
-        assert policy.max_retries == 3
-        assert policy.interval == 5
-
-    def test_attempts_yields_1_to_max(self):
-        policy = ImmediatePolicy(max_retries=4)
-        assert list(policy.attempts()) == [1, 2, 3, 4]
-
-    def test_delay_before_first_attempt_is_zero(self):
-        policy = ImmediatePolicy()
-        assert policy.delay_before(1) == 0.0
-
-    def test_delay_before_subsequent_returns_interval(self):
-        policy = ImmediatePolicy(interval=7)
-        assert policy.delay_before(2) == 7.0
-        assert policy.delay_before(3) == 7.0
-        assert policy.delay_before(100) == 7.0  # 无论 attempt 多大
-
-    def test_max_retries_clamped_low(self):
-        """max_retries 下限为 1。"""
-        policy = ImmediatePolicy(max_retries=0)
-        assert policy.max_retries == 1
-
-        policy = ImmediatePolicy(max_retries=-5)
-        assert policy.max_retries == 1
-
-    def test_max_retries_clamped_high(self):
-        """max_retries 上限为 10。"""
-        policy = ImmediatePolicy(max_retries=20)
-        assert policy.max_retries == 10
-
-    def test_interval_min_clamped(self):
-        """interval 最小值为 1。"""
-        policy = ImmediatePolicy(interval=0)
-        assert policy.interval == 1
-
-        policy = ImmediatePolicy(interval=-3)
-        assert policy.interval == 1
-
-    def test_single_retry(self):
-        """max_retries=1 时只产生一次重试。"""
-        policy = ImmediatePolicy(max_retries=1)
-        assert list(policy.attempts()) == [1]
-        assert policy.delay_before(1) == 0.0
+from app.services.retry_policy import MonitoredPolicy
 
 
 class TestMonitoredPolicy:
@@ -72,10 +11,6 @@ class TestMonitoredPolicy:
     def test_default_params(self):
         policy = MonitoredPolicy()
         assert policy.max_retries == 5
-
-    def test_attempts_yields_1_to_max(self):
-        policy = MonitoredPolicy(max_retries=5)
-        assert list(policy.attempts()) == [1, 2, 3, 4, 5]
 
     # -- delay_before ---------------------------------------------------
 
@@ -106,6 +41,17 @@ class TestMonitoredPolicy:
         policy = MonitoredPolicy()
         assert policy.delay_before(100) == 100.0
         assert policy.delay_before(1000) == 100.0
+
+    def test_delay_before_zero(self):
+        """attempt=0 不应越界，返回第一个延迟值。"""
+        policy = MonitoredPolicy()
+        assert policy.delay_before(0) == 5.0
+
+    def test_delay_before_negative(self):
+        """attempt 为负数时返回第一个延迟值。"""
+        policy = MonitoredPolicy()
+        assert policy.delay_before(-1) == 5.0
+        assert policy.delay_before(-100) == 5.0
 
     # -- on_network_check -----------------------------------------------
 
@@ -175,7 +121,7 @@ class TestMonitoredPolicy:
 
     def test_login_failure_subsequent_delays(self):
         """多次登录失败 → 按延迟表递增。"""
-        policy = MonitoredPolicy()
+        policy = MonitoredPolicy(max_retries=6)
         # 第 1 次失败: _attempt=1 → delay_before(1)=5.0
         assert policy.on_login_done(success=False) == 5.0
         # 第 2 次失败: _attempt=2 → delay_before(2)=10.0
@@ -188,12 +134,11 @@ class TestMonitoredPolicy:
         assert policy.on_login_done(success=False) == 100.0
 
     def test_login_failure_exceeds_max_returns_none(self):
-        """超过最大重试次数 → 返回 None。"""
+        """达到最大重试次数 → 返回 None。"""
         policy = MonitoredPolicy(max_retries=3)
-        assert policy.on_login_done(success=False) == 5.0   # attempt=1
+        assert policy.on_login_done(success=False) == 5.0  # attempt=1
         assert policy.on_login_done(success=False) == 10.0  # attempt=2
-        assert policy.on_login_done(success=False) == 20.0  # attempt=3
-        result = policy.on_login_done(success=False)         # attempt=4 > max_retries
+        result = policy.on_login_done(success=False)  # attempt=3 >= max_retries
         assert result is None
 
     def test_login_success_after_failures_resets(self):

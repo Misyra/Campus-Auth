@@ -267,10 +267,10 @@ class TestUninstall:
         assert resp.json()["success"] is True
 
     def test_uninstall_perform_invalid_keys(self, api_client):
-        """keys 不是列表返回 400。"""
+        """keys 不是列表返回 422（Pydantic 验证失败）。"""
         test_client, _ = api_client
         resp = test_client.post("/api/uninstall", json={"keys": "not_a_list"})
-        assert resp.status_code == 400
+        assert resp.status_code == 422
 
 
 # ── 更新检测 ──

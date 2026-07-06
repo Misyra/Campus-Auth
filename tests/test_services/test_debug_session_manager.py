@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.services.debug_service import DebugSessionManager
-from app.services.debug_session import empty_debug_session
+from app.services.debug_session import DebugSession, debug_to_response
 from app.workers.playwright_worker import WorkerResponse
 
 # ---------------------------------------------------------------------------
@@ -34,7 +34,7 @@ def _fail_response(error="失败") -> WorkerResponse:
 
 def _set_session_running(manager: DebugSessionManager, task_id="t1", steps=None):
     """手动将管理器的内部会话设置为运行中状态。"""
-    session = empty_debug_session()
+    session = DebugSession()
     session.running = True
     session._browser_active = True
     session.task_id = task_id
@@ -78,69 +78,23 @@ class TestDebugSessionManagerInit:
 
 
 # =====================================================================
-# get_status
-# =====================================================================
-
-
-class TestDebugSessionManagerGetStatus:
-    """状态获取。"""
-
-    def test_returns_debug_response(self, tmp_path):
-        """返回调试响应字典。"""
-        manager = _make_manager(tmp_path)
-        status = manager.get_status()
-        assert isinstance(status, dict)
-        assert "running" in status
-        assert "task_id" in status
-        assert "current_step" in status
-        assert "total_steps" in status
-        assert "steps" in status
-        assert "results" in status
-        assert "screenshot_url" in status
-
-    def test_initial_status_not_running(self, tmp_path):
-        """初始状态未运行。"""
-        manager = _make_manager(tmp_path)
-        status = manager.get_status()
-        assert status["running"] is False
-        assert status["task_id"] is None
-        assert status["current_step"] == 0
-        assert status["total_steps"] == 0
-
-    def test_status_reflects_session_changes(self, tmp_path):
-        """状态反映会话变更。"""
-        manager = _make_manager(tmp_path)
-        _set_session_running(
-            manager,
-            task_id="my_task",
-            steps=[
-                {"index": 0, "id": "s1", "type": "click", "description": "步骤1"},
-            ],
-        )
-        status = manager.get_status()
-        assert status["running"] is True
-        assert status["task_id"] == "my_task"
-        assert status["total_steps"] == 1
-
-
-# =====================================================================
-# _debug_response
+# debug_to_response
 # =====================================================================
 
 
 class TestDebugSessionManagerDebugResponse:
-    """内部 _debug_response 方法。"""
+    """debug_to_response 返回值验证。"""
 
     def test_returns_dict(self, tmp_path):
         """返回字典。"""
         manager = _make_manager(tmp_path)
-        result = manager._debug_response()
+        result = debug_to_response(manager._session)
         assert isinstance(result, dict)
 
     def test_excludes_internal_fields(self, tmp_path):
         """不包含内部字段。"""
         manager = _make_manager(tmp_path)
-        result = manager._debug_response()
+        result = debug_to_response(manager._session)
         assert "_browser_active" not in result
         assert "_last_activity" not in result
         assert "_timer_task" not in result
@@ -299,9 +253,9 @@ class TestDebugSessionManagerStart:
         mock_request = MagicMock()
         mock_request.json = AsyncMock(return_value={"task_id": "missing_task"})
 
-        mock_task_service = MagicMock()
-        mock_task_service.task_manager.load_task.return_value = None
-        mock_request.app.state.services.task_service = mock_task_service
+        mock_task_mgr = MagicMock()
+        mock_task_mgr.load_task.return_value = None
+        mock_request.app.state.services.task_manager = mock_task_mgr
 
         mock_monitor = MagicMock()
 
@@ -326,13 +280,12 @@ class TestDebugSessionManagerStart:
 
         mock_request = MagicMock()
         mock_request.json = AsyncMock(return_value={"task_id": "task1"})
-        mock_task_service = MagicMock()
-        mock_task_service.task_manager.load_task.return_value = mock_task
-        mock_request.app.state.services.task_service = mock_task_service
+        mock_task_mgr = MagicMock()
+        mock_task_mgr.load_task.return_value = mock_task
+        mock_request.app.state.services.task_manager = mock_task_mgr
 
         mock_monitor = MagicMock()
         mock_runtime = MagicMock()
-        mock_runtime.custom_variables = {}
         mock_runtime.browser.timeout = 8
         mock_runtime.browser.navigation_timeout = 15
         mock_runtime.credentials.auth_url = "http://auth.example.com"
@@ -347,7 +300,7 @@ class TestDebugSessionManagerStart:
                 "app.services.debug_service.build_login_template_vars", return_value={}
             ),
             patch(
-                "app.services.debug_service._runtime_config_to_worker_dict",
+                "app.services.debug_service.runtime_config_to_worker_dict",
                 return_value={},
             ),
         ):
@@ -376,13 +329,12 @@ class TestDebugSessionManagerStart:
 
         mock_request = MagicMock()
         mock_request.json = AsyncMock(return_value={"task_id": "task1"})
-        mock_task_service = MagicMock()
-        mock_task_service.task_manager.load_task.return_value = mock_task
-        mock_request.app.state.services.task_service = mock_task_service
+        mock_task_mgr = MagicMock()
+        mock_task_mgr.load_task.return_value = mock_task
+        mock_request.app.state.services.task_manager = mock_task_mgr
 
         mock_monitor = MagicMock()
         mock_runtime = MagicMock()
-        mock_runtime.custom_variables = {}
         mock_runtime.browser.timeout = 8
         mock_runtime.browser.navigation_timeout = 15
         mock_monitor.get_runtime_config.return_value = mock_runtime
@@ -393,7 +345,7 @@ class TestDebugSessionManagerStart:
                 "app.services.debug_service.build_login_template_vars", return_value={}
             ),
             patch(
-                "app.services.debug_service._runtime_config_to_worker_dict",
+                "app.services.debug_service.runtime_config_to_worker_dict",
                 return_value={},
             ),
         ):
@@ -420,13 +372,12 @@ class TestDebugSessionManagerStart:
 
         mock_request = MagicMock()
         mock_request.json = AsyncMock(return_value={"task_id": "task2"})
-        mock_task_service = MagicMock()
-        mock_task_service.task_manager.load_task.return_value = mock_task
-        mock_request.app.state.services.task_service = mock_task_service
+        mock_task_mgr = MagicMock()
+        mock_task_mgr.load_task.return_value = mock_task
+        mock_request.app.state.services.task_manager = mock_task_mgr
 
         mock_monitor = MagicMock()
         mock_runtime = MagicMock()
-        mock_runtime.custom_variables = {}
         mock_runtime.browser.timeout = 8
         mock_runtime.browser.navigation_timeout = 15
         mock_monitor.get_runtime_config.return_value = mock_runtime
@@ -437,7 +388,7 @@ class TestDebugSessionManagerStart:
                 "app.services.debug_service.build_login_template_vars", return_value={}
             ),
             patch(
-                "app.services.debug_service._runtime_config_to_worker_dict",
+                "app.services.debug_service.runtime_config_to_worker_dict",
                 return_value={},
             ),
         ):
@@ -787,7 +738,7 @@ class TestDebugSessionManagerTimeoutWatcher:
             async with manager._lock:
                 if manager._session._browser_active:
                     await manager._close_debug_browser()
-                manager._session = empty_debug_session()
+                manager._session = DebugSession()
 
         # 验证关闭浏览器被调用
         close_mock.assert_awaited_once()

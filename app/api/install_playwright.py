@@ -6,6 +6,7 @@ import time
 
 from fastapi import APIRouter
 
+from app.schemas import ApiResponse
 from app.utils.logging import get_logger
 from app.utils.platform import CREATE_NO_WINDOW_FLAG, is_windows
 
@@ -17,11 +18,12 @@ router = APIRouter()
 _install_lock = asyncio.Lock()
 
 
-@router.post("/api/browsers/install-playwright")
-async def install_playwright_chromium():
+@router.post("/api/browsers/install-playwright", response_model=ApiResponse)
+async def install_playwright_chromium() -> ApiResponse:
     """安装 Playwright Chromium 浏览器（异步执行）。"""
     if _install_lock.locked():
-        return {"success": False, "message": "安装正在进行中，请稍后再试"}
+        logger.debug("Playwright 安装进行中，跳过重复请求")
+        return ApiResponse(success=False, message="安装正在进行中，请稍后再试")
 
     async with _install_lock:
         try:
@@ -31,7 +33,7 @@ async def install_playwright_chromium():
             if is_windows():
                 kwargs["creationflags"] = CREATE_NO_WINDOW_FLAG
 
-            logger.info("开始安装 Playwright Chromium...")
+            logger.debug("开始安装 Playwright Chromium")
 
             # 使用异步子进程，避免阻塞事件循环
             process = await asyncio.create_subprocess_exec(
@@ -53,10 +55,10 @@ async def install_playwright_chromium():
                 except asyncio.TimeoutError:
                     idle = time.monotonic() - last_output
                     if idle > 300:
-                        logger.error("Playwright 安装 5 分钟无输出，判定挂死")
+                        logger.warning("安装 Playwright 失败: 5 分钟无输出")
                         process.kill()
                         raise
-                    logger.debug("Playwright 安装 30 秒无输出，继续等待...")
+                    logger.debug("Playwright 安装 30 秒无输出，继续等待")
                     continue
                 if not line:
                     break
@@ -69,12 +71,12 @@ async def install_playwright_chromium():
             await process.wait()
 
             if process.returncode == 0:
-                logger.info("Playwright Chromium 安装成功")
-                return {"success": True, "message": "Playwright Chromium 安装成功"}
+                logger.info("安装 Playwright Chromium 成功")
+                return ApiResponse(success=True, message="Playwright Chromium 安装成功")
             else:
                 error_msg = "\n".join(output_lines)
-                logger.error("Playwright Chromium 安装失败: {}", error_msg)
-                return {"success": False, "message": error_msg}
+                logger.warning("安装 Playwright Chromium 失败: {}", error_msg)
+                return ApiResponse(success=False, message=error_msg)
         except Exception as e:
-            logger.exception("Playwright Chromium 安装异常")
-            return {"success": False, "message": str(e)}
+            logger.exception("安装 Playwright Chromium 异常: {}", e)
+            return ApiResponse(success=False, message=str(e))

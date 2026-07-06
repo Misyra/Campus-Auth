@@ -1,15 +1,15 @@
-import { LOG_LEVELS } from './constants.js';
+import { LOG_LEVELS, LEVEL_VALUES, LIMITS } from './constants.js';
 
-// 日志级别数值映射（用于级别比较）
-const _LEVEL_VALUES = Object.fromEntries(LOG_LEVELS.map((l, i) => [l.value, (i + 1) * 10]));
 
 export function createFrontendLogger(initialLevel = 'INFO') {
   let currentLevel = String(initialLevel || 'INFO').toUpperCase();
   let _ws = null;
+  // WS 断连期间的日志缓冲，重连成功后 flush
+  const _logBuffer = [];
 
   const shouldLog = (level) => {
-    const left = _LEVEL_VALUES[String(level || '').toUpperCase()] || _LEVEL_VALUES.INFO;
-    const right = _LEVEL_VALUES[currentLevel] || _LEVEL_VALUES.INFO;
+    const left = LEVEL_VALUES[String(level || '').toUpperCase()] ?? LEVEL_VALUES.INFO;
+    const right = LEVEL_VALUES[currentLevel] ?? LEVEL_VALUES.INFO;
     return left >= right;
   };
 
@@ -26,16 +26,40 @@ export function createFrontendLogger(initialLevel = 'INFO') {
           data: { level, scope, message, meta: meta || '' },
         }));
       } catch (_) { /* ignore send errors */ }
+    } else {
+      // WS 不可用时缓冲日志，重连后批量补发；超限丢弃最旧
+      _logBuffer.push({ level, scope, message, meta: meta || '' });
+      if (_logBuffer.length > LIMITS.WS_LOG_BUFFER_MAX) {
+        _logBuffer.shift();
+      }
+    }
+  };
+
+  const _flushBuffer = () => {
+    if (!_ws || _ws.readyState !== WebSocket.OPEN || _logBuffer.length === 0) return;
+    const batch = _logBuffer.splice(0, _logBuffer.length);
+    let sent = 0;
+    try {
+      for (const msg of batch) {
+        _ws.send(JSON.stringify({
+          type: 'frontend_log',
+          data: { level: msg.level, scope: msg.scope, message: msg.message, meta: msg.meta },
+        }));
+        sent++;
+      }
+    } catch (_) {
+      _logBuffer.unshift(...batch.slice(sent));
     }
   };
 
   return {
     setWebSocket(ws) {
       _ws = ws;
+      _flushBuffer();
     },
     setLevel(level) {
       const next = String(level || '').toUpperCase();
-      currentLevel = _LEVEL_VALUES[next] ? next : 'INFO';
+      currentLevel = (LEVEL_VALUES[next] ?? -1) >= 0 ? next : 'INFO';
       console.info(...format('INFO', 'logger', `frontend log level => ${currentLevel}`));
     },
     debug(scope, message, meta) {

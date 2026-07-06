@@ -1,7 +1,7 @@
 """src/task_executor.py — 任务执行器综合测试
 
 覆盖 StepConfig, TaskConfig, VariableResolver, StepHandler 子类,
-StepExecutorRegistry, TaskValidator, TaskExecutor, TaskManager 等核心类。
+DEFAULT_HANDLERS, TaskValidator, BrowserTaskRunner, TaskManager 等核心类。
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.tasks.browser_runner import TaskExecutor
+from app.tasks.browser_runner import BrowserTaskRunner
 from app.tasks.manager import TaskManager, is_valid_task_id, normalize_task_id
 from app.tasks.models import (
     StepConfig,
@@ -21,6 +21,7 @@ from app.tasks.models import (
     TaskConfig,
 )
 from app.tasks.step_handlers import (
+    DEFAULT_HANDLERS,
     ClickHandler,
     EvalHandler,
     InputHandler,
@@ -28,7 +29,6 @@ from app.tasks.step_handlers import (
     ScreenshotHandler,
     SelectHandler,
     SleepHandler,
-    StepExecutorRegistry,
     StepHandler,
     WaitHandler,
     WaitUrlHandler,
@@ -297,7 +297,8 @@ class TestVariableResolver:
     def test_resolve_for_js_unknown_var(self):
         resolver = VariableResolver(self._make_config(), {})
         result = resolver.resolve_for_js("{{UNKNOWN}}")
-        assert result == '"{{UNKNOWN}}"'
+        # 白名单模式：未知变量保留原样，不 JSON 编码
+        assert result == "{{UNKNOWN}}"
 
     def test_resolve_unknown_var_logs_warning(self):
         """未知变量应触发 warning 日志"""
@@ -622,38 +623,24 @@ class TestOcrHandler:
 
 
 # =====================================================================
-# StepExecutorRegistry
+# DEFAULT_HANDLERS
 # =====================================================================
 
 
-class TestStepExecutorRegistry:
+class TestDefaultHandlers:
     def test_all_default_handlers_registered(self):
-        registry = StepExecutorRegistry()
+        registry = dict(DEFAULT_HANDLERS)
         for step_type in StepType:
             assert registry.get(step_type.value) is not None
 
     def test_custom_js_alias(self):
-        registry = StepExecutorRegistry()
+        registry = dict(DEFAULT_HANDLERS)
         assert registry.get("custom_js") is not None
         assert registry.get("custom_js") is registry.get("eval")
 
     def test_get_unknown_returns_none(self):
-        registry = StepExecutorRegistry()
+        registry = dict(DEFAULT_HANDLERS)
         assert registry.get("nonexistent") is None
-
-    def test_register_custom_handler(self):
-        registry = StepExecutorRegistry()
-
-        class CustomHandler(StepHandler):
-            @property
-            def step_type(self):
-                return "custom_type"
-
-            async def execute(self, page, step, resolver):
-                return True, ""
-
-        registry.register(CustomHandler())
-        assert registry.get("custom_type") is not None
 
 
 # =====================================================================
@@ -697,7 +684,7 @@ class TestTaskValidator:
     def test_step_invalid_id(self):
         config = {
             "name": "测试",
-            "steps": [{"id": "123bad", "type": "click", "selector": "#btn"}],
+            "steps": [{"id": "", "type": "click", "selector": "#btn"}],
         }
         ok, errors = TaskValidator.validate(config)
         assert ok is False
@@ -777,9 +764,8 @@ class TestTaskIdHelpers:
 
     def test_invalid_ids(self):
         assert is_valid_task_id("") is False
-        assert is_valid_task_id("123abc") is False
-        assert is_valid_task_id("my-task") is False
         assert is_valid_task_id(None) is False
+        assert is_valid_task_id("a" * 65) is False  # 超过 64 字符上限
 
 
 # =====================================================================
@@ -803,8 +789,8 @@ class TestTaskManager:
     def test_list_tasks_skips_invalid_ids(self, tmp_path):
         mgr = TaskManager(tmp_path)
         browser_dir = tmp_path / "browser"
-        # 含连字符的文件名应被跳过
-        (browser_dir / "my-task.json").write_text(
+        # 含空格的文件名应被跳过
+        (browser_dir / "invalid id.json").write_text(
             '{"name":"x","steps":[]}', encoding="utf-8"
         )
         (browser_dir / "valid_task.json").write_text(
@@ -902,18 +888,18 @@ class TestTaskManager:
 
 
 # =====================================================================
-# TaskExecutor（使用 mock page）
+# BrowserTaskRunner（使用 mock page）
 # =====================================================================
 
 
-class TestTaskExecutor:
+class TestBrowserTaskRunner:
     @pytest.mark.asyncio
     async def test_execute_step_at_out_of_range(self):
         config = TaskConfig(
             name="test",
             steps=[StepConfig(id="s1", type="click", selector="#btn")],
         )
-        executor = TaskExecutor(config)
+        executor = BrowserTaskRunner(config)
         mock_page = MagicMock()
         result = await executor.execute_step_at(mock_page, -1)
         assert result["success"] is False
@@ -931,7 +917,7 @@ class TestTaskExecutor:
                 StepConfig(id="s1", type="eval", script="return true"),
             ],
         )
-        executor = TaskExecutor(config)
+        executor = BrowserTaskRunner(config)
 
         mock_page = MagicMock()
         mock_page.evaluate = AsyncMock(return_value=True)
@@ -952,7 +938,7 @@ class TestTaskExecutor:
                 StepConfig(id="s2", type="eval", script=""),
             ],
         )
-        executor = TaskExecutor(config)
+        executor = BrowserTaskRunner(config)
 
         mock_page = MagicMock()
         mock_page.evaluate = AsyncMock(return_value=True)
@@ -967,13 +953,13 @@ class TestTaskExecutor:
 
     def test_registry_initialized(self):
         config = TaskConfig(name="test")
-        executor = TaskExecutor(config)
+        executor = BrowserTaskRunner(config)
         assert executor.registry is not None
-        assert isinstance(executor.registry, StepExecutorRegistry)
+        assert isinstance(executor.registry, dict)
 
     def test_resolver_initialized(self):
         config = TaskConfig(name="test", variables={"X": "1"})
-        executor = TaskExecutor(config, template_vars={"Y": "2"})
+        executor = BrowserTaskRunner(config, template_vars={"Y": "2"})
         assert executor.resolver is not None
         assert executor.resolver.resolve("{{X}}") == "1"
         assert executor.resolver.resolve("{{Y}}") == "2"
@@ -986,7 +972,7 @@ class TestTaskExecutor:
             timeout=5000,
             steps=[StepConfig(id="s1", type="eval", script="return 1", timeout=10000)],
         )
-        executor = TaskExecutor(config)
+        executor = BrowserTaskRunner(config)
         mock_page = MagicMock()
         mock_page.evaluate = AsyncMock(return_value=1)
 
@@ -1007,7 +993,7 @@ class TestTaskExecutor:
             timeout=5000,
             steps=[StepConfig(id="s1", type="sleep", duration=300000)],
         )
-        executor = TaskExecutor(config)
+        executor = BrowserTaskRunner(config)
         mock_page = MagicMock()
         mock_page.wait_for_timeout = AsyncMock()
 

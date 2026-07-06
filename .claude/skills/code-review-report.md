@@ -20,25 +20,29 @@ Campus-Auth 是一个校园网自动认证工具，采用 Python 后端 + Vue 3 
 
 | 模块 | 语言 | 路径 | 说明 |
 |------|------|------|------|
-| API 路由层 | Python | `app/api/` | FastAPI 路由，含 monitor、config、tasks、profiles 等模块 |
-| 服务层 | Python | `app/services/` | 业务逻辑，含 engine、task_executor、monitor_service 等 |
-| 网络检测 | Python | `app/network/` | probes（TCP/HTTP/URL 探测）、decision（决策层）、detect（网关/SSID） |
-| 任务系统 | Python | `app/tasks/` | JSON 驱动的自动化流程，含 models、manager、step_handlers 等 |
-| 工作线程 | Python | `app/workers/` | Playwright Actor 模型、脚本运行器 |
-| 前端 | JavaScript | `frontend/` | Vue 3 SPA，无构建步骤，直接由 FastAPI 静态服务提供 |
-| 启动器 | Go / Shell | `start.go` / `start.sh` | 自动下载 uv、安装依赖、启动应用 |
+| API 路由层 | Python | `app/api/` | FastAPI 路由，含 monitor、config、tasks、profiles、debug、scheduled_tasks、ws 等 18 个端点模块 |
+| 服务层 | Python | `app/services/` | 业务逻辑核心，含 Actor 引擎(engine.py)、登录管线(orchestrator/attempt/runner/session/retry_policy)、调度器(scheduler_service)、监控(monitor_service)、任务执行(task_executor) 等 20 个模块 |
+| 网络检测 | Python | `app/network/` | probes（TCP/HTTP/URL 探测）、decision（聚合判定）、detect（网关/SSID）、interfaces（网卡枚举）、proxy（代理检测）、parsers（目标解析） |
+| 任务系统 | Python | `app/tasks/` | JSON 驱动的浏览器自动化 DSL，含 manager、models、step_handlers、validator、variable_resolver、browser_runner |
+| 工作线程 | Python | `app/workers/` | Playwright Actor 模型(playwright_worker)、脚本运行器(script_runner)、浏览器引导(playwright_bootstrap) |
+| 前端 | JavaScript | `frontend/` | Vue 3 全局构建 SPA，零构建步骤，data/methods/tasks 三层分离，HTML partials 模板加载 |
 
 ### 基础设施
 
 | 模块 | 路径 | 说明 |
 |------|------|------|
-| 应用入口 | `app/application.py` | FastAPI 工厂模式 `create_app()` |
-| 依赖注入 | `app/container.py` | ServiceContainer 服务生命周期管理 |
-| 数据模型 | `app/schemas.py` | Pydantic 模型定义 |
-| 工具模块 | `app/utils/` | browser、crypto、logging、login、network 等约 15 个模块 |
-| UI 托盘 | `app/ui/` | 系统托盘实现 |
-| 任务定义 | `tasks/` | JSON 格式认证流程（browser、scripts、scheduled） |
-| 测试 | `tests/` | 约 70 个测试文件，分 test_api、test_app、test_config 等 |
+| 应用入口 | `app/application.py` | FastAPI 工厂模式 `create_app()`，支持 full/lightweight 双模式，lightweight 可通过 `existing_container` 升级为 full |
+| 依赖注入 | `app/container.py` | `ServiceContainer` 五步装配、late-binding 解决循环依赖（Engine↔Orchestrator↔TaskExecutor） |
+| 注入别名 | `app/deps.py` | FastAPI `Depends` 类型别名，供路由层使用 |
+| 数据模型 | `app/schemas.py` | 全部 Pydantic v2 frozen 模型，含 ProfilesData v5 持久化 Schema（~644 行） |
+| 常量 | `app/constants.py` | 路径常量、超时、容量上限、默认网络目标、正则 |
+| 版本 | `app/version.py` | 从 pyproject.toml 读取版本号，semver 比较工具 |
+| 系统托盘 | `app/system_tray.py` | pystray 实现，延迟导入 |
+| 工具模块 | `app/utils/` | cancel_token、browser_registry、crypto、concurrent、config_utils、logging、platform、ports、process、shell_policy、shutdown 等 ~20 个模块 |
+| 任务定义 | `tasks/` | JSON 格式认证流程（browser/、scripts/、scheduled/），含 .order.json 排序和 active.txt 标记 |
+| 配置持久化 | `config/settings.json` | 单一 JSON 持久化层（ProfilesData v5 Schema），无数据库 |
+| Go 工具 | `resources/tools/` | start.exe（启动器）、git-puller.exe（Git 辅助）的 Go 源码 |
+| 测试 | `tests/` | 10 个子目录 ~100 个测试文件，分 test_api、test_app、test_config、test_core、test_integration、test_network、test_services、test_tasks、test_utils、test_workers |
 
 ### 编码规范执行
 
@@ -48,6 +52,7 @@ Campus-Auth 是一个校园网自动认证工具，采用 Python 后端 + Vue 3 
 | `pyrightconfig.json` | Python 类型检查 |
 | `.pre-commit-config.yaml` | Ruff + 其他预提交检查 |
 | `.editorconfig` | 全局编辑器配置 |
+| `uv.lock` | uv 依赖锁文件 |
 
 ## Phase 1: 探索 & 拆分 Review Unit
 
@@ -65,7 +70,7 @@ Campus-Auth 是一个校园网自动认证工具，采用 Python 后端 + Vue 3 
 
 1. 项目模块清单（目录名 + 核心文件 + 简述职责）
 2. 近期有实质改动的模块（结合 git log 或文件修改时间）
-3. 建议的 Review Unit 划分方案（8-15 个 Unit）
+3. 建议的 Review Unit 划分方案（15-20 个 Unit）
 
 每个 Unit 包含：
 - name: Unit 名称
@@ -84,72 +89,107 @@ explore agent 应基于此骨架调整，而非从零开始：
 
 | Unit 名称 | 模块 | 默认焦点 | 默认优先级 |
 |-----------|------|----------|-----------|
-| api-routes | API 路由层 | 路由注册、输入验证、错误处理、响应模型一致性 | P1 |
-| api-websocket | API 路由层 | WebSocket 连接管理、异常断开处理 | P1 |
-| service-core | 服务层 | 业务逻辑正确性、依赖注入生命周期 | P1 |
-| service-async | 服务层 | async/await 正确性、事件循环阻塞、并发竞态 | P0 |
-| network-probes | 网络检测 | TCP/HTTP/URL 探测判定逻辑、超时处理 | P1 |
-| network-decision | 网络检测 | 网关/SSID 检测、网络状态机正确性 | P1 |
-| tasks-system | 任务系统 | JSON Schema 验证、变量模板解析安全性、步骤执行顺序 | P0 |
-| workers-playwright | 工作线程 | Playwright Actor 模型、线程安全、资源泄漏 | P0 |
-| frontend-vue | 前端 | Vue 3 组件状态、API 错误处理、XSS 防护 | P1 |
-| frontend-ws | 前端 | WebSocket 实时通信稳定性 | P1 |
-| starter-go | Go 启动器 | 进程管理、依赖下载安全性、跨平台路径 | P2 |
-| utils-crypto | 工具模块 | 加密/解密安全性、密钥管理 | P0 |
-| utils-general | 工具模块 | 其他工具模块代码质量 | P2 |
-| test-coverage | 测试 | 测试覆盖率、Mock 正确性、异步测试稳定性 | P2 |
+| api-routes | API 路由层 | 路由注册、输入验证、错误处理、响应模型一致性、deps 注入正确性 | P1 |
+| api-websocket | API 路由层 | WebSocket 连接管理(ws.py + websocket_manager.py)、日志广播、异常断开 | P1 |
+| service-engine | 服务层 | Actor 引擎(engine.py)、监控循环(monitor_service.py)、命令队列、关闭顺序 | P0 |
+| service-login | 服务层 | 登录管线(orchestrator→attempt→runner→session)、去重/抢占、重试策略(retry_policy)、历史记录 | P0 |
+| service-scheduler | 服务层 | 定时调度(scheduler_service)、任务注册(task_registry)、任务执行(task_executor) | P1 |
+| service-config | 服务层 | 配置构建(config_builder)、Profile CRUD(profile_service)、Pydantic frozen 模型(schemas.py) | P1 |
+| service-debug | 服务层 | 调试会话(debug_service + debug_session)、状态机正确性、线程安全 | P2 |
+| service-launcher | 服务层 | 进程生命周期(launcher.py)、PID 管理、full/lightweight 双模式启动 | P0 |
+| network-probes | 网络检测 | TCP/HTTP/URL 探测判定逻辑、超时处理、shutdown_probes 清理 | P1 |
+| network-detect | 网络检测 | 网关/SSID 检测(detect.py)、网卡枚举(interfaces.py)、代理检测(proxy.py)、解析器(parsers.py) | P1 |
+| tasks-system | 任务系统 | JSON Schema 验证(validator)、变量解析安全性(variable_resolver)、步骤执行(step_handlers) | P0 |
+| tasks-browser | 任务系统 | BrowserTaskRunner 执行流程、Playwright 交互、资源释放 | P1 |
+| workers-playwright | 工作线程 | Playwright Actor 模型(playwright_worker)、线程安全、浏览器引导(bootstrap)、资源泄漏 | P0 |
+| frontend-app | 前端 | Vue 3 初始化(app.js)、组件(components.js)、API 服务(api-service.js)、data 状态模块 | P1 |
+| frontend-pages | 前端 | HTML partials 模板、methods 模块、任务编辑器(tasks/)、WebSocket 通信 | P1 |
+| go-tools | Go 工具 | 启动器(resources/tools/start/)、Git 辅助(resources/tools/git-puller/)、进程管理、跨平台 | P2 |
+| utils-core | 工具模块 | cancel_token、crypto(加密安全)、concurrent(异步睡眠)、browser_registry、logging | P0 |
+| utils-platform | 工具模块 | 平台检测(platform.py)、进程管理(process.py)、Shell 策略(shell_policy)、端口(ports)、关闭(shutdown) | P1 |
+| infra-di | 基础设施 | ServiceContainer(container.py) 装配顺序、late-binding、deps.py 注入别名 | P1 |
+| test-coverage | 测试 | 覆盖率、Mock 正确性、异步测试稳定性、集成测试(test_integration/) | P2 |
 
 ### 各模块 Review 焦点
 
-**Python 后端 (`app/`)**：
+**Actor 引擎 (`app/services/engine.py` + `monitor_service.py`)**：
 
-- 异步安全（async/await 正确性、事件循环阻塞、并发竞态）
-- 依赖注入生命周期（ServiceContainer 初始化顺序、单例/瞬态混用）
-- API 安全（输入验证、认证绕过、敏感信息泄露）
-- 网络探测可靠性（超时处理、重试策略、探测目标可达性）
-- Playwright Actor 模型（线程安全、资源泄漏、浏览器实例管理）
-- 任务系统正确性（JSON Schema 验证、变量解析、步骤执行顺序）
-- 跨平台兼容（路径处理、进程管理、自启动配置）
+- Actor 模型正确性（专属 daemon 线程 + asyncio 事件循环 + asyncio.Queue 命令队列）
+- 命令分发（EngineCommand.data 弱类型 dict 的线程安全性）
+- 监控循环状态机（网络状态判定、定时触发、手动触发去重）
+- 关闭顺序（Engine→Monitor→Worker→Probes 严格逆序）
+- 轻量/完整模式切换（existing_container 复用）
+
+**登录管线 (`app/services/login_*.py` + `retry_policy.py`)**：
+
+- LoginOrchestrator 入口（去重、抢占、cancel_token 协作取消）
+- 登录尝试生命周期（attempt→runner→session 调用链）
+- MonitoredPolicy 重试策略（退避计算、attempt 计数、预算削减风险）
+- 登录历史持久化（login_history_service 写入正确性）
+- 跨线程安全（回调从线程池写引擎线程字段，GIL 保护但需验证）
+
+**定时调度 (`app/services/scheduler_service.py` + `task_registry.py` + `task_executor.py`)**：
+
+- 定时任务注册与触发（TaskRegistry + TaskHistoryStore）
+- 任务执行正确性（TaskExecutor 调度 browser/script/shell 三类任务）
+- CMD_LOGIN 复用风险（定时任务是否绕过 Orchestrator 直接提交 Worker）
+- 历史记录持久化（scheduled/history/ JSON 写入）
+
+**配置 & 依赖注入 (`app/container.py` + `schemas.py` + `config_builder.py`)**：
+
+- ServiceContainer 五步装配顺序（late-binding 解决循环依赖的正确性）
+- Pydantic v2 frozen 模型（不可变性保证、字段同步）
+- RuntimeConfig 原子替换（getter 注入零停机热更新）
+- 配置构建器（config_builder 从 profiles + settings.json 组装 RuntimeConfig）
+- ProfileService 持久化（settings.json 读写一致性）
 
 **FastAPI 路由 (`app/api/`)**：
 
-- 路由注册完整性（重复注册、缺失端点）
+- 路由注册完整性（18 个端点模块，重复注册、缺失端点）
 - 响应模型一致性（Pydantic 模型与实际返回匹配）
-- WebSocket 连接管理（连接泄漏、异常断开处理）
+- deps.py 注入别名正确性（Annotated 类型别名与 ServiceContainer 对齐）
+- WebSocket 连接管理（ws.py + websocket_manager.py，连接泄漏、日志广播）
 - 错误处理（HTTP 异常传播、全局异常捕获）
 
 **网络模块 (`app/network/`)**：
 
-- 探测策略准确性（TCP/HTTP/URL 探测判定逻辑）
-- 网关/SSID 检测可靠性（跨平台实现差异）
-- 决策层逻辑（网络状态机正确性、边界条件）
+- 探测策略准确性（TCP/HTTP/URL 探测判定逻辑，shutdown_probes 清理）
+- 网关/SSID 检测可靠性（detect.py 跨平台实现差异）
+- 网卡枚举（interfaces.py，psutil 接口类型缺失的已知限制）
+- 代理检测（proxy.py）
+- 聚合判定（decision.py 网络状态机正确性、边界条件）
 
 **任务系统 (`app/tasks/`)**：
 
-- JSON 任务定义 Schema 合规性
-- 变量模板解析安全性（注入风险）
-- 浏览器自动化步骤正确性
-- 定时任务调度可靠性
+- JSON 任务定义 Schema 合规性（validator.py）
+- 变量模板解析安全性（variable_resolver.py 注入风险）
+- 浏览器自动化步骤正确性（step_handlers.py 各步骤类型）
+- BrowserTaskRunner 执行流程（browser_runner.py，Playwright 交互、资源释放）
+- 定时任务调度可靠性（与 scheduler_service 的交互）
 
 **前端 (`frontend/`)**：
 
-- Vue 3 组件状态管理（响应式数据正确性）
-- API 调用错误处理（网络异常、超时重试）
-- WebSocket 实时通信稳定性
+- Vue 3 全局构建初始化（app.js，无 SFC/编译器/构建步骤）
+- data/ 响应式状态模块（14 个模块：config、dashboard、profiles、tasks 等）
+- methods/ 行为模块（11 个模块：actions、config、profiles、lifecycle 等）
+- tasks/ 任务编辑器子系统（core、debug、editor、index）
+- HTML partials 模板加载（template-loader.js + data-include）
+- API 调用错误处理（api-service.js，网络异常、超时）
+- WebSocket 实时通信稳定性（websocket.js）
 - XSS 防护（用户输入、动态内容渲染）
-- 跨浏览器兼容性
 
-**Go 启动器 (`start.go`)**：
+**Go 工具 (`resources/tools/`)**：
 
-- 进程管理（子进程生命周期、信号处理）
-- 依赖下载安全性（校验和验证、HTTPS）
-- 跨平台路径处理
+- 启动器进程管理（start/：子进程生命周期、信号处理、PID 文件）
+- Git 辅助工具（git-puller/：网络操作安全性）
+- 跨平台路径处理、依赖下载安全性
 
 **测试 (`tests/`)**：
 
-- 测试覆盖率（关键路径是否覆盖）
-- Mock 正确性（外部依赖隔离）
-- 异步测试稳定性（超时、竞态）
+- 测试覆盖率（10 个子目录，关键路径是否覆盖）
+- Mock 正确性（外部依赖隔离，特别是 Playwright、网络探测）
+- 异步测试稳定性（超时、竞态、Actor 线程关闭）
+- 集成测试完整性（test_integration/ 含 full/lightweight/login/network 等场景）
 
 ## Phase 2: 并行 Review
 

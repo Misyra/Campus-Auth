@@ -2,7 +2,7 @@
 
 浏览器生命周期由 PlaywrightWorker 管理，BrowserContextManager 作为轻量代理:
 - __aenter__: 通过 Worker 确保浏览器已就绪，获取浏览器对象引用
-- __aexit__: 通知 Worker 释放引用（浏览器常驻 Worker 不实际关闭）
+- __aexit__: 调用 Worker._close_browser 释放当前浏览器实例（每次登录周期会关闭并重建）
 """
 
 import threading
@@ -54,8 +54,8 @@ Object.defineProperty(navigator, 'languages', {
 });
 
 // 隐藏 Playwright 注入的属性（Object.defineProperty 防止 non-configurable 属性 delete 静默失败）
-Object.defineProperty(window, '__playwright', {value: undefined, writable: false, configurable: false});
-Object.defineProperty(window, '__pw_manual', {value: undefined, writable: false, configurable: false});
+Object.defineProperty(window, '__playwright', {value: undefined, writable: false, configurable: true});
+Object.defineProperty(window, '__pw_manual', {value: undefined, writable: false, configurable: true});
 """.lstrip()
 
 
@@ -85,9 +85,6 @@ class BrowserContextManager:
         self.context = None
         self.page = None
 
-        # Worker 管理模式标志 — True 时表示浏览器由 Worker 管理生命周期
-        self._worker_managed = False
-
     def _is_cancelled(self) -> bool:
         return self.cancel_event is not None and self.cancel_event.is_set()
 
@@ -95,7 +92,7 @@ class BrowserContextManager:
         """异步上下文管理器入口 — 通过 Worker 获取浏览器
 
         Worker 管理浏览器生命周期，不再直接调用 _start_browser()。
-        从 Worker 获取浏览器对象引用（同线程安全，因为 LoginAttemptHandler
+        从 Worker 获取浏览器对象引用（同线程安全，因为 LoginAttempt
         始终在 Worker 的事件循环线程中执行）。
         """
         if self._is_cancelled():
@@ -108,13 +105,12 @@ class BrowserContextManager:
         await worker.ensure_browser(self.config)
 
         # 从 Worker 获取浏览器对象引用（同线程，通过只读属性访问）
-        self._worker_managed = True
         self.playwright = worker.playwright_instance
         self.browser = worker.browser
         self.context = worker.context
         self.page = worker.page
 
-        self.logger.info("浏览器已通过 Worker 就绪")
+        self.logger.info("浏览器就绪成功")
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
@@ -127,16 +123,12 @@ class BrowserContextManager:
         worker = get_worker()
         try:
             await worker._close_browser()
-        except Exception:
-            self.logger.warning("关闭浏览器异常", exc_info=True)
+        except Exception as e:
+            self.logger.exception("关闭浏览器异常: {}", e)
 
         self.playwright = None
         self.browser = None
         self.context = None
         self.page = None
 
-        if exc_type:
-            self.logger.error(
-                "浏览器操作异常: {}: {}", exc_type.__name__, str(exc_val)[:200]
-            )
         return False

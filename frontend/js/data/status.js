@@ -18,7 +18,7 @@ export function statusData() {
       enabled: false,
       method: '-',
       location: '',
-      lightweight: true,
+      runtime_mode: 'full',
     },
     busy: {
       save: false,

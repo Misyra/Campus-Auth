@@ -31,7 +31,8 @@ api.interceptors.response.use(
     if (!isRetryable) return Promise.reject(error);
 
     config.__retryCount = (config.__retryCount || 0) + 1;
-    const delay = RETRY_CONFIG.retryDelay * Math.pow(2, config.__retryCount - 1);
+    const jitter = Math.random() * 1000;
+    const delay = RETRY_CONFIG.retryDelay * Math.pow(2, config.__retryCount - 1) + jitter;
     await new Promise(r => setTimeout(r, delay));
     return api(config);
   }
@@ -46,12 +47,16 @@ export const TIMING = {
   WS_READY_TIMEOUT: 2000,         // WebSocket 就绪等待超时（ms）
   OPENAPI_TIMEOUT: 5000,          // OpenAPI 请求超时（ms）
   DRAG_SWAP_COOLDOWN: 120,        // 拖拽交换冷却时间（ms）
+  WS_BACKOFF_BASE: 1000,          // WebSocket 重连退避基础延迟（ms）
+  WS_BACKOFF_MAX: 30000,          // WebSocket 重连退避上限（ms）
+  WS_PING_INTERVAL: 30000,        // WebSocket 应用层 ping 间隔（ms）
 };
 
 export const LIMITS = {
   LOG_MAX_ENTRIES: 100,           // 前端日志最大条数
   FILE_UPLOAD_MAX: 5 * 1024 * 1024, // 文件上传最大大小（5MB）
   SCROLL_BOTTOM_THRESHOLD: 50,    // 判断滚动到底部的阈值（px）
+  WS_LOG_BUFFER_MAX: 100,         // WS 断连期间前端日志缓冲上限
 };
 
 // 日志级别选项
@@ -60,20 +65,16 @@ export const LOG_LEVELS = [
   { value: 'INFO', label: 'INFO' },
   { value: 'WARNING', label: 'WARNING' },
   { value: 'ERROR', label: 'ERROR' },
-  { value: 'CRITICAL', label: 'CRITICAL' },
 ];
 
 // 日志级别数值映射（数值越大级别越高）
 export const LEVEL_VALUES = Object.fromEntries(LOG_LEVELS.map((l, i) => [l.value, i]));
-// { DEBUG: 0, INFO: 1, WARNING: 2, ERROR: 3, CRITICAL: 4 }
+// { DEBUG: 0, INFO: 1, WARNING: 2, ERROR: 3 }
 
 // 日志来源列表
 export const LOG_SOURCES = [
-  { value: 'backend', label: 'backend', color: '#4fc3f7' },
-  { value: 'network', label: 'network', color: '#81c784' },
-  { value: 'task', label: 'task', color: '#fff176' },
-  { value: 'frontend', label: 'frontend', color: '#ce93d8' },
-  { value: 'debug', label: 'debug', color: '#ffab91' },
+  { value: "backend",  label: "backend",  color: "#60a5fa" },
+  { value: "frontend", label: "frontend", color: "#a78bfa" }
 ];
 
 export const BROWSER_ARGS_DEFAULT = "--disable-blink-features=AutomationControlled\n--disable-software-rasterizer\n--disable-extensions\n--disable-background-timer-throttling\n--disable-backgrounding-occluded-windows\n--disable-renderer-backgrounding\n--disable-features=TranslateUI,BlinkGenPropertyTrees\n--disable-ipc-flooding-protection\n--disable-hang-monitor\n--disable-popup-blocking";
@@ -119,6 +120,7 @@ export const DEFAULT_CONFIG = {
       "http://detectportal.firefox.com/success.txt|success",
     ],
     script_timeout: 60,
+    bind_interface_name: '',
   },
   pause: {
     enabled: true,
@@ -127,7 +129,6 @@ export const DEFAULT_CONFIG = {
   },
   logging: {
     level: "INFO",
-    frontend_level: "INFO",
     log_retention_days: 7,
     access_log: false,
   },
@@ -143,16 +144,17 @@ export const DEFAULT_CONFIG = {
     carrier_custom: "",
   },
   active_task: "",
-  custom_variables: {},
-  block_proxy: true,
-  shell_path: "",
-  minimize_to_tray: true,
-  lightweight_tray: true,
-  startup_action: "none",
-  autostart_lightweight: true,
-  auto_open_browser: false,
-  proxy: "",
-  app_port: 50721,
+  app_settings: {
+    block_proxy: true,
+    shell_path: "",
+    startup_action: "none",
+    runtime_mode: "full",
+    lightweight_tray: true,
+    minimize_to_tray: true,
+    auto_open_browser: false,
+    proxy: "",
+    app_port: 50721,
+  },
 };
 
 export const SETTINGS_TABS = [
@@ -170,7 +172,7 @@ export const DEFAULT_APPEARANCE = {
   wallpaper_api_url: '',
   background_blur: 10,
   background_opacity: 0.3,
-  background_color: '#0f172a',
+  background_color: '',
   card_opacity: 0.45,
   card_blur: 12,
   border_intensity: 1.0,
@@ -179,12 +181,11 @@ export const DEFAULT_APPEARANCE = {
   sidebar_accent: '',
   backdrop_filter: false, // 毛玻璃效果
   accent_color: '#22d3ee',
-  zoom: 100,
-  theme: 'dark', // dark | light
+  theme: 'light', // light | dark | auto
 };
 
-// 预设背景色
-export const BG_COLORS = [
+// 预设背景色（深色）
+export const DARK_BG_COLORS = [
   { value: '#0f172a', label: '深空蓝' },
   { value: '#111827', label: '墨石黑' },
   { value: '#1a1a2e', label: '暗夜紫' },
@@ -192,6 +193,27 @@ export const BG_COLORS = [
   { value: '#1b2838', label: 'Steam 暗' },
   { value: '#0d1117', label: 'GitHub 暗' },
 ];
+
+// 预设背景色（浅色）
+export const LIGHT_BG_COLORS = [
+  { value: '#eef2f7', label: '默认灰白' },
+  { value: '#f8fafc', label: '纯白' },
+  { value: '#f1f5f9', label: '浅灰' },
+  { value: '#e8edf5', label: '淡蓝灰' },
+  { value: '#fef3c7', label: '暖黄' },
+  { value: '#ecfdf5', label: '薄荷绿' },
+];
+
+// 兼容旧引用
+export const BG_COLORS = DARK_BG_COLORS;
+
+// 自定义颜色默认结构（按类型分组，持久化到 localStorage 'appearance.custom_colors'）
+export const DEFAULT_CUSTOM_COLORS = {
+  accent: [],
+  bg: [],
+  sidebar: [],
+  sidebar_accent: [],
+};
 
 // 预设主题色
 export const ACCENT_COLORS = [

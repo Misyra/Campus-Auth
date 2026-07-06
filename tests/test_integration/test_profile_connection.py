@@ -16,13 +16,20 @@ class TestProfileConnection:
 
     def test_apply_profile(self, integration_stack):
         """切换方案 → engine 使用新凭证。"""
-        engine, profile_service, task_executor, mock_worker = integration_stack
+        engine, profile_service, task_executor, _, mock_worker = integration_stack
 
         # 创建第二个 profile 并设为活动方案
         profile_service.update(
-            lambda d: d.profiles.update({"profile-b": Profile(
-                name="方案B", username="user-b", password="pass-b", auth_url="http://10.0.0.2"
-            )})
+            lambda d: d.profiles.update(
+                {
+                    "profile-b": Profile(
+                        name="方案B",
+                        username="user-b",
+                        password="pass-b",
+                        auth_url="http://10.0.0.2",
+                    )
+                }
+            )
         )
         profile_service.set_active_profile("profile-b")
 
@@ -34,22 +41,29 @@ class TestProfileConnection:
 
     def test_switch_while_monitoring(self, integration_stack):
         """监控运行中切换 → 旧配置停、新配置起，无线程泄漏。"""
-        engine, profile_service, task_executor, mock_worker = integration_stack
+        engine, profile_service, task_executor, _, mock_worker = integration_stack
 
         profile_service.update(
-            lambda d: d.profiles.update({"profile-b": Profile(
-                name="方案B", username="user-b", password="pass-b", auth_url="http://10.0.0.2"
-            )})
+            lambda d: d.profiles.update(
+                {
+                    "profile-b": Profile(
+                        name="方案B",
+                        username="user-b",
+                        password="pass-b",
+                        auth_url="http://10.0.0.2",
+                    )
+                }
+            )
         )
 
         # 直接设置 monitor_core，绕过异步队列
         from app.services.monitor_service import NetworkMonitorCore
+
         config = engine.get_runtime_config()
         core = NetworkMonitorCore(
-            config=config,
-            log_callback=engine.record_log,
+            get_config=lambda: config,
+            logger=engine._logger,
             login_history=engine._login_history,
-            worker_getter=engine._worker_getter,
         )
         core.set_profile_service(engine._profile_service)
         core.init_monitoring()
@@ -62,26 +76,36 @@ class TestProfileConnection:
         assert ok is True
 
         # apply_profile 通过队列异步处理，等待引擎线程处理完成
-        time.sleep(0.5)
+        deadline = time.time() + 5
+        while time.time() < deadline and not engine._is_monitoring:
+            time.sleep(0.05)
 
         assert engine._is_monitoring
         assert engine.get_runtime_config().credentials.username == "user-b"
 
     def test_delete_current_profile(self, integration_stack):
         """删除当前方案 → 回退到 default。"""
-        engine, profile_service, task_executor, mock_worker = integration_stack
+        engine, profile_service, task_executor, _, mock_worker = integration_stack
 
         # 确保 default profile 有完整凭证
         profile_service.update(
-            lambda d: d.profiles.update({"default": Profile(
-                name="默认方案", username="testuser", auth_url="http://10.0.0.1"
-            )})
+            lambda d: d.profiles.update(
+                {
+                    "default": Profile(
+                        name="默认方案", username="testuser", auth_url="http://10.0.0.1"
+                    )
+                }
+            )
         )
 
         profile_service.update(
-            lambda d: d.profiles.update({"profile-b": Profile(
-                name="方案B", username="user-b", auth_url="http://10.0.0.2"
-            )})
+            lambda d: d.profiles.update(
+                {
+                    "profile-b": Profile(
+                        name="方案B", username="user-b", auth_url="http://10.0.0.2"
+                    )
+                }
+            )
         )
         profile_service.set_active_profile("profile-b")
         engine.apply_profile("profile-b")

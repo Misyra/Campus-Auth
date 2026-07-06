@@ -6,6 +6,8 @@
 from __future__ import annotations
 
 import asyncio
+import threading
+import time
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -20,15 +22,21 @@ def project_root(tmp_path: Path) -> Path:
     return tmp_path
 
 
+@pytest.fixture(autouse=True)
+def _mock_decision_executor_shutdown(monkeypatch):
+    """避免 container.shutdown() 真正关闭模块级资源。"""
+    monkeypatch.setattr("app.network.probes.shutdown_probes", MagicMock())
+
+
 @pytest.fixture
 def mock_classes():
     """返回所有被 patch 的服务类 mock。"""
     with (
         patch("app.container.WebSocketManager") as mock_ws_cls,
-        patch("app.container.ProfileService") as mock_profile_cls,
+        patch("app.container.get_profile_service") as mock_profile_cls,
         patch("app.container.LoginHistoryService") as mock_lh_cls,
         patch("app.container.ScheduleEngine") as mock_engine_cls,
-        patch("app.container.TaskService") as mock_task_cls,
+        patch("app.container.TaskManager") as mock_task_cls,
         patch("app.container.AutoStartService") as mock_autostart_cls,
         patch("app.container.TaskRegistry") as mock_tr_cls,
         patch("app.container.TaskHistoryStore") as mock_ths_cls,
@@ -40,7 +48,7 @@ def mock_classes():
             "ProfileService": mock_profile_cls,
             "LoginHistoryService": mock_lh_cls,
             "ScheduleEngine": mock_engine_cls,
-            "TaskService": mock_task_cls,
+            "TaskManager": mock_task_cls,
             "AutoStartService": mock_autostart_cls,
             "TaskRegistry": mock_tr_cls,
             "TaskHistoryStore": mock_ths_cls,
@@ -57,7 +65,9 @@ def container(project_root: Path, mock_classes: dict):
     c = ServiceContainer(project_root)
 
     # ws_drain_loop 必须返回协程，否则 asyncio.create_task 会失败
-    c.engine.ws_drain_loop = AsyncMock()
+    c.ws_manager.ws_drain_loop = AsyncMock()
+    # wait_for_callbacks 是异步方法，mock executor 需要返回协程
+    c.task_executor.wait_for_callbacks = AsyncMock()
 
     c._mock_classes = mock_classes
     return c
@@ -104,11 +114,11 @@ class TestInit:
         assert call_args[0][0] == project_root
         assert call_args[1]["login_history_service"] is container.login_history_service
 
-    def test_task_service_created_with_root(
+    def test_task_manager_created_with_root(
         self, container, project_root, mock_classes
     ):
-        """TaskService 应以 project_root 构造。"""
-        mock_classes["TaskService"].assert_called_once_with(project_root)
+        """TaskManager 应以 project_root / 'tasks' 构造。"""
+        mock_classes["TaskManager"].assert_called_once_with(project_root / "tasks")
 
     def test_autostart_service_created(self, container, project_root, mock_classes):
         """AutoStartService 应以 project_root 构造。"""
@@ -125,24 +135,23 @@ class TestInit:
         assert hasattr(container, "profile_service")
         assert hasattr(container, "login_history_service")
         assert hasattr(container, "engine")
-        assert hasattr(container, "monitor_service")  # 向后兼容别名
-        assert hasattr(container, "task_service")
+        assert hasattr(container, "task_manager")
         assert hasattr(container, "autostart_service")
         assert hasattr(container, "debug_manager")
         assert hasattr(container, "task_registry")
         assert hasattr(container, "task_history_store")
         assert hasattr(container, "task_executor")
 
-    def test_lightweight_mode_uses_null_ws_manager(self, project_root, mock_classes):
-        """轻量模式下应使用 NullWebSocketManager。"""
+    def test_lightweight_mode_uses_websocket_manager(self, project_root, mock_classes):
+        """轻量模式下也应创建 WebSocketManager。"""
         from app.container import ServiceContainer
-        from app.services.websocket_manager import NullWebSocketManager
 
         container = ServiceContainer(project_root, mode="lightweight")
-        assert isinstance(container.ws_manager, NullWebSocketManager)
-        mock_classes["WebSocketManager"].assert_not_called()
+        mock_classes["WebSocketManager"].assert_called_once()
 
-    def test_lightweight_mode_creates_real_task_executor(self, project_root, mock_classes):
+    def test_lightweight_mode_creates_real_task_executor(
+        self, project_root, mock_classes
+    ):
         """轻量模式下也应创建 TaskExecutor（用于自动登录）。"""
         from app.container import ServiceContainer
 
@@ -239,6 +248,8 @@ class TestShutdown:
         container.engine.shutdown = MagicMock()
         container.debug_manager.close = AsyncMock()
         container.ws_manager.close_all = AsyncMock()
+        # wait_for_callbacks 是新增的异步方法，需 mock 为协程
+        container.task_executor.wait_for_callbacks = AsyncMock()
         return container
 
     def test_shutdown_calls_monitor_shutdown(self, container_for_shutdown):
@@ -266,7 +277,9 @@ class TestShutdown:
                     await asyncio.sleep(1)
 
             container_for_shutdown._ws_drain_task = asyncio.create_task(_dummy_loop())
-            container_for_shutdown._web_services_started = True  # 复用 stop_web_services 需要此标志
+            container_for_shutdown._web_services_started = (
+                True  # 复用 stop_web_services 需要此标志
+            )
             # 让 task 开始运行
             await asyncio.sleep(0.01)
 
@@ -275,6 +288,39 @@ class TestShutdown:
             assert container_for_shutdown._ws_drain_task is None
 
         asyncio.run(_run())
+
+    def test_shutdown_handles_cross_loop_ws_drain_task(self, container_for_shutdown):
+        """跨事件循环的 ws_drain_task 不应引发 RuntimeError。"""
+
+        # 在另一个线程中创建 task，模拟守护线程创建的 ws_drain_task
+        other_task = None
+
+        def _create_task_in_other_loop():
+            nonlocal other_task
+
+            async def _dummy():
+                while True:
+                    await asyncio.sleep(1)
+
+            loop = asyncio.new_event_loop()
+            other_task = loop.create_task(_dummy())
+            loop.run_until_complete(asyncio.sleep(0.01))
+            # 保持 loop 存活，否则 task 会被销毁
+            return loop
+
+        t_loop = _create_task_in_other_loop()
+        try:
+            container_for_shutdown._ws_drain_task = other_task
+            container_for_shutdown._web_services_started = True
+
+            # 从当前 loop 调用 shutdown，不应抛 RuntimeError
+            asyncio.run(container_for_shutdown.shutdown())
+
+            assert container_for_shutdown._ws_drain_task is None
+        finally:
+            t_loop.call_soon_threadsafe(t_loop.stop)
+            t_loop.run_forever()
+            t_loop.close()
 
     def test_shutdown_handles_no_drain_task(self, container_for_shutdown):
         """ws_drain_task 为 None 时 shutdown 不应报错。"""
@@ -374,8 +420,151 @@ class TestIntegration:
     ):
         """所有通过容器创建的服务都应基于相同的 project_root。"""
         assert mock_classes["ProfileService"].call_args[0][0] == project_root
-        assert mock_classes["TaskService"].call_args[0][0] == project_root
+        assert mock_classes["TaskManager"].call_args[0][0] == project_root / "tasks"
         assert mock_classes["AutoStartService"].call_args[0][0] == project_root
         _ = container.debug_manager  # 触发延迟初始化
         assert mock_classes["DebugSessionManager"].call_args[0][0] == project_root
         assert mock_classes["ScheduleEngine"].call_args[0][0] == project_root
+
+
+# =====================================================================
+# TaskExecutor.wait_for_callbacks
+# =====================================================================
+
+
+class TestWaitForCallbacks:
+    """TaskExecutor.wait_for_callbacks 测试（使用真实 TaskExecutor）。"""
+
+    def _make_executor(self):
+        """创建一个最小化的 TaskExecutor 实例（mock 外部依赖）。"""
+        from app.services.task_executor import TaskExecutor
+
+        return TaskExecutor(
+            registry=MagicMock(),
+            history_store=MagicMock(),
+            worker_getter=MagicMock(),
+            login_orchestrator=MagicMock(),
+        )
+
+    def test_no_pending_returns_immediately(self):
+        """无 pending 任务时立即返回。"""
+        import time
+
+        executor = self._make_executor()
+        start = time.monotonic()
+        asyncio.run(executor.wait_for_callbacks(timeout=5))
+        elapsed = time.monotonic() - start
+        assert elapsed < 1.0, f"应立即返回，实际耗时 {elapsed:.2f}s"
+
+    def test_waits_for_running_task(self):
+        """等待运行中的任务完成。"""
+        executor = self._make_executor()
+        completed = threading.Event()
+
+        def _slow_task():
+            time.sleep(0.3)
+            completed.set()
+            return True, "done"
+
+        future = executor._ensure_task_pool().submit(_slow_task)
+        with executor._running_tasks_lock:
+            executor._running_tasks["task-1"] = (future, threading.Event())
+
+        asyncio.run(executor.wait_for_callbacks(timeout=5))
+        assert completed.is_set(), "任务应在 wait_for_callbacks 返回前完成"
+
+    def test_timeout_does_not_block_indefinitely(self):
+        """超时后不再阻塞。"""
+        executor = self._make_executor()
+
+        def _very_slow_task():
+            time.sleep(30)
+            return True, "done"
+
+        future = executor._ensure_task_pool().submit(_very_slow_task)
+        with executor._running_tasks_lock:
+            executor._running_tasks["task-slow"] = (future, threading.Event())
+
+        start = time.monotonic()
+        asyncio.run(executor.wait_for_callbacks(timeout=0.5))
+        elapsed = time.monotonic() - start
+        assert elapsed < 3.0, f"应在超时后返回，实际耗时 {elapsed:.2f}s"
+        future.cancel()
+
+    def test_handles_failed_task_gracefully(self):
+        """失败的任务不抛出异常。"""
+        from concurrent.futures import Future
+
+        executor = self._make_executor()
+        f: Future = Future()
+        f.set_exception(RuntimeError("任务失败"))
+        with executor._running_tasks_lock:
+            executor._running_tasks["task-fail"] = (f, threading.Event())
+
+        asyncio.run(executor.wait_for_callbacks(timeout=5))
+        # 不抛异常即通过
+
+
+# =====================================================================
+# shutdown 顺序保护
+# =====================================================================
+
+
+class TestShutdownOrder:
+    """验证 shutdown 顺序：engine → wait_for_callbacks → task_executor.shutdown。"""
+
+    def test_shutdown_order_correct(self):
+        """shutdown 应按正确顺序调用各关闭方法。"""
+        call_order = []
+
+        mock_engine = MagicMock()
+        mock_engine.shutdown.side_effect = lambda: call_order.append("engine.shutdown")
+
+        mock_executor = MagicMock()
+        mock_executor.shutdown.side_effect = lambda **kw: call_order.append(
+            "task_executor.shutdown"
+        )
+
+        async def _mock_wait():
+            call_order.append("wait_for_callbacks")
+
+        mock_executor.wait_for_callbacks = _mock_wait
+
+        # 模拟 container shutdown 中的关键序列
+        mock_engine.shutdown()
+        asyncio.run(mock_executor.wait_for_callbacks())
+        mock_executor.shutdown(wait=True, timeout=10)
+
+        assert call_order == [
+            "engine.shutdown",
+            "wait_for_callbacks",
+            "task_executor.shutdown",
+        ], f"调用顺序不正确: {call_order}"
+
+    def test_shutdown_timeout_continues(self):
+        """wait_for_callbacks 超时后 shutdown 继续执行。"""
+        call_order = []
+
+        async def _slow_wait():
+            call_order.append("wait_for_callbacks")
+            await asyncio.sleep(30)
+
+        mock_executor = MagicMock()
+        mock_executor.wait_for_callbacks = _slow_wait
+        mock_executor.shutdown.side_effect = lambda **kw: call_order.append(
+            "task_executor.shutdown"
+        )
+
+        try:
+            asyncio.run(
+                asyncio.wait_for(mock_executor.wait_for_callbacks(), timeout=0.2)
+            )
+        except TimeoutError:
+            call_order.append("timeout")
+        mock_executor.shutdown(wait=True, timeout=10)
+
+        assert "timeout" in call_order, "应触发超时"
+        assert "task_executor.shutdown" in call_order, "超时后应继续关闭"
+        assert call_order.index("timeout") < call_order.index(
+            "task_executor.shutdown"
+        ), "超时应在 task_executor.shutdown 之前"
