@@ -1226,6 +1226,23 @@
     }, true);  // capture phase
 
     // 事件绑定
+    // 已录制列表的删除/编辑用事件委托，避免 updateRecordedList 每次重渲染重复绑定监听器
+    state.panel.querySelector("#ca-recorded-list").addEventListener("click", (e) => {
+      const delBtn = e.target.closest(".ca-del");
+      if (delBtn) {
+        e.stopPropagation();  // 防止触发编辑弹窗
+        state.steps.splice(parseInt(delBtn.dataset.idx), 1);
+        updateRecordedList();
+        saveState();
+        updateButtons();
+        return;
+      }
+      const item = e.target.closest(".ca-recorded-item");
+      if (item) {
+        const idx = parseInt(item.querySelector(".ca-del")?.dataset.idx);
+        if (idx >= 0) showStepEditModal(idx);
+      }
+    });
     state.panel.querySelector("#ca-btn-undo").addEventListener("click", undoStep);
     state.panel.querySelector("#ca-btn-clear").addEventListener("click", clearSteps);
     state.panel.querySelector("#ca-btn-copy-prompt").addEventListener("click", () => {
@@ -1278,24 +1295,7 @@
       )
       .join("");
 
-    list.querySelectorAll(".ca-del").forEach(btn => {
-      btn.addEventListener("click", (e) => {
-        e.stopPropagation();  // 防止触发编辑弹窗
-        state.steps.splice(parseInt(btn.dataset.idx), 1);
-        updateRecordedList();
-        saveState();
-        updateButtons();
-      });
-    });
-
-    // 点击步骤项可编辑类型和备注
-    list.querySelectorAll(".ca-recorded-item").forEach(item => {
-      item.addEventListener("click", () => {
-        const idx = parseInt(item.querySelector(".ca-del")?.dataset.idx);
-        if (idx >= 0) showStepEditModal(idx);
-      });
-    });
-
+    // 删除与编辑通过事件委托处理（在 createPanel 中绑定一次），避免每次重渲染重复绑定
     updateButtons();
   }
 
