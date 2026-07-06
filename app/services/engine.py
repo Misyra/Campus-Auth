@@ -612,7 +612,10 @@ class ScheduleEngine:
     async def _do_async_login(
         self, is_manual: bool = False, config_snapshot: RuntimeConfig | None = None
     ) -> bool:
-        """【委托】提交登录到 LoginBridge。"""
+        """提交登录到 LoginBridge，同时递增登录计数器。"""
+        core = self._monitor_core
+        if core is not None:
+            core._update_state(login_attempt_count=core.login_attempt_count + 1)
         return await self._login_bridge.submit_login(
             is_manual=is_manual, config_snapshot=config_snapshot
         )
@@ -719,6 +722,9 @@ class ScheduleEngine:
                         cmd.response_future.set_result, cmd.response_data
                     )
 
+        core = self._monitor_core
+        if core is not None:
+            core._update_state(login_attempt_count=core.login_attempt_count + 1)
         await self._login_bridge.submit_login(
             is_manual=True,
             config_snapshot=self._runtime_config,

@@ -106,7 +106,13 @@ def set_autostart_mode(
 ) -> ApiResponse:
     """切换自启动运行模式（仅保存配置，不重新生成脚本）。"""
     _save_runtime_mode(request, body.runtime_mode)
+    mode_label = "完整模式" if body.runtime_mode == RuntimeMode.FULL else "轻量模式"
     api_logger.info("切换自启动模式: {}", body.runtime_mode.value)
+    if body.runtime_mode == RuntimeMode.LIGHTWEIGHT:
+        api_logger.info(
+            "轻量模式已启用：下次启动时 Web 界面不会自动打开，"
+            "只能通过系统托盘开启"
+        )
     return ApiResponse(
-        success=True, message=f"自启动模式已切换为 {body.runtime_mode.value}"
+        success=True, message=f"自启动模式已切换为 {mode_label}"
     )

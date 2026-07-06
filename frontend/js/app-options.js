@@ -346,6 +346,16 @@ export const appOptions = {
     ...appearanceMethods,
     ...dragMethods,
 
+    confirmLightweightTray() {
+      if (this.config.app_settings.runtime_mode === 'lightweight' && !this.config.app_settings.lightweight_tray) {
+        const confirmed = confirm(
+          '轻量模式下 Web 界面不会自动启动，关闭托盘后将无法通过系统托盘打开管理界面（仍可通过 exe 重新启动程序进入）。\n\n确定要关闭托盘吗？'
+        );
+        if (!confirmed) {
+          this.config.app_settings.lightweight_tray = true;
+        }
+      }
+    },
     async loadNetworkInterfaces() {
       try {
         const data = await this.$apiService.monitor.fetchInterfaces();

@@ -104,10 +104,10 @@
         <div class="toggle-group settings-toggle-spacer">
           <div class="toggle-with-help">
             <label class="toggle toggle-help-inline">
-              <input type="checkbox" v-model="config.app_settings.lightweight_tray" />
+              <input type="checkbox" v-model="config.app_settings.lightweight_tray" @change="confirmLightweightTray" />
               <span class="toggle-slider"></span>
               <span class="toggle-label">轻量模式托盘开关</span>
-              <span class="field-help" tabindex="0" role="note" data-tip="开启后可以通过托盘打开管理界面，但是会增加 10MB 左右内存。关闭后无法进入 Web 界面，只能通过命令行管理。建议在完成所有配置后打开。">?</span>
+              <span class="field-help" tabindex="0" role="note" data-tip="开启后可以通过托盘打开管理界面，但是会增加 10MB 左右内存。关闭后将无法通过托盘打开 Web 界面，但仍可通过 exe 启动程序来打开管理界面。建议在完成所有配置后打开。">?</span>
             </label>
           </div>
         </div>

@@ -261,7 +261,6 @@ class NetworkMonitorCore:
         )
         if net_ok:
             self._update_state(
-                login_attempt_count=0,
                 network_state=NetworkState.CONNECTED,
                 status_detail="网络正常",
             )
