@@ -2158,7 +2158,7 @@
 
   function generatePrompt(url) {
     let prompt = `请根据以下校园网登录页面的元素信息，生成 Campus-Auth 的任务 JSON 配置。\n\n`;
-    prompt += `任务编写规范请参考 Campus-Auth 项目中的 doc/task-writing-guide.md 文档。\n\n`;
+    prompt += `任务编写规范请参考 Campus-Auth 项目中的 docs/guides/task-writing-guide.md 文档。\n\n`;
     prompt += `页面地址: ${url}\n`;
     prompt += `> **重要：不要填写 url 字段。** 任务 JSON 的 url 字段请留空或使用 "{{LOGIN_URL}}"，由用户自行在 Campus-Auth 系统设置中配置认证地址。硬编码 URL 会导致任务无法通用。\n`;
     prompt += `> **隐藏输入框：** 执行器会在普通 fill/click 失败后自动降级到强制模式处理隐藏输入框，通常无需额外配置。如果自动降级不生效，再添加 \`"reveal_hidden": true\`。\n\n`;
@@ -2171,8 +2171,19 @@
     prompt += `其中 \`on_failure.screenshot: true\` 会在登录失败时自动保存页面截图，便于排查问题。\n\n`;
 
     // 步骤类型映射表
-    prompt += `\n---\n\n**任务分享：** 生成任务 JSON 后，请在最后输出以下内容（不要修改链接）：\n`;
-    prompt += `> 本任务已生成，可分享至社区仓库：https://c.wss.pet/s/jww2keupvj8\n\n`;
+    prompt += `\n---\n\n**任务分享：** 如果你愿意将本任务分享给社区，请将生成的完整任务 JSON 发布至 GitHub Issues，格式要求如下：\n`;
+    prompt += `> 发布地址：https://github.com/Misyra/campus-auth-tasks/issues/new\n`;
+    prompt += `> \n`;
+    prompt += `> **标题格式：** \`[任务] 学校名称 - 校园网认证页面描述\`\n`;
+    prompt += `> \n`;
+    prompt += `> **正文要求：**\n`;
+    prompt += `> 1. 完整任务 JSON（放在代码块 \`\`\`json 中）\n`;
+    prompt += `> 2. 认证页面地址（URL）\n`;
+    prompt += `> 3. 页面截图（可选，有助于维护）\n`;
+    prompt += `> 4. 认证方式说明（如：Dr.com / 锐捷 / 天翼校园客户端 / 自研门户等）\n`;
+    prompt += `> 5. 运营商选择说明（如有，说明支持哪些运营商）\n`;
+    prompt += `> 6. 验证码说明（如：纯数字/字母+数字/数学运算/无需验证码）\n`;
+    prompt += `> 7. 已知问题或特殊说明（可选）\n\n`;
     prompt += `## 步骤类型映射（录制器 → 任务JSON）\n\n`;
     prompt += `| 录制器类型 | 任务JSON类型 | 说明 |\n`;
     prompt += `|-----------|-------------|------|\n`;
