@@ -1,5 +1,36 @@
 # 修改日志
 
+## 2026-07-06
+
+### fix: 变量解析与网络检测修复 + ponytail-audit 代码清理
+
+- **Bug 修复**：
+  - `app/tasks/variable_resolver.py`：`resolve_for_js()` 补充 `config.variables` 查找链，修复任务级变量（如 `{{username}}`）未替换导致 eval 步骤 `SyntaxError`
+  - `app/tasks/browser_runner.py`：`check_network_status` 改为直接 `await`，修复 `asyncio.to_thread` 包装 async 函数导致 "cannot unpack coroutine" 错误
+  - `app/network/probes.py`：探测异常日志补充异常类型名，避免空消息
+- **死代码删除**：
+  - `app/tasks/models.py`：删除 `TaskError` 无用中间层，`StepError` 直接继承 `Exception`
+  - `app/network/interfaces.py`：删除 `is_interface_up`（无调用方）
+  - `app/utils/shutdown.py`：删除 `register_exit_handler`（无调用方）
+  - `app/services/engine.py`：删除 `get_config()` 重复方法
+  - `app/services/profile_service.py`：删除 `create_profile_service()` 无用别名
+- **单调用函数内联**：
+  - `app/services/task_executor.py`：`_get_script_path()` 内联
+  - `app/services/login_orchestrator.py`：`_link_cancel()` 内联、`_runtime_config()` 移除无用 fallback
+  - `app/services/login_runner.py`：`load_login_config()` 内联
+  - `app/services/scheduler_service.py`：`has_enabled_tasks()` 内联
+- **合并 wrapper 链**：
+  - `app/services/engine.py`：删除 `notify_network_state_changed()`、`set_dashboard_sink()` 无附加值包装
+- **os.path → pathlib**：
+  - `app/workers/script_runner.py`：`os.path.splitext(os.path.basename(x))` → `Path(x).stem`
+  - `app/utils/files.py`：`os.path.dirname(path)` → `Path(path).parent`
+  - `app/utils/logging.py`：`os.path.join(...)` → `Path(...) / ...`
+  - `app/utils/process.py`：`os.path.basename(...)` → `Path(...).name`
+- **统一变量解析器**：
+  - 提取 `_lookup()` 统一三层查找链（runtime → template → config.variables）
+  - 提取 `_to_str()` 工具方法
+- **测试同步**：删除 8 个测试已删除 API 的用例，修复 1 个 mock 目标，新增 2 个 config.variables 测试
+
 ## 2026-07-05
 
 ### refactor: ponytail-audit 代码清理
