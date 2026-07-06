@@ -172,7 +172,7 @@ export const DEFAULT_APPEARANCE = {
   wallpaper_api_url: '',
   background_blur: 10,
   background_opacity: 0.3,
-  background_color: '#0f172a',
+  background_color: '',
   card_opacity: 0.45,
   card_blur: 12,
   border_intensity: 1.0,
@@ -184,8 +184,8 @@ export const DEFAULT_APPEARANCE = {
   theme: 'light', // light | dark | auto
 };
 
-// 预设背景色
-export const BG_COLORS = [
+// 预设背景色（深色）
+export const DARK_BG_COLORS = [
   { value: '#0f172a', label: '深空蓝' },
   { value: '#111827', label: '墨石黑' },
   { value: '#1a1a2e', label: '暗夜紫' },
@@ -193,6 +193,19 @@ export const BG_COLORS = [
   { value: '#1b2838', label: 'Steam 暗' },
   { value: '#0d1117', label: 'GitHub 暗' },
 ];
+
+// 预设背景色（浅色）
+export const LIGHT_BG_COLORS = [
+  { value: '#eef2f7', label: '默认灰白' },
+  { value: '#f8fafc', label: '纯白' },
+  { value: '#f1f5f9', label: '浅灰' },
+  { value: '#e8edf5', label: '淡蓝灰' },
+  { value: '#fef3c7', label: '暖黄' },
+  { value: '#ecfdf5', label: '薄荷绿' },
+];
+
+// 兼容旧引用
+export const BG_COLORS = DARK_BG_COLORS;
 
 // 自定义颜色默认结构（按类型分组，持久化到 localStorage 'appearance.custom_colors'）
 export const DEFAULT_CUSTOM_COLORS = {

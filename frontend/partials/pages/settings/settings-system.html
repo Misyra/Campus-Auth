@@ -77,9 +77,20 @@
           </label>
         </div>
       </div>
-      <div class="form-group" v-if="autostart.enabled">
+    </div>
+  </section>
+
+  <section class="card settings-panel">
+    <div class="settings-card-header">
+      <svg class="settings-card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="3"/><path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72 1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+      </svg>
+      <h2>运行模式</h2>
+    </div>
+    <div class="card-body">
+      <div class="form-group">
         <div class="field-label-row">
-          <label>自启动模式</label>
+          <label>运行模式</label>
           <span class="field-help" tabindex="0" role="note" data-tip="轻量模式仅后台监控，不启动 Web 界面，可降低常态内存占用；完整模式启动 Web 管理界面。">?</span>
         </div>
         <custom-select
@@ -89,7 +100,7 @@
         ></custom-select>
       </div>
 
-      <template v-if="autostart.enabled && config.app_settings.runtime_mode === 'lightweight'">
+      <template v-if="config.app_settings.runtime_mode === 'lightweight'">
         <div class="toggle-group settings-toggle-spacer">
           <div class="toggle-with-help">
             <label class="toggle toggle-help-inline">
