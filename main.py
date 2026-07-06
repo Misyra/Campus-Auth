@@ -24,7 +24,7 @@ from app.services.launcher import (  # noqa: E402
     _terminate_process,
     launch_server,
 )
-from app.services.profile_service import create_profile_service  # noqa: E402
+from app.services.profile_service import get_profile_service  # noqa: E402
 from app.utils.process import (  # noqa: E402
     cleanup_pid,
     get_pid_file,
@@ -122,7 +122,7 @@ def _build_app_config(
     logger = get_logger("startup", source="backend")
     # 从 settings.json 加载
     try:
-        _ps = create_profile_service()
+        _ps = get_profile_service()
         _data = _ps.load()
         config = AppConfig.from_runtime_config(_data.global_config)
     except Exception:

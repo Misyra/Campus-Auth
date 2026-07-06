@@ -1,10 +1,9 @@
 """TaskExecutor 及相关组件测试。
 
 覆盖：
-1. TaskExecutor._get_script_path() 路径回退
-2. 定时任务线程池懒初始化
-3. BoundedExecutor 队列限制
-4. TaskExecutor CRUD 方法、登录去重、execute_task 分发、execute_shell
+1. 定时任务线程池懒初始化
+2. BoundedExecutor 队列限制
+3. TaskExecutor CRUD 方法、登录去重、execute_task 分发、execute_shell
 """
 
 from __future__ import annotations
@@ -17,43 +16,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from app.schemas import AppSettings, RuntimeConfig
-
-# =====================================================================
-# TaskExecutor._get_script_path()
-# =====================================================================
-
-
-class TestTaskExecutorGetScriptPath:
-    """TaskExecutor._get_script_path() 委托 registry.get_script_path() 的测试。"""
-
-    def test_delegates_to_registry(self) -> None:
-        """委托 registry.get_script_path() 方法。"""
-        mock_path = MagicMock()
-        mock_registry = MagicMock(spec=["get_script_path"])
-        mock_registry.get_script_path.return_value = mock_path
-
-        from app.services.task_executor import TaskExecutor
-
-        executor = TaskExecutor.__new__(TaskExecutor)
-        executor._registry = mock_registry
-
-        result = executor._get_script_path("test")
-        assert result is mock_path
-        mock_registry.get_script_path.assert_called_once_with("test")
-
-    def test_returns_none_when_registry_returns_none(self) -> None:
-        """registry.get_script_path 返回 None 时返回 None。"""
-        mock_registry = MagicMock(spec=["get_script_path"])
-        mock_registry.get_script_path.return_value = None
-
-        from app.services.task_executor import TaskExecutor
-
-        executor = TaskExecutor.__new__(TaskExecutor)
-        executor._registry = mock_registry
-
-        result = executor._get_script_path("nonexistent_script")
-        assert result is None
-
 
 # =====================================================================
 # TaskExecutor 线程池懒初始化
@@ -488,7 +450,7 @@ class TestTaskExecutorExecuteScript:
     def test_script_file_not_found(self):
         executor = self._make_executor()
         executor._registry.get_task.return_value = {"type": "script"}
-        executor._get_script_path = MagicMock(return_value=None)
+        executor._registry.get_script_path.return_value = None
         success, msg = executor._execute_script("s1", 30)
         assert success is False
         assert "文件不存在" in msg
@@ -496,7 +458,7 @@ class TestTaskExecutorExecuteScript:
     def test_script_path_not_exists(self, tmp_path):
         executor = self._make_executor()
         executor._registry.get_task.return_value = {"type": "script"}
-        executor._get_script_path = MagicMock(return_value=tmp_path / "nonexistent.py")
+        executor._registry.get_script_path.return_value = tmp_path / "nonexistent.py"
         success, msg = executor._execute_script("s1", 30)
         assert success is False
         assert "文件不存在" in msg

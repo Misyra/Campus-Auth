@@ -33,7 +33,7 @@ def atomic_write(
         suffix: 临时文件后缀（默认 ".tmp"）
     """
     path = str(path)
-    parent = os.path.dirname(path)
+    parent = str(Path(path).parent)
     if parent:
         os.makedirs(parent, exist_ok=True)
 

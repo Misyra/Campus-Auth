@@ -167,7 +167,7 @@ def write_pid(mode: str | None = None) -> None:
     data = {
         "pid": os.getpid(),
         "create_time": psutil.Process().create_time(),
-        "proc_name": os.path.basename(sys.executable),
+        "proc_name": Path(sys.executable).name,
         "mode": mode,
     }
     atomic_write(pid_file, json.dumps(data, ensure_ascii=False))

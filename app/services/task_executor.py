@@ -314,7 +314,7 @@ class TaskExecutor:
             return False, f"脚本任务不存在: {script_id}"
 
         # 获取脚本路径（通过 registry 的 TaskManager）
-        script_path = self._get_script_path(script_id)
+        script_path = self._registry.get_script_path(script_id)
         if not script_path or not script_path.exists():
             return False, f"脚本文件不存在: {script_id}"
 
@@ -424,10 +424,6 @@ class TaskExecutor:
             return False, f"执行异常: {exc}"
 
     # ── 辅助方法 ──
-
-    def _get_script_path(self, script_id: str):
-        """获取脚本任务的文件路径。"""
-        return self._registry.get_script_path(script_id)
 
     # ── 生命周期 ──
 

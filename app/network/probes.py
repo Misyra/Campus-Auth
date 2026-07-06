@@ -179,7 +179,7 @@ async def _race_first_success_async(
             try:
                 result = await coro
             except Exception as e:
-                logger.debug("{} 探测异常: {}", label, e, exc_info=True)
+                logger.debug("{} 探测异常: {} - {}", label, type(e).__name__, e, exc_info=True)
                 continue
 
             if isinstance(result, tuple) and len(result) == 3:

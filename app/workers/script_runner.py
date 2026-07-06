@@ -49,10 +49,10 @@ _BINARY_EXT_MAP = {
 def _get_interpreter_name(binary: str) -> str:
     """从解释器路径中提取语言名称（小写）。
 
-    使用 os.path 提取文件名，正则匹配字母前缀。
+    使用 Path.stem 提取文件名，正则匹配字母前缀。
     例如: /usr/bin/python3.12 → python, C:\\Python312\\python.exe → python
     """
-    stem = os.path.splitext(os.path.basename(binary))[0]
+    stem = Path(binary).stem
     match = _EXEC_NAME_RE.match(stem)
     if match:
         return match.group(1).lower()

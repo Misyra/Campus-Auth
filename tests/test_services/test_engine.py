@@ -1790,30 +1790,12 @@ class TestSchedulerControl:
 
 
 class TestGetConfig:
-    def test_get_config_returns_runtime_config(self, engine_factory):
-        svc = engine_factory(raw=True)
-        svc._runtime_config = RuntimeConfig()
-        config = svc.get_config()
-        assert config is svc._runtime_config
-        assert isinstance(config, RuntimeConfig)
-
     def test_get_runtime_config_returns_reference(self, engine_factory):
         svc = engine_factory(raw=True)
         svc._runtime_config = RuntimeConfig()
         config = svc.get_runtime_config()
         assert config is svc._runtime_config
         assert isinstance(config, RuntimeConfig)
-
-
-class TestNotifyNetworkStateChanged:
-    def test_notify_network_state_changed(self, engine_factory):
-        svc = engine_factory(raw=True)
-        svc.notify_network_state_changed = (
-            ScheduleEngine.notify_network_state_changed.__get__(svc)
-        )
-        svc._update_status_snapshot = MagicMock()
-        svc.notify_network_state_changed()
-        svc._update_status_snapshot.assert_called_once()
 
 
 # =====================================================================

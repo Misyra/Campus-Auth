@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
-
 from app.schemas import LoginCredentials, LoginResult, RuntimeConfig
 
 
@@ -26,17 +24,19 @@ class TestLoginOnceMode:
         ctx = self._make_ctx()
         logger = MagicMock()
 
+        mock_ps = MagicMock()
+        mock_ps.get_runtime_config.return_value = RuntimeConfig()
+
         with (
-            patch("app.services.login_runner.load_login_config") as mock_load,
+            patch(
+                "app.services.profile_service.get_profile_service",
+                return_value=mock_ps,
+            ),
             patch(
                 "app.network.decision.check_network_status", new_callable=AsyncMock
             ) as mock_net,
             patch("app.services.login_runner.execute_login_with_retries") as mock_login,
         ):
-            mock_load.return_value = (
-                RuntimeConfig(),
-                None,
-            )
             mock_net.return_value = (False, "network_down", "")
             mock_login.return_value = LoginResult.SUCCESS
 
@@ -53,17 +53,19 @@ class TestLoginOnceMode:
         ctx = self._make_ctx()
         logger = MagicMock()
 
+        mock_ps = MagicMock()
+        mock_ps.get_runtime_config.return_value = RuntimeConfig()
+
         with (
-            patch("app.services.login_runner.load_login_config") as mock_load,
+            patch(
+                "app.services.profile_service.get_profile_service",
+                return_value=mock_ps,
+            ),
             patch(
                 "app.network.decision.check_network_status", new_callable=AsyncMock
             ) as mock_net,
             patch("app.services.login_runner.execute_login_with_retries") as mock_login,
         ):
-            mock_load.return_value = (
-                RuntimeConfig(),
-                None,
-            )
             mock_net.return_value = (False, "network_down", "")
             mock_login.return_value = LoginResult.TEMPORARY_FAILURE
 
@@ -80,9 +82,13 @@ class TestLoginOnceMode:
         ctx = self._make_ctx()
         logger = MagicMock()
 
-        with patch("app.services.login_runner.load_login_config") as mock_load:
-            mock_load.return_value = (None, LoginResult.CONFIG_ERROR)
+        mock_ps = MagicMock()
+        mock_ps.get_runtime_config.side_effect = Exception("配置加载失败")
 
+        with patch(
+            "app.services.profile_service.get_profile_service",
+            return_value=mock_ps,
+        ):
             result = _run_login_then_exit(ctx, logger)
 
         assert result == LoginResult.CONFIG_ERROR
@@ -105,7 +111,7 @@ class TestLoginOnceMode:
 
         with (
             patch(
-                "app.services.profile_service.create_profile_service"
+                "app.services.profile_service.get_profile_service"
             ) as mock_profile_factory,
             patch(
                 "app.services.login_history_service.LoginHistoryService"
@@ -128,10 +134,10 @@ class TestLoginOnceMode:
 
     def test_login_once_records_failure_history(self):
         """login_once 登录失败后应记录失败历史。"""
+        from app.schemas import RetrySettings
         from app.services.login_runner import (
             execute_login_with_retries as _execute_login_with_retries,
         )
-        from app.schemas import RetrySettings
 
         logger = MagicMock()
         _creds = LoginCredentials(
@@ -147,7 +153,7 @@ class TestLoginOnceMode:
 
         with (
             patch(
-                "app.services.profile_service.create_profile_service"
+                "app.services.profile_service.get_profile_service"
             ) as mock_profile_factory,
             patch(
                 "app.services.login_history_service.LoginHistoryService"

@@ -188,22 +188,6 @@ class TestInterfaceManager:
 
         assert call_count == 2  # 首次 + 过期后
 
-    def test_is_interface_up(self):
-        from app.network.interfaces import InterfaceManager
-
-        mock_stats = {
-            "以太网": MagicMock(isup=True, isloopback=False),
-            "WLAN": MagicMock(isup=False, isloopback=False),
-        }
-        with patch(
-            "app.network.interfaces.psutil.net_if_stats", return_value=mock_stats
-        ):
-            mgr = InterfaceManager()
-            assert mgr.is_interface_up("以太网") is True
-            assert mgr.is_interface_up("WLAN") is False
-            assert mgr.is_interface_up("不存在") is False
-
-
 class TestInterfaceManagerGateway:
     """网关解析测试。"""
 

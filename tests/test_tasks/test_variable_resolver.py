@@ -137,3 +137,26 @@ class TestResolveForJsWhitelist:
         result = resolver.resolve_for_js("{{data}}")
         parsed = json.loads(result)
         assert parsed == {"key": "val"}
+
+    def test_config_variables_resolved(self):
+        """config.variables 中的中间变量（如 username → {{USERNAME}}）应被递归解析。"""
+        resolver = _make_resolver(
+            template_vars={"USERNAME": "admin", "PASSWORD": "p@ss"},
+            variables={"username": "{{USERNAME}}", "password": "{{PASSWORD}}"},
+        )
+        result = resolver.resolve_for_js("{{username}}:{{password}}")
+        assert "admin" in result
+        assert "p@ss" in result
+        assert "{{USERNAME}}" not in result
+        assert "{{PASSWORD}}" not in result
+
+    def test_config_variables_chain_resolution(self):
+        """config.variables 支持多层链式解析（如 alias → user → REAL_USER）。"""
+        resolver = _make_resolver(
+            template_vars={"REAL_USER": "alice"},
+            variables={"user": "{{REAL_USER}}", "alias": "{{user}}"},
+        )
+        result = resolver.resolve_for_js("{{alias}}")
+        assert "alice" in result
+        assert "{{REAL_USER}}" not in result
+        assert "{{user}}" not in result

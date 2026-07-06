@@ -1,7 +1,6 @@
 """退出工具函数 — 强制退出。
 
 force_exit: 执行退出钩子后强制退出，用于无法优雅关闭的场景。
-register_exit_handler: 注册退出钩子，在 force_exit 时执行。
 """
 
 from __future__ import annotations
@@ -13,19 +12,8 @@ import threading
 from collections.abc import Callable
 from typing import Any
 
-
 # 手动维护的退出钩子列表，替代 atexit._run_exitfuncs() 私有 API
 _exit_handlers: list[tuple[Callable[..., Any], tuple[Any, ...], dict[str, Any]]] = []
-
-
-def register_exit_handler(func: Callable[..., Any], *args: Any, **kwargs: Any) -> None:
-    """注册退出钩子，在 force_exit 时按注册顺序执行。
-
-    用于需要在 os._exit 前执行的清理逻辑（如关闭线程池、断开连接）。
-    注意：此钩子仅在 force_exit 时执行，正常进程退出时不会触发。
-    如需正常退出时也执行，请同时使用 atexit.register()。
-    """
-    _exit_handlers.append((func, args, kwargs))
 
 
 def _is_test_environment() -> bool:
