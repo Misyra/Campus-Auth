@@ -79,7 +79,7 @@
       <div class="form-group">
         <div class="field-label-row">
           <label for="settings-retry-interval">重试间隔（秒）</label>
-          <span class="field-help" tabindex="0" role="note" data-tip="登录失败后等待的基础秒数。实际等待时间按指数退避计算：首次 0 秒，第二次以此间隔 ×1，第三次 ×2，以此类推。">?</span>
+          <span class="field-help" tabindex="0" role="note" data-tip="登录失败后每次重试的固定间隔秒数。每次重试之间等待相同的时长。">?</span>
         </div>
         <input id="settings-retry-interval" v-model.number="config.retry.retry_interval" type="number" min="1" max="300" />
       </div>

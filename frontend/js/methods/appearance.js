@@ -266,12 +266,9 @@ export const appearanceMethods = {
         _p('--sidebar-bg-1', `rgba(${sidebarRgb.r}, ${sidebarRgb.g}, ${sidebarRgb.b}, var(--sidebar-opacity))`);
         _p('--sidebar-bg-2', `rgba(${sidebarRgb.r}, ${sidebarRgb.g}, ${sidebarRgb.b}, calc(var(--sidebar-opacity) + 0.03))`);
       }
-    } else if (isLight) {
-      _p('--sidebar-bg-1', 'rgba(241, 245, 249, var(--sidebar-opacity))');
-      _p('--sidebar-bg-2', 'rgba(226, 232, 240, calc(var(--sidebar-opacity) + 0.03))');
     } else {
-      // 深色主题从背景色推导
-      const bgRgb = hexToRgb(this.appearance.background_color || '#0f172a');
+      // 浅色/深色统一从背景色推导
+      const bgRgb = hexToRgb(this.appearance.background_color || (isLight ? '#dfe4ec' : '#0f172a'));
       if (bgRgb) {
         _p('--sidebar-bg-1', `rgba(${Math.min(bgRgb.r + 15, 255)}, ${Math.min(bgRgb.g + 15, 255)}, ${Math.min(bgRgb.b + 15, 255)}, var(--sidebar-opacity))`);
         _p('--sidebar-bg-2', `rgba(${Math.max(bgRgb.r - 10, 0)}, ${Math.max(bgRgb.g - 10, 0)}, ${Math.max(bgRgb.b - 10, 0)}, calc(var(--sidebar-opacity) + 0.03))`);

@@ -2,6 +2,14 @@
 
 ## 2026-07-06
 
+### fix: 修复前端日志页不显示截图的问题
+
+- **Bug 修复**：
+  - `app/tasks/step_handlers.py`：`ScreenshotHandler` 日志级别从 `DEBUG` 改为 `INFO`，消息添加 `截图:` 前缀，使前端 `extractScreenshotUrl()` 正则能匹配到截图 URL
+  - `app/services/login_attempt.py`：移除 `re.sub(SCREENSHOT_URL_PATTERN)` 对失败消息的截图 URL 剥离逻辑，使登录失败时的截图也能出现在日志中
+- **文档同步**：
+  - `docs/guides/task-writing-guide.md`：对齐实际代码，修复 11 项差异（OCR char_range、步骤 ID 格式、navigate 行为描述、select 模糊匹配、required 字段补充、select_delay 补充、post_login_delay 补充等）
+
 ### fix: 变量解析与网络检测修复 + ponytail-audit 代码清理
 
 - **Bug 修复**：
