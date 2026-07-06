@@ -1450,78 +1450,46 @@
     handleElementSelected(el, info);
   }
 
-  function handleElementSelected(el, info) {
-    const type = state.currentStepType;
-
-    if (type === "captcha_img") {
-      // 检测是否是数学验证码（文本形式）
+  // 步骤类型 → 处理器映射，替代长串 if 判断（新增类型只需在此登记）
+  const STEP_HANDLERS = {
+    captcha_img: (el, info) => {
       if (isMathCaptchaElement(el)) {
-        // 数学验证码：记录为验证码容器，等待用户点击输入框
-        addStepFromElement(type, el, info, "数学验证码容器");
+        addStepFromElement("captcha_img", el, info, "数学验证码容器");
         selectStepType("captcha_input");
         setStatus("已记录数学验证码容器，现在点击验证码输入框", "recording");
         return;
       }
-      // 验证码图片：记录后提示选输入框
-      addStepFromElement(type, el, info, "验证码图片");
+      addStepFromElement("captcha_img", el, info, "验证码图片");
       selectStepType("captcha_input");
       setStatus("已记录验证码图片，现在点击验证码输入框", "recording");
-      return;
-    }
-
-    if (type === "captcha_input") {
-      // 弹出验证码类型选择
-      showCaptchaModal(el, info);
-      return;
-    }
-
-    if (type === "username") {
-      addStepFromElement(type, el, info, "账号输入框");
-      return;
-    }
-    if (type === "password") {
-      addStepFromElement(type, el, info, "密码输入框");
-      return;
-    }
-    if (type === "carrier") {
-      handleCarrierClickPhase(el, info);
-      return;
-    }
-    if (type === "submit") {
-      addStepFromElement(type, el, info, "提交按钮");
-      return;
-    }
-    if (type === "checkbox") {
+    },
+    captcha_input: (el, info) => showCaptchaModal(el, info),
+    username: (el, info) => addStepFromElement("username", el, info, "账号输入框"),
+    password: (el, info) => addStepFromElement("password", el, info, "密码输入框"),
+    carrier: (el, info) => handleCarrierClickPhase(el, info),
+    submit: (el, info) => addStepFromElement("submit", el, info, "提交按钮"),
+    checkbox: (el, info) => {
       const checkboxDesc = info.text ? `勾选: ${info.text.substring(0, 30)}` : "勾选/用户协议";
-      addStepFromElement(type, el, info, checkboxDesc);
-      return;
-    }
-    if (type === "smart_detect") {
-      handleSmartDetectClick(el, info);
-      return;
-    }
-    if (type === "sleep") {
-      showSleepModal(el, info);
-      return;
-    }
-    if (type === "screenshot") {
-      showScreenshotModal(el, info);
-      return;
-    }
-    if (type === "wait") {
+      addStepFromElement("checkbox", el, info, checkboxDesc);
+    },
+    smart_detect: (el, info) => handleSmartDetectClick(el, info),
+    sleep: (el, info) => showSleepModal(el, info),
+    screenshot: (el, info) => showScreenshotModal(el, info),
+    wait: (el, info) => {
       const waitDesc = info.text ? `等待元素出现: ${info.text.substring(0, 30)}` : `等待元素: ${info.tag}`;
-      addStepFromElement(type, el, info, waitDesc);
-      return;
-    }
-    if (type === "eval") {
-      showEvalModal(el, info);
-      return;
-    }
-    if (type === "wait_url") {
-      showWaitUrlModal(el, info);
-      return;
-    }
+      addStepFromElement("wait", el, info, waitDesc);
+    },
+    eval: (el, info) => showEvalModal(el, info),
+    wait_url: (el, info) => showWaitUrlModal(el, info),
+  };
 
+  function handleElementSelected(el, info) {
+    const type = state.currentStepType;
+    const handler = STEP_HANDLERS[type];
+    if (handler) {
+      handler(el, info);
+      return;
+    }
     // 通用步骤（click / custom）：弹出自定义描述
     showCustomStepModal(type, el, info);
   }
@@ -1572,6 +1540,49 @@
     return result;
   }
 
+  // 构建步骤的基础字段（addStepFromElement / addManualFillStep 等共用）
+  function buildStepBase(type, el, info, description) {
+    return {
+      type,
+      description,
+      tag: info.tag,
+      bestSelector: info.selectors[0]?.value || "",
+      selectorCandidates: info.selectors.map(s => s.value),
+      iframe: info.iframe,
+      shadowRoot: info.shadowRoot,
+      attrs: info.attrs,
+      text: info.text,
+      visible: info.visible,
+      elementHTML: el.outerHTML,
+      elementParentContext: el.parentElement ? el.parentElement.innerHTML.substring(0, LIMITS.HTML_ELEMENT) : "",
+      elementContainerHTML: findStepContainer(el)?.innerHTML.substring(0, LIMITS.HTML_CONTAINER) || "",
+    };
+  }
+
+  // 推入步骤并统一刷新列表+保存+清理高亮（状态提示与多步模式由调用方处理）
+  function commitStep(step) {
+    state.steps.push(step);
+    state.selectedEl?.classList.remove("ca-highlight-selected");
+    state.selectedEl = null;
+    updateRecordedList();
+    saveState();
+  }
+
+  // 单步录制收尾：非多步/非智能检测时停止录制，否则提示继续
+  function maybeStopRecording() {
+    const isSmartDetect = state.currentStepType === "smart_detect";
+    if (!state.multiStepMode && !isSmartDetect) {
+      state.recording = false;
+      state.panel.querySelectorAll(".ca-step-btn").forEach(b => b.classList.remove("active"));
+    }
+    if ((state.multiStepMode || isSmartDetect) && state.recording) {
+      const nextHint = state.currentStepType
+        ? `继续 [${STEP_TYPES[state.currentStepType]?.label || state.currentStepType}] — 点击下一个元素或按 Esc 停止`
+        : "点击下一个元素或选择步骤类型，按 Esc 停止";
+      setStatus(`🔁 ${nextHint}`, "recording");
+    }
+  }
+
   function addStepFromElement(type, el, info, description) {
     let tipSelector = null;
     if (el.tagName === "LABEL" && el.htmlFor) {
@@ -1601,33 +1612,17 @@
       tipSelector = bestSelector;
     }
 
-    const step = {
-      type,
-      description,
-      tag: info.tag,
-      bestSelector,
-      selectorCandidates,
-      iframe: info.iframe,
-      shadowRoot: info.shadowRoot,
-      attrs: info.attrs,
-      text: info.text,
-      visible: info.visible,
+    const step = buildStepBase(type, el, info, description);
+    Object.assign(step, {
       hiddenRealSelector,
       hiddenRealHTML,
       hiddenRealTag,
       hiddenRealRelation,
       hiddenWarning,
       tipSelector,
-      elementHTML: el.outerHTML,
-      elementParentContext: el.parentElement ? el.parentElement.innerHTML.substring(0, LIMITS.HTML_ELEMENT) : "",
-      elementContainerHTML: findStepContainer(el)?.innerHTML.substring(0, LIMITS.HTML_CONTAINER) || "",
-    };
+    });
 
-    state.steps.push(step);
-    state.selectedEl?.classList.remove("ca-highlight-selected");
-    state.selectedEl = null;
-    updateRecordedList();
-    saveState();
+    commitStep(step);
     if (hiddenWarning) {
       setStatus(hiddenWarning, "recording");
       setTimeout(() => {
@@ -1636,17 +1631,7 @@
     } else {
       setStatus(`已添加: ${description}`);
     }
-    const isSmartDetect = state.currentStepType === "smart_detect";
-    if (!state.multiStepMode && !isSmartDetect) {
-      state.recording = false;
-      state.panel.querySelectorAll(".ca-step-btn").forEach(b => b.classList.remove("active"));
-    }
-    if ((state.multiStepMode || isSmartDetect) && state.recording) {
-      const nextHint = state.currentStepType
-        ? `继续 [${STEP_TYPES[state.currentStepType]?.label || state.currentStepType}] — 点击下一个元素或按 Esc 停止`
-        : "点击下一个元素或选择步骤类型，按 Esc 停止";
-      setStatus(`🔁 ${nextHint}`, "recording");
-    }
+    maybeStopRecording();
   }
 
   // 从 input 事件记录步骤（智能检测 & 旧版手动填写共用）
@@ -1666,32 +1651,16 @@
       ? `⚠️ 检测到隐藏输入框！真实输入框 ${hiddenRealSelector} 已自动识别`
       : "";
 
-    const step = {
-      type,
-      description,
-      tag: info.tag,
-      bestSelector,
-      selectorCandidates: info.selectors.map(s => s.value),
-      iframe: info.iframe,
-      shadowRoot: info.shadowRoot,
-      attrs: info.attrs,
-      text: info.text,
-      visible: info.visible,
+    const step = buildStepBase(type, el, info, description);
+    Object.assign(step, {
       hiddenRealSelector,
       hiddenRealHTML,
       hiddenRealTag,
       hiddenRealRelation,
       hiddenWarning,
-      elementHTML: el.outerHTML,
-      elementParentContext: el.parentElement ? el.parentElement.innerHTML.substring(0, LIMITS.HTML_ELEMENT) : "",
-      elementContainerHTML: findStepContainer(el)?.innerHTML.substring(0, LIMITS.HTML_CONTAINER) || "",
-    };
+    });
 
-    state.steps.push(step);
-    state.selectedEl?.classList.remove("ca-highlight-selected");
-    state.selectedEl = null;
-    updateRecordedList();
-    saveState();
+    commitStep(step);
     if (hiddenWarning) {
       setStatus(hiddenWarning, "recording");
       setTimeout(() => {
@@ -2545,6 +2514,18 @@
   // Dynamic iframe MutationObserver — watches for new iframe/frame elements added to DOM
   let _iframeObserver = null;
 
+  // 给 frame 绑定 load 事件并立即尝试绑定监听器（动态 iframe 监听与 SPA 表单检测共用）
+  function bindIframeLoad(frame) {
+    try {
+      if (frame.contentDocument) attachFrameListeners(frame.contentDocument);
+    } catch (_) {}
+    frame.addEventListener("load", () => {
+      try {
+        if (frame.contentDocument) attachFrameListeners(frame.contentDocument);
+      } catch (_) {}
+    });
+  }
+
   function attachAllFrameListeners() {
     document.querySelectorAll("iframe, frame").forEach(frame => {
       try {
@@ -2561,35 +2542,11 @@
           for (const node of r.addedNodes) {
             if (node.nodeType !== 1) continue;
             if (node.tagName === "IFRAME" || node.tagName === "FRAME") {
-              try {
-                if (node.contentDocument) {
-                  attachFrameListeners(node.contentDocument);
-                }
-                node.addEventListener("load", () => {
-                  try {
-                    if (node.contentDocument) {
-                      attachFrameListeners(node.contentDocument);
-                    }
-                  } catch (_) {}
-                });
-              } catch (_) {}
+              bindIframeLoad(node);
             }
             // Also check nested iframes within added nodes
             if (node.querySelectorAll) {
-              node.querySelectorAll("iframe, frame").forEach(frame => {
-                try {
-                  if (frame.contentDocument) {
-                    attachFrameListeners(frame.contentDocument);
-                  }
-                  frame.addEventListener("load", () => {
-                    try {
-                      if (frame.contentDocument) {
-                        attachFrameListeners(frame.contentDocument);
-                      }
-                    } catch (_) {}
-                  });
-                } catch (_) {}
-              });
+              node.querySelectorAll("iframe, frame").forEach(bindIframeLoad);
             }
           }
         }
@@ -2642,16 +2599,7 @@
               }
               // 新出现的 iframe 也需要绑定监听器
               if (node.querySelectorAll) {
-                node.querySelectorAll("iframe, frame").forEach(frame => {
-                  try {
-                    frame.addEventListener("load", () => {
-                      try {
-                        if (frame.contentDocument) attachFrameListeners(frame.contentDocument);
-                      } catch (_) {}
-                    });
-                    if (frame.contentDocument) attachFrameListeners(frame.contentDocument);
-                  } catch (_) {}
-                });
+                node.querySelectorAll("iframe, frame").forEach(bindIframeLoad);
               }
               break;  // 一次变动只通知一次
             }
