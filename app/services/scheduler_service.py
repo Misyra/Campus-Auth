@@ -132,16 +132,10 @@ class SchedulerService:
 
     def sync_state(self) -> None:
         """根据是否有启用任务自动启停调度器。"""
-        has_tasks = self.has_enabled_tasks()
+        has_tasks = self._task_executor.registry.has_enabled_tasks() if self._task_executor else False
         if has_tasks and not self._scheduler_running:
             self.start()
         elif not has_tasks and self._scheduler_running:
             self.stop()
 
-    def has_enabled_tasks(self) -> bool:
-        """检查是否存在启用的定时任务。"""
-        return (
-            self._task_executor.registry.has_enabled_tasks()
-            if self._task_executor
-            else False
-        )
+

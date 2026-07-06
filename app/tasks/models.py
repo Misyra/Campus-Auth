@@ -35,13 +35,7 @@ def _safe_float(value: Any, default: float) -> float:
         return default
 
 
-class TaskError(Exception):
-    """任务执行错误"""
-
-    pass
-
-
-class StepError(TaskError):
+class StepError(Exception):
     """步骤执行错误"""
 
     pass

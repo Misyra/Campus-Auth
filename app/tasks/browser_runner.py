@@ -342,7 +342,7 @@ class BrowserTaskRunner:
             delay = cfg.get("post_login_delay")
             await asyncio.sleep(delay if delay is not None else 5)
 
-            ok, status, method = await asyncio.to_thread(check_network_status, monitor)
+            ok, status, method = await check_network_status(monitor)
 
             if ok:
                 logger.info("网络已恢复，登录认证生效 (检测方式={})", method)

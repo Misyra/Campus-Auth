@@ -828,22 +828,18 @@ class ScheduleEngine:
                 enable_http=enable_http,
                 url_checks=url_checks if url_checks else None,
             )
-            self.notify_network_state_changed()
+            self._update_status_snapshot()
             if is_available:
                 cmd.response_data = (True, "网络连接正常")
             else:
                 cmd.response_data = (False, "网络连接异常")
         except Exception as exc:
             logger.warning("网络测试失败", exc_info=True)
-            self.notify_network_state_changed()
+            self._update_status_snapshot()
             cmd.response_data = (False, f"网络测试失败: {exc}")
 
         if cmd.response_future and not cmd.response_future.done():
             cmd.response_future.set_result(cmd.response_data)
-
-    def notify_network_state_changed(self) -> None:
-        """网络状态变化时显式调用，更新状态快照。"""
-        self._update_status_snapshot()
 
     def _update_status_snapshot(self, force: bool = False) -> None:
         self._status_manager.update_snapshot(force=force)
@@ -895,9 +891,6 @@ class ScheduleEngine:
         else:
             logger.info("Engine 启动成功")
 
-    def set_dashboard_sink(self, sink) -> None:
-        self._status_manager.set_dashboard_sink(sink)
-
     @property
     def pure_mode(self) -> bool:
         """线程安全地读取纯净模式标志。"""
@@ -913,9 +906,6 @@ class ScheduleEngine:
     def tasks(self):
         """定时任务接口（供 API 路由使用）。"""
         return self._task_executor
-
-    def get_config(self) -> RuntimeConfig:
-        return self._runtime_config
 
     def _swap_runtime_config(
         self, new: RuntimeConfig, *, pure_mode: bool | None = None

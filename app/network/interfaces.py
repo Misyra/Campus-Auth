@@ -165,11 +165,6 @@ class InterfaceManager:
         self._ip_cache[name] = (ip, now)
         return ip or None
 
-    def is_interface_up(self, name: str) -> bool:
-        """检查指定网卡是否 up。"""
-        stats = psutil.net_if_stats().get(name)
-        return stats is not None and stats.isup
-
     def is_interface_bindable(self, name: str) -> tuple[bool, str]:
         """判断网卡是否可用于绑定。
 

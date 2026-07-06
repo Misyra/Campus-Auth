@@ -5,8 +5,6 @@ from __future__ import annotations
 import time
 from unittest.mock import MagicMock
 
-import pytest
-
 from app.services.scheduler_service import SchedulerService
 
 
@@ -101,13 +99,4 @@ class TestSchedulerServiceSyncState:
         svc.sync_state()
         assert svc.running is False
 
-    def test_has_enabled_tasks_delegates(self):
-        executor = MagicMock()
-        executor.registry.has_enabled_tasks.return_value = True
-        svc = SchedulerService(task_registry=MagicMock(), task_executor=executor)
-        assert svc.has_enabled_tasks() is True
-        executor.registry.has_enabled_tasks.assert_called_once()
 
-    def test_has_enabled_tasks_no_executor(self):
-        svc = SchedulerService(task_registry=MagicMock(), task_executor=None)
-        assert svc.has_enabled_tasks() is False

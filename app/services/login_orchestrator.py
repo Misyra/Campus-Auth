@@ -255,7 +255,7 @@ class LoginOrchestrator:
                     logger.debug("浏览器任务取消现有登录 (source={})", existing.source)
                     existing.cancel()
                 else:
-                    self._link_cancel(cancel_event, existing.cancel_event)
+                    existing.cancel_event.add_source(cancel_event)
                     return existing
 
             # 哨兵占位
@@ -360,7 +360,7 @@ class LoginOrchestrator:
                 future=None,
                 source=source,
                 cancel_event=cancel_event,
-                rejected_reason=f"登录队列已满，请稍后重试",
+                rejected_reason="登录队列已满，请稍后重试",
             )
         handle = LoginHandle(future=future, source=source, cancel_event=cancel_event)
 
@@ -402,12 +402,4 @@ class LoginOrchestrator:
 
     def _runtime_config(self) -> RuntimeConfig:
         """获取运行时配置。"""
-        if self._get_runtime_config is None:
-            return RuntimeConfig()
         return self._get_runtime_config()
-
-    def _link_cancel(
-        self, new_event: threading.Event, target_event: CompositeCancelEvent
-    ) -> None:
-        """将新 cancel_event 添加为源（无线程，惰性扫描）。"""
-        target_event.add_source(new_event)

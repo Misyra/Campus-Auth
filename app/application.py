@@ -136,7 +136,7 @@ def _create_lifespan(existing_container, boot_engine=False):
             settings_path.exists(),
             settings_path.stat().st_size if settings_path.exists() else 0,
         )
-        cfg = services.engine.get_config()
+        cfg = services.engine.get_runtime_config()
         startup_logger.debug(
             "当前配置: 用户={}, 密码={}, 认证={}, 运营商={}, 间隔={}min",
             f"'{cfg.credentials.username}'" if cfg.credentials.username else "(空)",

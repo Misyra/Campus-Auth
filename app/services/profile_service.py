@@ -315,14 +315,6 @@ def get_profile_service(project_root: Path | None = None) -> ProfileService:
     return _singleton_instance
 
 
-def create_profile_service(project_root: Path | None = None) -> ProfileService:
-    """兼容别名 — 委托 get_profile_service 单例。
-
-    保留旧函数名避免破坏现有调用点，行为已改为返回单例。
-    """
-    return get_profile_service(project_root)
-
-
 def reset_profile_service_singleton() -> None:
     """重置单例（仅供测试使用）。"""
     global _singleton_instance

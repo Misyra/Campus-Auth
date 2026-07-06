@@ -475,7 +475,7 @@ class TestRunLoginThenExit:
             patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
             patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
             patch(
-                "app.services.profile_service.create_profile_service",
+                "app.services.profile_service.get_profile_service",
                 return_value=mock_ps,
             ),
             patch("app.workers.playwright_worker.cleanup_orphan_browsers"),
@@ -503,7 +503,7 @@ class TestRunLoginThenExit:
             patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
             patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
             patch(
-                "app.services.profile_service.create_profile_service",
+                "app.services.profile_service.get_profile_service",
                 return_value=mock_ps,
             ),
             patch(
@@ -537,7 +537,7 @@ class TestRunLoginThenExit:
             patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
             patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
             patch(
-                "app.services.profile_service.create_profile_service",
+                "app.services.profile_service.get_profile_service",
                 return_value=mock_ps,
             ),
             patch(
@@ -569,7 +569,7 @@ class TestRunLoginThenExit:
             patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
             patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
             patch(
-                "app.services.profile_service.create_profile_service",
+                "app.services.profile_service.get_profile_service",
                 return_value=mock_ps,
             ),
             patch(
@@ -601,7 +601,7 @@ class TestRunLoginThenExit:
             patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
             patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
             patch(
-                "app.services.profile_service.create_profile_service",
+                "app.services.profile_service.get_profile_service",
                 return_value=mock_ps,
             ),
             patch(
@@ -1138,7 +1138,7 @@ class TestBuildAppConfigExceptionLogging:
         mock_logger = MagicMock()
         with (
             patch(
-                "app.services.profile_service.get_profile_service",
+                "main.get_profile_service",
                 side_effect=RuntimeError("test error"),
             ),
             patch(
@@ -1218,14 +1218,19 @@ class TestLoginOnceAllDisabled:
             run_login_then_exit as _run_login_then_exit,
         )
 
+        mock_ps = MagicMock()
+        mock_ps.get_runtime_config.return_value = RuntimeConfig()
+
         with (
-            patch("app.services.login_runner.load_login_config") as mock_load,
+            patch(
+                "app.services.profile_service.get_profile_service",
+                return_value=mock_ps,
+            ),
             patch(
                 "app.network.decision.check_network_status", new_callable=AsyncMock
             ) as mock_check,
             patch("app.services.login_runner.execute_login_with_retries") as mock_exec,
         ):
-            mock_load.return_value = (RuntimeConfig(), None)
             mock_check.return_value = (False, "all_disabled", "none")
 
             result = _run_login_then_exit(None, MagicMock())

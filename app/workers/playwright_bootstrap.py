@@ -75,9 +75,9 @@ def _get_browser_channel() -> str | None:
         None: 配置文件不存在或读取失败
     """
     try:
-        from app.services.profile_service import create_profile_service
+        from app.services.profile_service import get_profile_service
 
-        _ps = create_profile_service()
+        _ps = get_profile_service()
         _data = _ps.load()
         channel = _data.global_config.browser.browser_channel
         if channel:

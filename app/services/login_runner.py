@@ -11,19 +11,6 @@ if TYPE_CHECKING:
     from app.schemas import ApplicationContext
 
 
-def load_login_config(logger):
-    """加载登录所需的运行时配置。
-
-    Returns:
-        (RuntimeConfig, None) — 成功时返回 RuntimeConfig 和 None。
-        (None, LoginResult.CONFIG_ERROR) — 失败时返回 None 和错误结果。
-    """
-    from app.services.profile_service import create_profile_service
-
-    ps = create_profile_service()
-    runtime_config = ps.get_runtime_config()
-    return runtime_config, None
-
 
 def execute_login_with_retries(runtime_config: RuntimeConfig, logger) -> LoginResult:
     """执行登录（重试由 Worker 内的 LoginSession 负责）。
@@ -44,10 +31,10 @@ def execute_login_with_retries(runtime_config: RuntimeConfig, logger) -> LoginRe
     from app.constants import AUTH_DATA_DIR
     from app.services.login_history_service import LoginHistoryService
     from app.services.login_orchestrator import LoginOrchestrator
-    from app.services.profile_service import create_profile_service
+    from app.services.profile_service import get_profile_service
     from app.workers.playwright_worker import cleanup_orphan_browsers, get_worker
 
-    profile_service = create_profile_service()
+    profile_service = get_profile_service()
     history = LoginHistoryService(AUTH_DATA_DIR)
     # login_once 是单次登录后退出，用一次性 executor 即可
     one_shot_executor = ThreadPoolExecutor(
@@ -83,9 +70,10 @@ def run_login_then_exit(ctx: ApplicationContext, logger) -> LoginResult:
     """
     # 加载配置
     try:
-        runtime_config, error = load_login_config(logger)
-        if error is not None:
-            return error
+        from app.services.profile_service import get_profile_service
+
+        ps = get_profile_service()
+        runtime_config = ps.get_runtime_config()
     except Exception as exc:
         logger.warning("加载配置失败: {}", exc)
         return LoginResult.CONFIG_ERROR

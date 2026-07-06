@@ -14,9 +14,10 @@ import os
 import sys
 import threading
 from collections import deque
-from datetime import datetime
 from collections.abc import Callable
+from datetime import datetime
 from itertools import islice
+from pathlib import Path
 from typing import Any
 
 from loguru import logger
@@ -262,7 +263,7 @@ class LogConfigCenter:
             os.makedirs(log_dir, exist_ok=True)
 
             # 后端日志 -> app.log
-            backend_path = os.path.join(log_dir, "app.log")
+            backend_path = str(Path(log_dir) / "app.log")
             self._file_sink_id = logger.add(
                 backend_path,
                 rotation="00:00",
@@ -274,7 +275,7 @@ class LogConfigCenter:
             )
 
             # 前端日志 -> frontend.log
-            frontend_path = os.path.join(log_dir, "frontend.log")
+            frontend_path = str(Path(log_dir) / "frontend.log")
             self._frontend_file_sink_id = logger.add(
                 frontend_path,
                 rotation="00:00",
