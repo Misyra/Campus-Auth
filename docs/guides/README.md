@@ -9,6 +9,7 @@ Campus-Auth 用户文档，帮助你快速上手并充分利用所有功能。
 
 ## 功能指南
 
+- [用户指南](user-guide.md) — 详细使用说明、配置、任务系统、常见问题
 - [任务编写指南](task-writing-guide.md) — 如何编写浏览器自动登录任务（JSON 格式详解、步骤类型、变量系统、完整示例）
 - [自定义脚本指南](custom-script-guide.md) — 使用 Python/PowerShell/cmd 脚本直接登录，无需浏览器
 
