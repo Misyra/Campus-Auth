@@ -863,6 +863,9 @@ class PlaywrightWorker:
                         "height": browser_settings.get("viewport_height", 720),
                     }
                 }
+                # 网卡绑定代理（pure_mode 也要注入，否则浏览器流量不走指定网卡）
+                if browser_settings.get("bind_proxy"):
+                    ctx_opts["proxy"] = {"server": browser_settings["bind_proxy"]}
                 self._context = await self._browser.new_context(**ctx_opts)
             else:
                 launch_args = self._build_launch_args(browser_settings, channel)

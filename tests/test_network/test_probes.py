@@ -105,40 +105,55 @@ class TestAtexitRemoved:
             assert "atexit.register" not in stripped
 
 
-class TestTcpProbeSourceIp:
-    """TCP 探测 source_ip 参数传递验证。"""
+class TestTcpProbeInterfaceBind:
+    """TCP 探测 interface_name 参数传递验证。"""
 
-    async def test_source_ip_passed_to_open_connection(self, monkeypatch):
-        """source_ip 非空时应传递 local_addr 给 asyncio.open_connection。"""
+    async def test_no_interface_uses_default_route(self, monkeypatch):
+        """interface_name 为空时走 asyncio.open_connection（默认路由）。"""
         from app.network import probes as probes_mod
 
         captured: dict = {}
 
         async def fake_open_connection(host, port, **kwargs):
-            captured["local_addr"] = kwargs.get("local_addr")
-            raise OSError("mock")
-
-        monkeypatch.setattr("asyncio.open_connection", fake_open_connection)
-        await probes_mod.is_network_available_socket(
-            test_sites=[("8.8.8.8", 53)], timeout=1, source_ip="192.168.1.5"
-        )
-        assert captured["local_addr"] == ("192.168.1.5", 0)
-
-    async def test_no_source_ip_uses_none(self, monkeypatch):
-        """source_ip 为空时 local_addr 应为 None。"""
-        from app.network import probes as probes_mod
-
-        captured: dict = {}
-
-        async def fake_open_connection(host, port, **kwargs):
-            captured["local_addr"] = kwargs.get("local_addr")
+            captured["called"] = True
             raise OSError("mock")
 
         monkeypatch.setattr("asyncio.open_connection", fake_open_connection)
         await probes_mod.is_network_available_socket(
             test_sites=[("8.8.8.8", 53)], timeout=1
         )
-        assert captured["local_addr"] is None
+        assert captured.get("called") is True
+
+    async def test_interface_name_triggers_socket_bind(self, monkeypatch):
+        """interface_name 非空时应走手动 socket + 绑接口路径。"""
+        from app.network import probes as probes_mod
+
+        # 绑接口路径不调用 asyncio.open_connection，而是 loop.sock_connect
+        sock_connect_called: dict = {}
+
+        class FakeLoop:
+            def sock_connect(self, sock, addr):
+                sock_connect_called["called"] = True
+                raise OSError("mock")
+
+        async def fake_get_event_loop():
+            return FakeLoop()
+
+        monkeypatch.setattr(
+            "asyncio.get_event_loop", lambda: FakeLoop()
+        )
+        # bind_socket_to_interface 需要 mock，否则 Windows 上会真绑
+        monkeypatch.setattr(
+            "app.network.interface_bind.bind_socket_to_interface",
+            lambda sock, name, ip=None: "interface_index",
+        )
+        await probes_mod.is_network_available_socket(
+            test_sites=[("8.8.8.8", 53)],
+            timeout=1,
+            interface_name="Ethernet",
+            fallback_source_ip="192.168.1.5",
+        )
+        assert sock_connect_called.get("called") is True
 
 
 class TestPhysicalCheckFallback:

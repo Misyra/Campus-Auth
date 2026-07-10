@@ -340,7 +340,8 @@ class NetworkMonitorCore:
 
         from app.network.proxy import Socks5Server
 
-        self._socks5_server = Socks5Server(bind_ip)
+        # 传 interface_name（接口索引绑定）+ fallback_source_ip（Linux 降级用）
+        self._socks5_server = Socks5Server(bind_name, bind_ip)
         try:
             self._socks5_server.start()
             self._bind_proxy_url = self._socks5_server.proxy_url
@@ -366,7 +367,12 @@ class NetworkMonitorCore:
         return current != self._last_bind_interface
 
     def _check_bind_ip_change(self) -> None:
-        """检测绑定网卡的 IP 变化，自动更新代理绑定。"""
+        """检测绑定网卡的 IP 变化。
+
+        接口索引绑定模式下，DHCP IP 变化不影响绑定（接口索引不变）。
+        fallback_source_ip 仅 Linux 无 CAP_NET_RAW 时使用，变化影响有限。
+        此处仅记录日志，不重建代理；接口名变化走 _needs_bind_proxy_rebuild 路径。
+        """
         bind_name = self._get_config().monitor.bind_interface_name
         if (
             not bind_name
@@ -381,11 +387,10 @@ class NetworkMonitorCore:
             return
 
         self._last_bind_ip = new_ip
-        if new_ip and hasattr(self, "_socks5_server") and self._socks5_server:
-            self._socks5_server.update_bind_ip(new_ip)
-            self.log_message(f"DHCP IP 变化: {old_ip} -> {new_ip}，已更新代理")
-
-        # probe 客户端已改为 per-call 创建，无需手动关闭旧客户端
+        if new_ip:
+            self.log_message(
+                f"绑定网卡 DHCP IP 变化: {old_ip} -> {new_ip}（接口索引绑定不受影响）"
+            )
 
     def _get_test_sites(self) -> list[tuple[str, int]]:
         """获取测试站点列表（每次重算，targets 量小无需缓存）。"""

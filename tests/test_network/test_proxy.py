@@ -14,7 +14,8 @@ class TestSocks5Handshake:
     def test_accepts_no_auth(self):
         from app.network.proxy import Socks5Server
 
-        server = Socks5Server("127.0.0.1")  # 绑定到回环（测试用）
+        # 测试用：空接口名（不绑接口，走默认路由）
+        server = Socks5Server("", "127.0.0.1")
         server.start()
         try:
             client = socket.create_connection(("127.0.0.1", server.port), timeout=2)
@@ -29,7 +30,7 @@ class TestSocks5Handshake:
     def test_rejects_auth_required(self):
         from app.network.proxy import Socks5Server
 
-        server = Socks5Server("127.0.0.1")
+        server = Socks5Server("", "127.0.0.1")
         server.start()
         try:
             client = socket.create_connection(("127.0.0.1", server.port), timeout=2)
@@ -49,7 +50,7 @@ class TestSocks5Connect:
         """CONNECT 到 IPv4 地址成功。"""
         from app.network.proxy import Socks5Server
 
-        server = Socks5Server("127.0.0.1")
+        server = Socks5Server("", "127.0.0.1")
         server.start()
         try:
             # 超时需大于服务端 create_connection 的 10 秒超时
@@ -71,7 +72,7 @@ class TestSocks5Connect:
     def test_rejects_ipv6(self):
         from app.network.proxy import Socks5Server
 
-        server = Socks5Server("127.0.0.1")
+        server = Socks5Server("", "127.0.0.1")
         server.start()
         try:
             client = socket.create_connection(("127.0.0.1", server.port), timeout=5)
@@ -93,7 +94,7 @@ class TestSocks5Lifecycle:
     def test_proxy_url_format(self):
         from app.network.proxy import Socks5Server
 
-        server = Socks5Server("127.0.0.1")
+        server = Socks5Server("", "127.0.0.1")
         server.start()
         try:
             assert server.proxy_url.startswith("socks5://127.0.0.1:")
@@ -104,7 +105,7 @@ class TestSocks5Lifecycle:
     def test_stop_cleans_up(self):
         from app.network.proxy import Socks5Server
 
-        server = Socks5Server("127.0.0.1")
+        server = Socks5Server("", "127.0.0.1")
         server.start()
         port = server.port
         server.stop()
@@ -112,14 +113,3 @@ class TestSocks5Lifecycle:
         # 端口应该已释放（Windows 上可能是 TimeoutError 而非 ConnectionRefusedError）
         with pytest.raises(OSError):
             socket.create_connection(("127.0.0.1", port), timeout=0.5)
-
-    def test_update_bind_ip(self):
-        from app.network.proxy import Socks5Server
-
-        server = Socks5Server("127.0.0.1")
-        server.start()
-        try:
-            server.update_bind_ip("192.168.1.100")
-            # 内部 _bind_ip 应更新（通过后续 CONNECT 验证）
-        finally:
-            server.stop()

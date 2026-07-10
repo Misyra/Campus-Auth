@@ -240,6 +240,10 @@ export const appOptions = {
       const iface = this.networkInterfaces.find(i => i.id === name);
       return iface ? !iface.is_up : true;
     },
+    // 绑定网卡时仅支持 TCP 检测（httpx 无法绑接口）
+    isInterfaceBound() {
+      return !!this.config.monitor.bind_interface_name;
+    },
   },
   watch: {
     appearance: {
@@ -267,6 +271,14 @@ export const appOptions = {
     },
     urlCheckEnabled() {
       this._ensureAtLeastOneCheckMethod();
+    },
+    // 绑定网卡变化时：强制 TCP 开启，关闭 HTTP/URL 检测
+    'config.monitor.bind_interface_name'(name) {
+      if (name) {
+        this.config.monitor.enable_tcp_check = true;
+        this.config.monitor.enable_http_check = false;
+        this.config.monitor.url_check_urls = [];
+      }
     },
     currentSettingsTab(newTab) {
       if (newTab === 'monitor' && this.networkInterfaces.length === 0) {

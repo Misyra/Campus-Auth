@@ -13,9 +13,9 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from app.services.login_orchestrator import runtime_config_to_worker_dict
 from app.utils.env import build_login_template_vars
 from app.utils.logging import get_logger
-from app.services.login_orchestrator import runtime_config_to_worker_dict
 
 if TYPE_CHECKING:
     from starlette.requests import Request
@@ -144,8 +144,12 @@ class DebugSessionManager:
         navigation_timeout = runtime_config.browser.navigation_timeout * 1000
 
         # 构建 Worker 启动数据
+        # 注入网卡绑定代理（与 LoginOrchestrator 一致，监控未启动时为 None）
+        # monitor_service 实际是 ScheduleEngine，bind_proxy_url 在其 _monitor_core 上
+        core = getattr(monitor_service, "_monitor_core", None)
+        bind_proxy = getattr(core, "bind_proxy_url", None) if core else None
         worker_data = {
-            "config": runtime_config_to_worker_dict(runtime_config),
+            "config": runtime_config_to_worker_dict(runtime_config, bind_proxy=bind_proxy),
             "task_url": url if url else "",
             "task_data": task.to_dict(),
             "template_vars": template_vars,

@@ -342,9 +342,20 @@ def save_global_and_profile(
 
     def _apply(data: ProfilesData) -> ProfilesData:
         # 1. 更新全局配置
+        # 绑定网卡时强制 TCP 检测、关闭 HTTP/URL 检测（httpx 无法绑接口）
+        monitor = payload.monitor
+        if monitor.bind_interface_name:
+            monitor = monitor.model_copy(
+                update={
+                    "enable_tcp_check": True,
+                    "enable_http_check": False,
+                    "url_check_urls": [],
+                }
+            )
+
         new_global = GlobalConfig(
             browser=payload.browser,
-            monitor=payload.monitor,
+            monitor=monitor,
             retry=payload.retry,
             pause=payload.pause,
             logging=payload.logging,
