@@ -877,7 +877,7 @@ class ScheduleEngine:
 
     def _start_engine_thread(self) -> None:
         """启动引擎 loop 线程（内部方法）。"""
-        # 启动前清理孤儿浏览器（所有启动入口统一执行）
+        # 清理孤儿浏览器：冷却期内（30s）自动跳过，避免与 application.py 重复扫描
         from app.workers.playwright_worker import cleanup_orphan_browsers
 
         try:

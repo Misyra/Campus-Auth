@@ -1,23 +1,39 @@
-"""Playwright Worker 测试。"""
+"""Playwright Worker 测试."""
 
 from __future__ import annotations
 
 import asyncio
 import contextlib
 import threading
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import psutil
+import pytest
 
+import app.workers.playwright_worker as pw_module
 from app.workers.playwright_worker import cleanup_orphan_browsers
 
 # ── cleanup_orphan_browsers ──
 
 
+@pytest.fixture(autouse=True)
+def _reset_cleanup_cooldown():
+    """每个测试前重置清理冷却时间，确保扫描逻辑被执行。"""
+    pw_module._last_cleanup_time = 0.0
+    yield
+    pw_module._last_cleanup_time = 0.0
+
+
 def _make_proc(pid, exe, cmdline, orphan=True):
     """构造 mock 进程对象。orphan=True 模拟父进程已死。"""
     proc = MagicMock(spec=psutil.Process)
-    proc.info = {"pid": pid, "exe": exe, "cmdline": cmdline}
+    # name 用于快速过滤；从 exe 路径推导 basename
+    name = Path(exe).name if exe else ""
+    proc.info = {"pid": pid, "name": name}
+    proc.pid = pid
+    proc.exe.return_value = exe
+    proc.cmdline.return_value = cmdline
     if orphan:
         proc.parent.return_value = None
     else:

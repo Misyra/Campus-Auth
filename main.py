@@ -2,10 +2,17 @@
 """Campus-Auth 校园网自动认证 - 统一启动入口"""
 
 import argparse
+import contextlib
 import sys
 import threading
 import time
 from pathlib import Path
+
+# 管道模式（uv run / IDE 终端）下 stdout 默认块缓冲，导致日志延迟显示。
+# 强制行缓冲，确保每行实时刷新到终端。
+if not sys.stdout.isatty():
+    with contextlib.suppress(AttributeError, ValueError):
+        sys.stdout.reconfigure(line_buffering=True)
 
 # 确保项目根目录在 sys.path 中（uv 环境下 sys.path 已由 uv 管理，但保留兼容性）
 _project_root = Path(__file__).resolve().parent

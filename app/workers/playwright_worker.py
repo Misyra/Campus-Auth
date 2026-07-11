@@ -20,6 +20,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import threading
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -1180,35 +1181,79 @@ def shutdown_worker(timeout: float = 5) -> None:
 
 # ── 孤儿浏览器清理 ──
 
+# 冷却期：启动流程中 application.py → engine.py 短时间内连续调用，
+# 第二次起直接跳过，避免重复 5-8s 的全进程扫描
+_CLEANUP_COOLDOWN: float = 30.0
+_last_cleanup_time: float = 0.0
+_cleanup_lock = threading.Lock()
 
-def cleanup_orphan_browsers() -> None:
+# 浏览器进程名关键字（用于快速过滤，psutil 的 name 缓存廉价）
+_BROWSER_NAME_KEYWORDS = ("chrome", "chromium", "msedge", "firefox", "brave")
+
+
+def cleanup_orphan_browsers(*, force: bool = False) -> None:
     """清理孤儿 Playwright 浏览器进程。
 
     扫描并杀掉由 Campus-Auth 启动但已失去 Python 父进程的浏览器实例。
     仅清理 Playwright 管理的浏览器（可执行路径或命令行包含 "ms-playwright"），
     不会误杀用户自行安装的 Chrome/Edge/Brave 等浏览器。
     同时验证父进程存活状态，避免误杀仍在运行的浏览器进程。
+
+    启动流程中多处调用时通过 30s 冷却期自动去重，避免重复全进程扫描。
+
+    Args:
+        force: 强制执行，忽略冷却期（用于确保清理完成的场景）
     """
+    global _last_cleanup_time
+
+    # 冷却期检查：启动流程中 application.py → engine.py 短时间内连续调用
+    with _cleanup_lock:
+        now = time.monotonic()
+        if (
+            not force
+            and _last_cleanup_time
+            and now - _last_cleanup_time < _CLEANUP_COOLDOWN
+        ):
+            logger.debug(
+                "孤儿浏览器清理在冷却期内，跳过 (距上次 {:.1f}s)",
+                now - _last_cleanup_time,
+            )
+            return
+        _last_cleanup_time = now
+
     import psutil
 
     killed = 0
-    for proc in psutil.process_iter(["pid", "exe", "cmdline"]):
+    # 关键优化：process_iter 只取 name（廉价，psutil 内部缓存），
+    # 用 name 快速过滤后再对候选进程做 exe/cmdline/parent 检查（昂贵）
+    for proc in psutil.process_iter(["pid", "name"]):
         try:
-            info = proc.info
-            exe = (info.get("exe") or "").lower()
-            cmdline = " ".join(info.get("cmdline") or []).lower()
+            name = (proc.info.get("name") or "").lower()
+            # 快速过滤：名称不含浏览器关键字的直接跳过
+            if not any(kw in name for kw in _BROWSER_NAME_KEYWORDS):
+                continue
+
+            # 仅对浏览器候选进程做昂贵检查（打开进程句柄读 exe/cmdline）
+            try:
+                exe = (proc.exe() or "").lower()
+                cmdline = " ".join(proc.cmdline() or []).lower()
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                continue
+
             is_playwright_managed = "ms-playwright" in exe or "ms-playwright" in cmdline
-            is_browser = any(kw in exe or kw in cmdline for kw in ("chrom", "firefox"))
-            is_orphan = False
+            if not is_playwright_managed:
+                continue
+
             try:
                 parent = proc.parent()
                 is_orphan = parent is None or not parent.is_running()
             except psutil.NoSuchProcess:
                 is_orphan = True
-            if is_playwright_managed and is_browser and is_orphan:
+
+            if is_orphan:
                 proc.kill()
                 killed += 1
-                logger.debug("已终止孤儿浏览器进程 PID={}", info["pid"])
+                logger.debug("已终止孤儿浏览器进程 PID={}", proc.pid)
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             pass
         except Exception as e:

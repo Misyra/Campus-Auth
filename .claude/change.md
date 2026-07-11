@@ -2,6 +2,20 @@
 
 ## 2026-07-11
 
+### perf: 优化孤儿浏览器清理与启动日志输出
+
+- **问题**：启动时 `cleanup_orphan_browsers()` 被多处调用（application.py → engine.py），第二次重复扫描全进程浪费 5-8s；`uv run` 管道模式下 stdout 块缓冲导致终端假卡住
+- **优化 cleanup_orphan_browsers**（`app/workers/playwright_worker.py`）：
+  - 新增 30s 冷却期机制（`_last_cleanup_time` + `_cleanup_lock`），短时间内重复调用自动跳过，`force=True` 可绕过
+  - 扫描算法优化：`process_iter` 从 `["pid", "exe", "cmdline"]` 改为 `["pid", "name"]`，用进程名预过滤后再对浏览器候选进程做 `exe()/cmdline()/parent()` 检查（全系统 200+ 进程 → 仅 5-10 个候选做昂贵检查）
+  - 预期启动耗时从 13s 降至 1-2s
+- **修复 stdout 缓冲**（`main.py`）：
+  - 管道模式（`not sys.stdout.isatty()`）下 `reconfigure(line_buffering=True)`，确保日志实时刷新
+- **更新 engine.py 注释**：将"所有启动入口统一执行"改为"冷却期内自动跳过，避免与 application.py 重复扫描"
+- **更新测试**：
+  - `test_playwright_worker.py`：`_make_proc` 适配新签名（`info` 含 `name`、`exe()`/`cmdline()` 改为方法调用），新增 autouse fixture 重置冷却期
+  - `test_src_utils.py`：mock 进程的 `info`/`exe`/`cmdline` 适配新签名，新增 autouse fixture 重置冷却期
+
 ### fix: 修复任务录制器 prompt 与任务编写指南的不一致问题
 
 - **问题**：录制器 `generatePrompt` 生成的 AI 提示词与 `task-writing-guide.md` 存在多处矛盾和不完整
