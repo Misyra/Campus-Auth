@@ -342,9 +342,20 @@ def save_global_and_profile(
 
     def _apply(data: ProfilesData) -> ProfilesData:
         # 1. 更新全局配置
+        # 绑定网卡时强制 TCP 检测、关闭 HTTP/URL 检测（httpx 无法绑接口）
+        monitor = payload.monitor
+        if monitor.bind_interface_name:
+            monitor = monitor.model_copy(
+                update={
+                    "enable_tcp_check": True,
+                    "enable_http_check": False,
+                    "url_check_urls": [],
+                }
+            )
+
         new_global = GlobalConfig(
             browser=payload.browser,
-            monitor=payload.monitor,
+            monitor=monitor,
             retry=payload.retry,
             pause=payload.pause,
             logging=payload.logging,
@@ -358,6 +369,7 @@ def save_global_and_profile(
             existing = data.profiles.get("default", Profile())
 
         # ISP 反向映射
+        # TODO: 与 config_builder.py 的 ISP 转换逻辑重复，考虑提取为公共函数
         carrier_custom = payload.carrier_custom or ""
         if carrier_custom:
             carrier = "自定义"

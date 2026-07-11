@@ -15,6 +15,8 @@ from app.workers.script_runner import ScriptRunner, detect_available_binaries
 router = APIRouter()
 api_logger = get_logger("api", source="backend")
 _script_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="script_api")
+# 注意：脚本超时由 ScriptRunner 内部的 subprocess timeout 控制，
+# ThreadPoolExecutor 本身不设超时，依赖 ScriptRunner 返回。
 
 
 def shutdown_script_executor() -> None:

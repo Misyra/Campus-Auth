@@ -360,9 +360,10 @@ class TestBuildVbsContent:
 
 
 class TestMacosLaunchctl:
-    @pytest.mark.skipif(os.name == "nt", reason="os.getuid 不存在于 Windows")
-    def test_enable_macos_uses_bootstrap(self, tmp_path):
+    def test_enable_macos_uses_bootstrap(self, tmp_path, monkeypatch):
         """启用 macOS 自启动应使用 launchctl bootstrap"""
+        if not hasattr(os, "getuid"):
+            monkeypatch.setattr(os, "getuid", lambda: 501, raising=False)
         svc = AutoStartService(project_root=tmp_path)
         with (
             patch.object(svc, "_run", return_value=(True, "")) as mock_run,
@@ -374,9 +375,10 @@ class TestMacosLaunchctl:
             calls = [str(c) for c in mock_run.call_args_list]
             assert any("bootstrap" in str(c) for c in calls)
 
-    @pytest.mark.skipif(os.name == "nt", reason="os.getuid 不存在于 Windows")
-    def test_disable_macos_uses_bootout(self, tmp_path):
+    def test_disable_macos_uses_bootout(self, tmp_path, monkeypatch):
         """禁用 macOS 自启动应使用 launchctl bootout"""
+        if not hasattr(os, "getuid"):
+            monkeypatch.setattr(os, "getuid", lambda: 501, raising=False)
         svc = AutoStartService(project_root=tmp_path)
         plist = tmp_path / "test.plist"
         plist.write_text("test", encoding="utf-8")

@@ -3,10 +3,9 @@
 import asyncio
 import contextlib
 import mimetypes
-import os
-import signal
 import threading
 import time
+import logging
 from contextlib import asynccontextmanager
 
 # Windows 上 mimetypes 模块可能无法正确识别 .js 的 MIME 类型
@@ -35,16 +34,12 @@ api_logger = get_logger("api", source="backend")
 _TEMP_SCREENSHOT_MAX_AGE_DAYS = 7
 
 
-def _cleanup_screenshots() -> None:
-    """启动时清理截图文件：
-    1. temp/ 目录中超过保留天数的截图文件。
-    2. screenshots/ 目录中非当天的日期子目录。
-    """
-    # --- 清理 temp/ 中的过期截图 ---
+def _cleanup_temp_screenshots() -> None:
+    """清理 temp/ 目录中超过保留天数的截图文件。"""
     try:
         if TEMP_DIR.exists():
             cutoff = time.time() - _TEMP_SCREENSHOT_MAX_AGE_DAYS * 86400
-            removed_temp = 0
+            removed = 0
             for f in TEMP_DIR.iterdir():
                 if (
                     f.is_file()
@@ -52,28 +47,37 @@ def _cleanup_screenshots() -> None:
                     and f.stat().st_mtime < cutoff
                 ):
                     f.unlink()
-                    removed_temp += 1
-            if removed_temp:
-                startup_logger.debug("清理 temp 截图: 删除 {} 个过期文件", removed_temp)
+                    removed += 1
+            if removed:
+                startup_logger.debug("清理 temp 截图: 删除 {} 个过期文件", removed)
     except Exception as exc:
         startup_logger.warning("清理 temp 截图失败: {}", exc)
 
-    # --- 清理 screenshots/ 中的非当天目录 ---
+
+def _cleanup_dated_screenshots() -> None:
+    """清理 screenshots/ 目录中非当天的日期子目录。"""
     try:
         if SCREENSHOTS_DIR.exists():
             import shutil
             from datetime import datetime
 
             today = datetime.now().strftime("%Y-%m-%d")
-            removed_dirs = 0
+            removed = 0
             for d in SCREENSHOTS_DIR.iterdir():
                 if d.is_dir() and d.name != today:
                     shutil.rmtree(d, ignore_errors=True)
-                    removed_dirs += 1
-            if removed_dirs:
-                startup_logger.debug("清理旧截图: 删除 {} 个日期目录", removed_dirs)
+                    removed += 1
+            if removed:
+                startup_logger.debug("清理旧截图: 删除 {} 个日期目录", removed)
     except Exception as exc:
         startup_logger.warning("清理旧截图失败: {}", exc)
+
+
+def _cleanup_screenshots() -> None:
+    """启动时清理截图文件。"""
+    _cleanup_temp_screenshots()
+    _cleanup_dated_screenshots()
+
 
 
 _access_log_event = threading.Event()  # 默认未 set（即关闭）
@@ -117,7 +121,7 @@ def _create_lifespan(existing_container, boot_engine=False):
             services.start_web_services()
             # 引擎线程必须始终运行（处理配置保存等命令），监控按需启动
             services.engine.start_thread()
-            if boot_engine and not services.engine._is_monitoring:
+            if boot_engine and not services.engine.is_monitoring:
                 services.engine.boot()
             services.engine.sync_scheduler_state()
         else:
@@ -256,8 +260,8 @@ def _register_static(app) -> None:
         return FileResponse(FRONTEND_DIR / "index.html")
 
     # 确保挂载目录存在（发布版本解压后这些目录可能不存在）
-    for _dir in (DEBUG_DIR, TEMP_DIR):
-        _dir.mkdir(parents=True, exist_ok=True)
+    for dir_ in (DEBUG_DIR, TEMP_DIR):
+        dir_.mkdir(parents=True, exist_ok=True)
 
     app.mount("/static", StaticFiles(directory=FRONTEND_DIR), name="static")
     app.mount("/debug", StaticFiles(directory=DEBUG_DIR), name="debug")
@@ -349,14 +353,8 @@ def create_app(existing_container=None, boot_engine=False):
                     request.method,
                     request.url.path,
                     duration_ms,
+                    exc_info=True,
                 )
-            http_logger.debug(
-                "{} {} 异常 ({:.1f}ms)",
-                request.method,
-                request.url.path,
-                duration_ms,
-                exc_info=True,
-            )
             raise
 
     # ==================== WebSocket ====================
@@ -379,24 +377,22 @@ def create_app(existing_container=None, boot_engine=False):
 # ==================== 启动入口 ====================
 
 
-def run(
-    access_log_enabled: bool | None = None,
-    log_retention: int | None = None,
-    existing_container=None,
-    server_ref: list | None = None,
-    boot_engine: bool = False,
-    logging_settings: LoggingSettings | None = None,
+class _UvicornLogHandler(logging.Handler):
+    """将 uvicorn 的标准 logging 路由到 loguru。"""
+
+    def emit(self, record: logging.LogRecord) -> None:
+        logger.opt(exception=record.exc_info).log(
+            record.levelno, record.getMessage()
+        )
+
+
+def _setup_logging(
+    access_log_enabled: bool | None,
+    log_retention: int | None,
+    logging_settings: LoggingSettings | None,
+    existing_container,
 ) -> None:
-    """启动 uvicorn Web 服务器。
-
-    Args:
-        server_ref: 若传入，运行后 [0] 为 uvicorn.Server 实例（供外部停止）。
-        boot_engine: 是否在 lifespan 内启动监控引擎（仅 existing_container 分支有效）。
-    """
-    global app
-
-    import uvicorn
-
+    """配置日志系统：级别、文件、访问日志开关、uvicorn 日志路由。"""
     # 使用调用方传入的日志配置，或从 settings.json 读取
     if logging_settings is None and (
         access_log_enabled is None or log_retention is None
@@ -429,8 +425,6 @@ def run(
     )
 
     # 压制第三方库的 DEBUG 日志
-    import logging
-
     logging.getLogger("PIL").setLevel(logging.WARNING)
 
     log_dir = LOGS_DIR
@@ -446,26 +440,19 @@ def run(
         _access_log_event.clear()
 
     # 将 uvicorn 的标准 logging 路由到 loguru，确保日志格式统一
-    class _UvicornLogHandler(logging.Handler):
-        def emit(self, record: logging.LogRecord) -> None:
-            logger.opt(exception=record.exc_info).log(
-                record.levelno, record.getMessage()
-            )
-
     for name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
         log = logging.getLogger(name)
         log.handlers.clear()
         log.propagate = False
         log.addHandler(_UvicornLogHandler())
 
-    # 创建 FastAPI 应用
-    _app = create_app(existing_container=existing_container, boot_engine=boot_engine)
-    app = _app
 
-    # 使用 Server 实例而非 uvicorn.run()，以便 _wait_shutdown 可通过
-    # server.should_exit = True 触发优雅关闭（避免 SIGTERM → os._exit 路径）
+def _create_uvicorn_server(app):
+    """创建 uvicorn Server 实例。"""
+    import uvicorn
+
     uv_config = uvicorn.Config(
-        _app,
+        app,
         host="127.0.0.1",
         port=resolve_port(),
         reload=False,
@@ -473,11 +460,39 @@ def run(
         access_log=False,
         ws_max_size=65536,
     )
-    uv_server = uvicorn.Server(uv_config)
+    return uvicorn.Server(uv_config)
+
+
+def run(
+    access_log_enabled: bool | None = None,
+    log_retention: int | None = None,
+    existing_container=None,
+    server_ref: list | None = None,
+    boot_engine: bool = False,
+    logging_settings: LoggingSettings | None = None,
+) -> None:
+    """启动 uvicorn Web 服务器。
+
+    Args:
+        server_ref: 若传入，运行后 [0] 为 uvicorn.Server 实例（供外部停止）。
+        boot_engine: 是否在 lifespan 内启动监控引擎（仅 existing_container 分支有效）。
+    """
+    global app
+
+    _setup_logging(access_log_enabled, log_retention, logging_settings, existing_container)
+
+    # 创建 FastAPI 应用
+    _app = create_app(existing_container=existing_container, boot_engine=boot_engine)
+    app = _app
+
+    # 使用 Server 实例而非 uvicorn.run()，以便 _wait_shutdown 可通过
+    # server.should_exit = True 触发优雅关闭（避免 SIGTERM → os._exit 路径）
+    uv_server = _create_uvicorn_server(_app)
     _app.state._uvicorn_server = uv_server
     if server_ref is not None:
         server_ref[0] = uv_server
     uv_server.run()
+
 
 
 if __name__ == "__main__":

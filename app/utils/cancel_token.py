@@ -5,6 +5,9 @@ from __future__ import annotations
 import threading
 import time
 
+from .logging import get_logger
+
+_logger = get_logger("cancel_token", source="backend")
 
 class CompositeCancelEvent(threading.Event):
     """组合多个 cancel_event：任一源被 set，则 is_set() 返回 True。
@@ -31,6 +34,7 @@ class CompositeCancelEvent(threading.Event):
                 self._sources.append(event)
                 if event.is_set():
                     super().set()
+                    _logger.debug("取消源已触发，CompositeCancelEvent 已 set")
 
     def is_set(self) -> bool:
         """惰性扫描：每次调用时检查所有源。"""
@@ -75,6 +79,7 @@ class CompositeCancelEvent(threading.Event):
         super().clear()
         with self._lock:
             self._sources.clear()
+        _logger.debug("CompositeCancelEvent 已 clear，所有源已移除")
 
     def clear_sources(self) -> None:
         """清除所有源（用于 handle 销毁时释放引用）。"""

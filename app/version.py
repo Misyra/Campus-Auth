@@ -6,6 +6,9 @@ import re
 import tomllib
 from pathlib import Path
 
+from app.utils.logging import get_logger
+
+logger = get_logger("version", source="backend")
 
 def get_project_version(project_root: Path | None = None) -> str:
     """从 pyproject.toml 读取项目版本，读取失败时返回 unknown。
@@ -37,11 +40,12 @@ def compare_versions(a: str, b: str) -> int:
         max_len = max(len(va), len(vb))
         va.extend([0] * (max_len - len(va)))
         vb.extend([0] * (max_len - len(vb)))
-        for x, y in zip(va, vb, strict=False):
+        for x, y in zip(va, vb, strict=True):
             if x > y:
                 return 1
             if x < y:
                 return -1
         return 0
     except (ValueError, AttributeError):
+        logger.warning("版本号解析失败: a={!r}, b={!r}", a, b)
         return 0

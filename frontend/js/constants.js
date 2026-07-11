@@ -57,6 +57,7 @@ export const LIMITS = {
   FILE_UPLOAD_MAX: 5 * 1024 * 1024, // 文件上传最大大小（5MB）
   SCROLL_BOTTOM_THRESHOLD: 50,    // 判断滚动到底部的阈值（px）
   WS_LOG_BUFFER_MAX: 100,         // WS 断连期间前端日志缓冲上限
+  WS_LOG_FLUSH_BATCH: 20,         // 单次 flush 最多发送的日志条数（背压）
 };
 
 // 日志级别选项

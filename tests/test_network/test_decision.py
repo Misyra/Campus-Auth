@@ -53,19 +53,21 @@ class TestCheckNetworkStatus:
         assert status == "all_disabled"
 
 
-class TestResolveSourceIp:
-    """_resolve_source_ip 解析逻辑验证。"""
+class TestResolveInterface:
+    """_resolve_interface 解析逻辑验证。"""
 
-    def test_no_bind_interface_returns_none(self):
-        """未绑定网卡时返回 None。"""
+    def test_no_bind_interface_returns_empty(self):
+        """未绑定网卡时返回空接口名。"""
         from app.network import decision as decision_mod
         from app.schemas import MonitorSettings
 
         monitor = MonitorSettings(bind_interface_name="")
-        assert decision_mod._resolve_source_ip(monitor) is None
+        name, ip = decision_mod._resolve_interface(monitor)
+        assert name == ""
+        assert ip is None
 
-    def test_resolves_ip_from_interface(self, monkeypatch):
-        """绑定网卡存在时返回其 IP。"""
+    def test_resolves_interface_and_ip(self, monkeypatch):
+        """绑定网卡存在时返回接口名和 IP。"""
         from app.network import decision as decision_mod
         from app.schemas import MonitorSettings
 
@@ -73,10 +75,12 @@ class TestResolveSourceIp:
         monkeypatch.setattr(decision_mod, "_interface_mgr", fake_mgr)
 
         monitor = MonitorSettings(bind_interface_name="Ethernet")
-        assert decision_mod._resolve_source_ip(monitor) == "192.168.1.5"
+        name, ip = decision_mod._resolve_interface(monitor)
+        assert name == "Ethernet"
+        assert ip == "192.168.1.5"
 
-    def test_unresolvable_returns_none(self, monkeypatch):
-        """绑定网卡无 IP 时返回 None。"""
+    def test_unresolvable_returns_empty(self, monkeypatch):
+        """绑定网卡无 IP 时返回空接口名。"""
         from app.network import decision as decision_mod
         from app.schemas import MonitorSettings
 
@@ -84,14 +88,16 @@ class TestResolveSourceIp:
         monkeypatch.setattr(decision_mod, "_interface_mgr", fake_mgr)
 
         monitor = MonitorSettings(bind_interface_name="Ethernet")
-        assert decision_mod._resolve_source_ip(monitor) is None
+        name, ip = decision_mod._resolve_interface(monitor)
+        assert name == ""
+        assert ip is None
 
 
-class TestCheckNetworkStatusPassesSourceIp:
-    """check_network_status 传递 source_ip 到 is_network_available。"""
+class TestCheckNetworkStatusPassesInterface:
+    """check_network_status 传递 interface_name 到 is_network_available。"""
 
-    async def test_source_ip_forwarded(self, monkeypatch):
-        """source_ip 应传递给 is_network_available。"""
+    async def test_interface_forwarded(self, monkeypatch):
+        """interface_name 和 fallback_source_ip 应传递给 is_network_available。"""
         from app.network import decision as decision_mod
         from app.schemas import MonitorSettings
 
@@ -117,7 +123,8 @@ class TestCheckNetworkStatusPassesSourceIp:
         )
         await decision_mod.check_network_status(monitor)
 
-        assert called_with.get("source_ip") == "10.0.0.1"
+        assert called_with.get("interface_name") == "Ethernet"
+        assert called_with.get("fallback_source_ip") == "10.0.0.1"
 
 
 class TestNoExecutorRemnants:

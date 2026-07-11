@@ -69,7 +69,7 @@ class TestProfileConnection:
         core.init_monitoring()
         engine._monitor_core = core
 
-        assert engine._is_monitoring
+        assert engine.is_monitoring
 
         profile_service.set_active_profile("profile-b")
         ok, msg = engine.apply_profile("profile-b")
@@ -77,10 +77,10 @@ class TestProfileConnection:
 
         # apply_profile 通过队列异步处理，等待引擎线程处理完成
         deadline = time.time() + 5
-        while time.time() < deadline and not engine._is_monitoring:
+        while time.time() < deadline and not engine.is_monitoring:
             time.sleep(0.05)
 
-        assert engine._is_monitoring
+        assert engine.is_monitoring
         assert engine.get_runtime_config().credentials.username == "user-b"
 
     def test_delete_current_profile(self, integration_stack):

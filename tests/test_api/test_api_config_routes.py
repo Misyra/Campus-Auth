@@ -140,11 +140,11 @@ class TestSetLogLevel:
     def test_set_log_level_invalid_level_rejected(
         self, mock_log_center_cls, api_client
     ):
-        """无效日志级别应返回 400。"""
+        """无效日志级别应返回 422（Pydantic 校验）。"""
         test_client, _ = api_client
 
         resp = test_client.put("/api/config/log-level", json={"level": "INVALID"})
-        assert resp.status_code == 400
+        assert resp.status_code == 422
 
     @patch("app.utils.logging.LogConfigCenter")
     def test_set_log_level_updates_profile_service(

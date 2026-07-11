@@ -100,11 +100,16 @@
       <div class="settings-detect-col">
         <h4 class="settings-detect-heading">网络状态检测</h4>
 
+        <!-- 绑定网卡时的提示 -->
+        <p v-if="isInterfaceBound" class="form-info">
+          已绑定网卡，仅支持 TCP 检测（HTTP/网址响应检测无法绑定网卡接口）
+        </p>
+
         <!-- TCP 检测 -->
         <div class="toggle-group">
           <div class="toggle-with-help">
             <label class="toggle toggle-help-inline">
-              <input type="checkbox" v-model="config.monitor.enable_tcp_check" />
+              <input type="checkbox" v-model="config.monitor.enable_tcp_check" :disabled="isInterfaceBound" />
               <span class="toggle-slider"></span>
               <span class="toggle-label">TCP 检测</span>
               <span class="field-help" tabindex="0" role="note" data-tip="通过 TCP 连接外部站点（如 8.8.8.8:53）检测网络连通性。适用于大多数校园网。">?</span>
@@ -134,7 +139,7 @@
         <div class="toggle-group settings-toggle-spacer">
           <div class="toggle-with-help">
             <label class="toggle toggle-help-inline">
-              <input type="checkbox" v-model="config.monitor.enable_http_check" />
+              <input type="checkbox" v-model="config.monitor.enable_http_check" :disabled="isInterfaceBound" />
               <span class="toggle-slider"></span>
               <span class="toggle-label">HTTP 检测</span>
               <span class="field-help" tabindex="0" role="note" data-tip="通过 HTTP 请求外部站点检测网络连通性。">?</span>
@@ -164,7 +169,7 @@
         <div class="toggle-group settings-toggle-spacer">
           <div class="toggle-with-help">
             <label class="toggle toggle-help-inline">
-              <input type="checkbox" v-model="urlCheckEnabled" />
+              <input type="checkbox" v-model="urlCheckEnabled" :disabled="isInterfaceBound" />
               <span class="toggle-slider"></span>
               <span class="toggle-label">网址响应检测</span>
               <span class="field-help" tabindex="0" role="note" data-tip="通过访问指定网址判断网络是否正常。能准确识别被门户劫持的网络。与 HTTP 检测不同，此方式会检查返回内容是否被劫持。">?</span>

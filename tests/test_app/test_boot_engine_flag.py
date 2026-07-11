@@ -58,7 +58,7 @@ def _make_mock_container():
     """创建配置好的 mock ServiceContainer。"""
     mock_container = MagicMock()
     mock_container.engine.has_enabled_tasks.return_value = False
-    mock_container.engine._is_monitoring = False
+    mock_container.engine.is_monitoring = False
     mock_container.start_web_services = MagicMock()
     mock_container.engine.boot = MagicMock()
     mock_container.shutdown = AsyncMock()
@@ -193,7 +193,7 @@ class TestLifespanBootOrder:
         from app.application import create_app
 
         mock_container = _make_mock_container()
-        mock_container.engine._is_monitoring = True
+        mock_container.engine.is_monitoring = True
         _app = create_app(existing_container=mock_container, boot_engine=True)
 
         self._run_lifespan(_app)

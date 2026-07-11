@@ -330,6 +330,8 @@ class LoginAttempt:
 
         from app.schemas import MonitorSettings
 
+        # Pydantic 默认会静默丢弃未知字段（model_config 忽略多余参数），
+        # 此处显式过滤仅为可读性，功能上等价于直接 **self._monitor_settings。
         monitor_settings = MonitorSettings(
             **{
                 k: v

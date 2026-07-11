@@ -16,6 +16,13 @@ class TaskValidator:
 
     REQUIRED_STEP_FIELDS = {"id", "type"}
     VALID_STEP_TYPES = {t.value for t in StepType} | {"custom_js"}
+    SELECTOR_REQUIRED_TYPES = {
+        StepType.INPUT,
+        StepType.CLICK,
+        StepType.SELECT,
+        StepType.CLICK_SELECT,
+        StepType.WAIT,
+    }
 
     @classmethod
     def validate(cls, config: dict[str, Any]) -> tuple[bool, list[str]]:
@@ -95,14 +102,7 @@ class TaskValidator:
             errors.append(f"{prefix} 未知的步骤类型: '{step_type}'")
 
         # 根据类型验证特定字段
-        _SELECTOR_REQUIRED = {
-            StepType.INPUT,
-            StepType.CLICK,
-            StepType.SELECT,
-            StepType.CLICK_SELECT,
-            StepType.WAIT,
-        }
-        if step_type in _SELECTOR_REQUIRED and not step.get("selector"):
+        if step_type in cls.SELECTOR_REQUIRED_TYPES and not step.get("selector"):
             errors.append(f"{prefix} ({step_type}) 需要 'selector' 字段")
 
         if step_type == StepType.WAIT_URL and not step.get("pattern"):

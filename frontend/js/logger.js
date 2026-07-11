@@ -37,7 +37,7 @@ export function createFrontendLogger(initialLevel = 'INFO') {
 
   const _flushBuffer = () => {
     if (!_ws || _ws.readyState !== WebSocket.OPEN || _logBuffer.length === 0) return;
-    const batch = _logBuffer.splice(0, _logBuffer.length);
+    const batch = _logBuffer.splice(0, LIMITS.WS_LOG_FLUSH_BATCH);
     let sent = 0;
     try {
       for (const msg of batch) {
@@ -50,6 +50,7 @@ export function createFrontendLogger(initialLevel = 'INFO') {
     } catch (_) {
       _logBuffer.unshift(...batch.slice(sent));
     }
+    // 剩余消息在下次 setWebSocket 时继续 flush
   };
 
   return {

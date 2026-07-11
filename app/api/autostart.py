@@ -26,6 +26,7 @@ def list_shells() -> ShellListResponse:
     """获取系统可用的 Shell 列表。"""
     shells = detect_available_shells()
     default_shell = get_default_shell()
+    api_logger.debug("检测到 {} 个 Shell，默认: {}", len(shells), default_shell)
     return ShellListResponse(
         shells=[ShellInfo(**s) for s in shells],
         default=default_shell,
@@ -44,20 +45,23 @@ def _read_runtime_mode(request: Request) -> RuntimeMode:
 
 def _save_runtime_mode(request: Request, runtime_mode: RuntimeMode) -> None:
     """保存自启动运行模式到配置。"""
-    ps = request.app.state.services.profile_service
-    ps.update(
-        lambda d: d.model_copy(
-            update={
-                "global_config": d.global_config.model_copy(
-                    update={
-                        "app_settings": d.global_config.app_settings.model_copy(
-                            update={"runtime_mode": runtime_mode}
-                        )
-                    }
-                )
-            }
+    try:
+        ps = request.app.state.services.profile_service
+        ps.update(
+            lambda d: d.model_copy(
+                update={
+                    "global_config": d.global_config.model_copy(
+                        update={
+                            "app_settings": d.global_config.app_settings.model_copy(
+                                update={"runtime_mode": runtime_mode}
+                            )
+                        }
+                    )
+                }
+            )
         )
-    )
+    except Exception as e:
+        api_logger.warning("保存自启动运行模式失败: {}", e)
 
 
 @router.get("/api/autostart/status", response_model=AutoStartStatusResponse)

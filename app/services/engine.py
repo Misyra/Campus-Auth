@@ -320,7 +320,7 @@ class LoginBridge:
                 if on_complete is not None:
                     on_complete(False, "登录已取消")
             except Exception as e:
-                logger.exception("登录任务异常: {}", e)
+                logger.exception("登录任务异常")
                 if on_complete is not None:
                     on_complete(False, f"登录内部错误: {e}")
 
@@ -490,7 +490,7 @@ class ScheduleEngine:
                 now = time.time()
 
                 # 重试（独立于网络检测，延迟后直接登录）
-                if self._is_monitoring:
+                if self.is_monitoring:
                     with self._retry_time_lock:
                         retry_time = self._next_retry_time
                         if retry_time > 0 and now >= retry_time:
@@ -502,14 +502,14 @@ class ScheduleEngine:
                         await self._do_async_login()
 
                 # 网络检测
-                if self._is_monitoring and now >= self._next_network_check:
+                if self.is_monitoring and now >= self._next_network_check:
                     await self._do_network_check_async()
 
                 # 定时任务
                 if self._scheduler and self._scheduler.should_tick(now):
                     self._scheduler.tick(now)
             except Exception as e:
-                logger.exception("引擎循环异常，继续运行: {}", e)
+                logger.exception("引擎循环异常，继续运行")
                 await asyncio.sleep(1)
 
         self._engine_running = False
@@ -523,7 +523,7 @@ class ScheduleEngine:
         now = time.time()
         candidates: list[float] = [now + 60]
 
-        if self._is_monitoring:
+        if self.is_monitoring:
             candidates.append(float(self._next_network_check))
             with self._retry_time_lock:
                 if self._next_retry_time > 0:
@@ -606,7 +606,7 @@ class ScheduleEngine:
             self._next_network_check = time.time() + result.interval
             self._update_status_snapshot(force=True)
         except Exception as e:
-            logger.exception("网络检测异常: {}", e)
+            logger.exception("网络检测异常")
             self._next_network_check = time.time() + self._monitor_check_interval
 
     async def _do_async_login(
@@ -675,7 +675,7 @@ class ScheduleEngine:
                 cmd.response_future.set_result((True, "监控已启动"))
             return
         except Exception as exc:
-            self._logger.exception("监控启动失败: {}", exc)
+            self._logger.exception("监控启动失败")
             if cmd.response_future and not cmd.response_future.done():
                 cmd.response_future.set_result((False, f"监控启动失败: {exc}"))
             return
@@ -877,7 +877,7 @@ class ScheduleEngine:
 
     def _start_engine_thread(self) -> None:
         """启动引擎 loop 线程（内部方法）。"""
-        # 启动前清理孤儿浏览器（所有启动入口统一执行）
+        # 清理孤儿浏览器：冷却期内（30s）自动跳过，避免与 application.py 重复扫描
         from app.workers.playwright_worker import cleanup_orphan_browsers
 
         try:
@@ -904,7 +904,8 @@ class ScheduleEngine:
             return self._pure_mode
 
     @property
-    def _is_monitoring(self) -> bool:
+    def is_monitoring(self) -> bool:
+        """当前是否正在监控。"""
         core = self._monitor_core
         return core is not None and core.monitoring
 
@@ -1003,7 +1004,7 @@ class ScheduleEngine:
     def start_monitoring(self) -> tuple[bool, str]:
         logger.debug("收到启动监控请求")
         with self._start_stop_lock:
-            if self._is_monitoring:
+            if self.is_monitoring:
                 return False, "监控已在运行中"
 
             return self._dispatch_command(EngineCmdType.START, timeout=5.0)
@@ -1011,7 +1012,7 @@ class ScheduleEngine:
     def stop_monitoring(self) -> tuple[bool, str]:
         logger.debug("收到停止监控请求")
         with self._start_stop_lock:
-            if not self._is_monitoring:
+            if not self.is_monitoring:
                 return False, "监控未运行"
 
             return self._dispatch_command(EngineCmdType.STOP, timeout=5.0)

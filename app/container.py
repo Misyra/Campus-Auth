@@ -50,9 +50,7 @@ class ServiceContainer:
 
             return get_worker()
 
-        # 新组件
-
-        # 1. 创建 TaskExecutor（login_orchestrator 延迟绑定，打破循环依赖）
+        # --- 创建 TaskExecutor（login_orchestrator 延迟绑定，打破循环依赖） ---
         self.task_executor = TaskExecutor(
             registry=self.task_registry,
             history_store=self.task_history_store,
@@ -60,7 +58,7 @@ class ServiceContainer:
             task_manager=self.task_manager,
         )
 
-        # 2. 创建 LoginOrchestrator（executor 复用 TaskExecutor 的 login_executor）
+        # --- 创建 LoginOrchestrator（executor 复用 TaskExecutor 的 login_executor） ---
         from app.services.login_orchestrator import LoginOrchestrator
 
         self.login_orchestrator = LoginOrchestrator(
@@ -70,10 +68,10 @@ class ServiceContainer:
             profile_service=self.profile_service,
         )
 
-        # 3. 反向绑定：让 TaskExecutor 持有 orchestrator
+        # --- 反向绑定：让 TaskExecutor 持有 orchestrator ---
         self.task_executor.bind_login_orchestrator(self.login_orchestrator)
 
-        # 3.5 创建 SchedulerService
+        # --- 创建 SchedulerService ---
         from app.services.scheduler_service import SchedulerService
 
         self.scheduler_service = SchedulerService(
@@ -81,7 +79,7 @@ class ServiceContainer:
             task_executor=self.task_executor,
         )
 
-        # 4. 创建 ScheduleEngine（传入 orchestrator + task_executor + scheduler）
+        # --- 创建 ScheduleEngine（传入 orchestrator + task_executor + scheduler） ---
         self.engine = ScheduleEngine(
             project_root,
             self.profile_service,
@@ -94,7 +92,7 @@ class ServiceContainer:
             scheduler=self.scheduler_service,
         )
 
-        # 5. 延迟绑定 get_runtime_config（engine 现在存在）
+        # --- 延迟绑定 get_runtime_config（engine 现在存在） ---
         self.login_orchestrator.bind_runtime_config(self.engine.get_runtime_config)
         self.task_executor.bind_runtime_config(self.engine.get_runtime_config)
 
@@ -115,12 +113,12 @@ class ServiceContainer:
             self.engine.boot()
             self.engine.sync_scheduler_state()
             container_logger.info("服务容器启动成功")
-        except Exception as e:
-            container_logger.exception("服务启动异常，正在清理: {}", e)
+        except Exception as exc:
+            container_logger.exception("服务启动异常，正在清理: {}", exc)
             try:
                 await self.shutdown()
-            except Exception as e2:
-                container_logger.exception("清理过程异常: {}", e2)
+            except Exception as cleanup_exc:
+                container_logger.exception("清理过程异常: {}", cleanup_exc)
             raise
 
     def start_web_services(self):
@@ -166,7 +164,7 @@ class ServiceContainer:
                 else:
                     container_logger.debug("WS drain task 属于其他事件循环，跳过 await")
             except Exception:
-                pass
+                container_logger.debug("WS drain task 清理失败", exc_info=True)
             self._ws_drain_task = None
 
         self._web_services_started = False

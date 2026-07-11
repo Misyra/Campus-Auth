@@ -180,7 +180,7 @@ class TestCalculateWakeup:
     def test_default_wakeup(self, engine_factory):
         """无监控、无重试、无调度时，默认 60 秒后唤醒。"""
         svc = engine_factory(raw=True)
-        # _monitor_core 为 None => _is_monitoring 为 False
+        # _monitor_core 为 None => is_monitoring 为 False
         now = time.time()
         wakeup = svc._calculate_wakeup()
         assert wakeup >= now + 59
@@ -329,8 +329,9 @@ class TestHandleStart:
         svc._handle_start(cmd)
         assert svc._monitor_core is mock_core
 
+    @patch("app.services.engine.validate_env_config", return_value=(True, ""))
     @patch("app.services.engine.NetworkMonitorCore")
-    def test_handle_start_creates_core(self, mock_core_cls, engine_factory):
+    def test_handle_start_creates_core(self, mock_core_cls, _mock_validate, engine_factory):
         """正常启动时创建 NetworkMonitorCore。"""
         svc = engine_factory(raw=True)
         svc._profile_service = MagicMock()
@@ -346,8 +347,9 @@ class TestHandleStart:
         assert svc._monitor_core is mock_core
         mock_core.init_monitoring.assert_called_once()
 
+    @patch("app.services.engine.validate_env_config", return_value=(True, ""))
     @patch("app.services.engine.NetworkMonitorCore")
-    def test_handle_start_pure_mode(self, mock_core_cls, engine_factory):
+    def test_handle_start_pure_mode(self, mock_core_cls, _mock_validate, engine_factory):
         """纯净模式标志通过 getter 传递。"""
         svc = engine_factory(raw=True)
         svc._profile_service = MagicMock()
@@ -1734,21 +1736,21 @@ class TestProperties:
 
     def test_is_monitoring_false(self, engine_factory):
         svc = engine_factory(raw=True)
-        assert svc._is_monitoring is False
+        assert svc.is_monitoring is False
 
     def test_is_monitoring_true(self, engine_factory):
         svc = engine_factory(raw=True)
         mock_core = MagicMock()
         mock_core.monitoring = True
         svc._monitor_core = mock_core
-        assert svc._is_monitoring is True
+        assert svc.is_monitoring is True
 
     def test_is_monitoring_core_not_monitoring(self, engine_factory):
         svc = engine_factory(raw=True)
         mock_core = MagicMock()
         mock_core.monitoring = False
         svc._monitor_core = mock_core
-        assert svc._is_monitoring is False
+        assert svc.is_monitoring is False
 
     def test_tasks_property(self, engine_factory):
         svc = engine_factory(raw=True)
@@ -2016,7 +2018,7 @@ class TestEngineLoopAsyncCommands:
 
         engine._process_command_async = mock_process
         engine._calculate_wakeup = lambda: time.time() + 60
-        # _is_monitoring 是 property，通过 mock _monitor_core = None 实现 False
+        # is_monitoring 是 property，通过 mock _monitor_core = None 实现 False
 
         loop = asyncio.new_event_loop()
         engine._engine_loop = loop

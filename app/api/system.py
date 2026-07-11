@@ -28,6 +28,7 @@ router = APIRouter()
 api_logger = get_logger("api", source="backend")
 
 # 更新检查缓存（避免触发 GitHub API 速率限制）
+# 注意：全局可变状态，单用户桌面应用场景下无并发风险
 _update_cache: dict | None = None
 _update_cache_time: float = 0
 _UPDATE_CACHE_TTL = 12 * 60 * 60  # 12 小时

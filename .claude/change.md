@@ -1,5 +1,106 @@
 # 修改日志
 
+
+### chore: 版本升级至 v4.2.1
+
+- `pyproject.toml`：version 4.2.0 → 4.2.1
+- `resources/tools/task-recorder.user.js`：@version 和 VERSION 常量同步更新至 4.2.1
+- `CLAUDE.md`：当前版本 v4.1.0 → v4.2.1（上次漏更）
+- `docs/changelog.md`：新增 v4.2.1 版本更新日志
+
+## 2026-07-11
+
+### perf: 优化孤儿浏览器清理与启动日志输出
+
+- **问题**：启动时 `cleanup_orphan_browsers()` 被多处调用（application.py → engine.py），第二次重复扫描全进程浪费 5-8s；`uv run` 管道模式下 stdout 块缓冲导致终端假卡住
+- **优化 cleanup_orphan_browsers**（`app/workers/playwright_worker.py`）：
+  - 新增 30s 冷却期机制（`_last_cleanup_time` + `_cleanup_lock`），短时间内重复调用自动跳过，`force=True` 可绕过
+  - 扫描算法优化：`process_iter` 从 `["pid", "exe", "cmdline"]` 改为 `["pid", "name"]`，用进程名预过滤后再对浏览器候选进程做 `exe()/cmdline()/parent()` 检查（全系统 200+ 进程 → 仅 5-10 个候选做昂贵检查）
+  - 预期启动耗时从 13s 降至 1-2s
+- **修复 stdout 缓冲**（`main.py`）：
+  - 管道模式（`not sys.stdout.isatty()`）下 `reconfigure(line_buffering=True)`，确保日志实时刷新
+- **更新 engine.py 注释**：将"所有启动入口统一执行"改为"冷却期内自动跳过，避免与 application.py 重复扫描"
+- **更新测试**：
+  - `test_playwright_worker.py`：`_make_proc` 适配新签名（`info` 含 `name`、`exe()`/`cmdline()` 改为方法调用），新增 autouse fixture 重置冷却期
+  - `test_src_utils.py`：mock 进程的 `info`/`exe`/`cmdline` 适配新签名，新增 autouse fixture 重置冷却期
+
+### fix: 修复任务录制器 prompt 与任务编写指南的不一致问题
+
+- **问题**：录制器 `generatePrompt` 生成的 AI 提示词与 `task-writing-guide.md` 存在多处矛盾和不完整
+- **强化 HTML 上下文优先级**：
+  - prompt 开头新增「核心原则」段，明确 HTML 上下文是唯一权威依据，录制步骤仅供参考
+  - 明确授权模型可修正选择器、合并/拆分/补充/删除步骤，不必拘泥于录制器的分类和顺序
+  - 中段「请结合上下文 HTML 验证选择器」改写为「录制器检测的局限性」，从"验证"语气改为"独立判断"
+  - 补充运营商选择三种模式的 HTML 判据（原生 select / 自定义 div / 按钮组）
+  - 补充"遗漏步骤"提醒，引导模型从 HTML 中发现录制器未录的必要元素
+  - 「录制到的元素」章节标题处加 ⚠️ 提醒，防止模型原样照搬检测数据
+  - 输出要求新增「改动说明」项：模型在修正选择器、补充/删除步骤、调整顺序时需向用户列出调整清单及理由，完全一致则免说明
+- **修复（task-recorder.user.js）**：
+  - char_range 表格从数字枚举（0-7）改为字符串格式（如 `"0123456789"`），与 guide 文档统一
+  - 移除 ocr 示例中硬编码的 `"old": true`，改为可选字段说明
+  - 顶层 JSON 模板补充 `name`/`description`/`metadata` 字段示范
+  - 新增 `navigation_wait`/`step_delay` 调优建议（AJAX 动态渲染场景）
+  - 修复 2245-2247 行缩进不一致问题（4 空格 → 12 空格，与周围代码对齐）
+- **优化（task-writing-guide.md）**：
+  - `post_login_delay` 明确标注为系统监控配置而非任务 JSON 字段，指引到 Web 控制台修改
+  - `click_select` 章节补充选项搜索回退链说明（option_selector → 父容器 → 全局）
+  - 新增 `select_delay` 完整 JSON 示例
+  - 新增按钮组模式说明与示例（平铺 button/a 标签的运营商选择）
+  - `eval` 章节补充执行环境说明（page.evaluate 页面上下文、store_as 机制、变量模板转义）
+
+## 2026-07-10
+
+### fix: 网卡绑定改用接口索引绑定，修复 Windows 下绑定无效问题
+
+- **根因**：原方案用 `source_address=(ip, 0)` 绑定源 IP，但 Windows 是 weak host model，内核选路只看目的地址 + metric，不看源 IP。导致绑网卡后流量仍走默认路由，多网卡并发场景下检测不到指定网卡断网。
+- **验证**：通过 `IP_UNICAST_IF` 绑定接口索引，实测在 Windows 上成功控制出口接口（绑 WLAN 2 时 local IP 变为 192.168.31.178，绑 以太网 3 时为 10.75.76.4）。
+- **新增**：
+  - `app/network/interface_bind.py`：跨平台 `bind_socket_to_interface()` 工具函数
+    - Windows: `IP_UNICAST_IF`(31)，接口索引按网络字节序打包
+    - Linux: `SO_BINDTODEVICE`(25)，无 CAP_NET_RAW 时降级为 source IP（strong host model 下有效）
+    - macOS: `IP_BOUND_IF`(25)
+    - Windows 中文名网卡名 `socket.if_nametoindex` 失败时，通过遍历索引 + UDP connect 反查 local IP 匹配
+- **改造**：
+  - `app/network/decision.py`：`_resolve_source_ip` → `_resolve_interface`，传 `interface_name` + `fallback_source_ip`
+  - `app/network/probes.py`：TCP 探测改用手动 socket + 绑接口 + `loop.sock_connect`；`_check_interface_connectivity` 同步改造
+  - `app/network/proxy.py`：`Socks5Server` 接收 `interface_name` + `fallback_source_ip`，出站连接绑接口（替代原 `source_address`）
+  - `app/services/monitor_service.py`：`_start_bind_proxy` 传 `interface_name` 给 `Socks5Server`；`_check_bind_ip_change` 简化为仅记录日志（接口索引不受 DHCP IP 变化影响）
+- **设计决策**：
+  - 绑网卡时 HTTP/URL 探测自动跳过（httpx 的 `socket_options` 时序不对，connect 后才 setsockopt 无效；TCP 探测已足够判断断网）
+  - SOCKS5 代理层同步改造（浏览器流量经 SOCKS5 出站，绑接口后浏览器流量也走指定网卡）
+- **测试**：更新 `test_decision.py`、`test_proxy.py`、`test_probes.py` 适配新接口；2512 个测试全部通过
+
+### feat: 调试会话支持网卡绑定代理
+
+- **问题**：调试会话（DebugSessionManager）启动的浏览器不经过 LoginOrchestrator，不注入 `bind_proxy`，导致调试时浏览器流量走默认路由，无法验证网卡绑定效果。
+- **改造**：
+  - `app/services/debug_service.py` 的 `start` 方法从 `monitor_service._monitor_core.bind_proxy_url` 获取代理 URL（`monitor_service` 实际是 `ScheduleEngine`，`bind_proxy_url` 在其 `_monitor_core` 上），通过 `runtime_config_to_worker_dict(config, bind_proxy=bind_proxy)` 注入 Worker 数据。
+  - `app/workers/playwright_worker.py` 的 `_start_browser` 修复 `pure_mode` 分支不注入 `bind_proxy` 的 bug：原代码 pure_mode 分支只硬编码 viewport，不调 `_build_context_options`，导致代理被跳过。现在 pure_mode 分支也合并 `bind_proxy` 到 `ctx_opts`。
+- **行为**：监控启动时调试会话也走 SOCKS5 绑接口；监控未启动时 `bind_proxy_url` 为 None，调试会话走默认路由（与登录流程行为一致）。
+- **验证**：38 个测试全部通过；实测调试会话浏览器打开 IP 查询网站返回联通 IP（绑定网卡出口）。
+
+### feat: 绑定网卡时锁定检测方式 + 代码规范优化
+
+**功能改造**：
+- **前端** `settings-monitor.html`：绑定网卡时三个检测方式 checkbox 加 `:disabled="isInterfaceBound"`，并显示提示"已绑定网卡，仅支持 TCP 检测"
+- **前端** `app-options.js`：新增 `isInterfaceBound` 计算属性；新增 `bind_interface_name` watcher，绑定网卡时自动开启 TCP、关闭 HTTP/URL 检测
+- **后端** `profile_service.py`：`save_global_and_profile` 的 `_apply` 函数中，绑定网卡时强制修正 monitor 配置（TCP 开启、HTTP 关闭、URL 清空），作为前端校验的兜底
+
+**代码 review 优化**：
+- `probes.py`：删除 TCP 探测函数与 URL 探测函数之间的多余空行
+- `decision.py`：补充模块级 docstring（符合 CLAUDE.md 规范）
+- `proxy.py`：`bind_socket_to_interface` 从函数内 import 提到模块级 import
+- `interface_bind.py`：Windows 接口索引遍历上限提取为常量 `_MAX_INTERFACE_INDEX`
+
+**验证**：ruff 全部通过，2512 个测试全部通过。
+
+### refactor: 绑定网卡模块 import 统一与代码结构规范化
+
+- `decision.py`：模块级补充 `import socket` 和 `from .interface_bind import bind_socket_to_interface`，删除 `_is_auth_url_reachable` 内的 `import socket as socket_module` 别名和条件 import
+- `probes.py`：`from app.network.interface_bind import bind_socket_to_interface` 从函数内条件 import 提到模块级，与 proxy.py 保持一致
+- **未选网卡时走默认通道**：`bind_socket_to_interface` 在 `if_name` 为空时直接返回 `"none"`，socket 不绑接口走系统默认路由；不支持的平台同样返回 `"none"` 安全降级
+- **验证**：ruff 全部通过，网络层 159 个测试全部通过
+
 ## 2026-07-06
 
 ### fix: 修复前端日志页不显示截图的问题

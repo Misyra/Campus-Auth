@@ -132,6 +132,7 @@ class ShellCommandPolicy:
         self._audit(argv, effective_timeout)
 
         popen_kwargs = {
+            "stdin": subprocess.DEVNULL,
             "stdout": subprocess.PIPE,
             "stderr": subprocess.PIPE,
             "text": True,

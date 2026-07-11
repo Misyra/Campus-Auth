@@ -114,15 +114,16 @@ export const appearanceMethods = {
   startLongPress(type, hex, event) {
     // 同步阻止默认行为（防止长按文本选择/上下文菜单）
     event.preventDefault();
-    let timer = setTimeout(() => {
-      this.onColorLongPress(type, hex, event);
-    }, 600);
-    // 触摸结束或移动时取消
     const cancel = () => {
       clearTimeout(timer);
       event.target.removeEventListener('touchend', cancel);
       event.target.removeEventListener('touchmove', cancel);
     };
+    let timer = setTimeout(() => {
+      cancel();
+      this.onColorLongPress(type, hex, event);
+    }, 600);
+    // 触摸结束或移动时取消
     event.target.addEventListener('touchend', cancel);
     event.target.addEventListener('touchmove', cancel);
   },

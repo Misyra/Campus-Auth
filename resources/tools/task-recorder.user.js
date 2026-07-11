@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Campus-Auth 任务录制器
 // @namespace    https://github.com/Misyra/Campus-Auth
-// @version      4.2.0
+// @version      4.2.1
 // @description  可视化选取校园网登录页面元素，自动生成任务 JSON 或结构化文档
 // @author       Misyra
 // @match        http://*/*
@@ -19,7 +19,7 @@
 
   // ==================== 配置 ====================
 
-  const VERSION = "4.2.0"; // 同步修改顶部 @version
+  const VERSION = "4.2.1"; // 同步修改顶部 @version
 
   const STEP_TYPES = {
     username: { category: "basic", label: "账号输入框", icon: "👤", color: "#4CAF50", primary: true, hint: "点击页面上真实的账号输入框（不是旁边的文字标签），支持自动检测隐藏输入框" },
@@ -2128,10 +2128,23 @@
   function generatePrompt(url) {
     let prompt = `请根据以下校园网登录页面的元素信息，生成 Campus-Auth 的任务 JSON 配置。\n\n`;
     prompt += `任务编写规范请参考 Campus-Auth 项目中的 docs/guides/task-writing-guide.md 文档。\n\n`;
+    prompt += `## 核心原则：以 HTML 上下文为准，录制步骤仅供参考\n\n`;
+    prompt += `录制器是辅助工具，其自动检测的选择器、步骤分类和顺序**可能出错**（常见问题：选择器指向了非登录元素、遗漏了必要步骤、步骤顺序不合理、隐藏输入框误判）。下方「页面上下文 HTML」才是判断页面真实结构的**唯一权威依据**。\n\n`;
+    prompt += `生成任务时请：\n`;
+    prompt += `1. **先通读「页面上下文 HTML」**，理解表单结构、各元素的 id/name/type/placeholder 及其层级关系，再决定步骤设计\n`;
+    prompt += `2. **自行判断最佳选择器**，不要直接照搬录制器检测的 \`bestSelector\`——结合 HTML 验证它是否指向正确的登录元素，必要时修正、合并候选选择器或改用更稳定的属性\n`;
+    prompt += `3. **自行设计步骤顺序与数量**，可合并冗余步骤、补充遗漏步骤（如协议勾选、运营商选择）、删除录制器误录的步骤\n`;
+    prompt += `4. **优先选择器稳定性**：id > name 属性 > 属性组合 > class（class 易变，尽量避免）\n\n`;
     prompt += `## 输出要求\n\n`;
-    prompt += `1. 直接输出完整的任务 JSON（放在 \`\`\`json 代码块中），可附简短说明\n`;
-    prompt += `2. 然后询问用户：\`"任务是否成功？"\`\n`;
-    prompt += `3. 若用户反馈失败，提供一套使用 eval 步骤的备选任务（通过 JS 强制填值并提交，选择器按当前页面 HTML 适配）\n\n`;
+    prompt += `1. 直接输出完整的任务 JSON（放在 \`\`\`json 代码块中）\n`;
+    prompt += `2. **改动说明**：在与录制步骤不一致时，附上简短说明列出你做了哪些调整及理由，包括但不限于：\n`;
+    prompt += `   - 修正了哪个步骤的选择器（原选择器→新选择器，原因）\n`;
+    prompt += `   - 补充了录制器遗漏的步骤（如协议勾选、运营商选择）\n`;
+    prompt += `   - 删除了录制器误录的步骤（原因）\n`;
+    prompt += `   - 调整了步骤顺序（原顺序→新顺序，原因）\n`;
+    prompt += `   - 若与录制步骤完全一致则无需说明\n`;
+    prompt += `3. 然后询问用户：\`"任务是否成功？"\`\n`;
+    prompt += `4. 若用户反馈失败，提供一套使用 eval 步骤的备选任务（通过 JS 强制填值并提交，选择器按当前页面 HTML 适配）\n\n`;
     prompt += `## 页面地址\n\n`;
     prompt += `${url}\n`;
     prompt += `> **不要填写 url 字段**：任务 JSON 的 url 字段留空或使用 \`"{{LOGIN_URL}}"\`，由用户在系统设置中配置。硬编码会导致任务无法通用。\n\n`;
@@ -2143,9 +2156,10 @@
     prompt += `| \`{{ISP}}\` | 运营商 | select / click_select 步骤的 value |\n`;
     prompt += `| \`{{LOGIN_URL}}\` | 认证地址 | url 字段（通常留空由系统填充） |\n\n`;
     prompt += `## 任务 JSON 顶层结构\n\n`;
-    prompt += `\`\`\`json\n{\n  "version": "${VERSION}",\n  "url": "",\n  "steps": [ /* 见下方步骤类型映射 */ ],\n  "on_success": { "message": "登录成功" },\n  "on_failure": { "message": "登录失败", "screenshot": true }\n}\n\`\`\`\n\n`;
+    prompt += `\`\`\`json\n{\n  "version": "${VERSION}",\n  "name": "校园网登录",\n  "description": "适用于 XX 型号认证页面",\n  "metadata": { "author": "your-name", "device": "设备型号" },\n  "url": "",\n  "timeout": 30000,\n  "steps": [ /* 见下方步骤类型映射 */ ],\n  "on_success": { "message": "登录成功" },\n  "on_failure": { "message": "登录失败", "screenshot": true }\n}\n\`\`\`\n\n`;
     prompt += `> \`on_failure.screenshot: true\` 会在登录失败时自动保存页面截图，便于排查问题。\n`;
-    prompt += `> **隐藏输入框：** 执行器会在普通 fill/click 失败后自动降级到强制模式处理隐藏输入框，通常无需额外配置；若不生效再添加 \`"reveal_hidden": true\`。检测到的隐藏输入框见后文「隐藏输入框检测」。\n\n`;
+    prompt += `> **隐藏输入框：** 执行器会在普通 fill/click 失败后自动降级到强制模式处理隐藏输入框，通常无需额外配置；若不生效再添加 \`"reveal_hidden": true\`。检测到的隐藏输入框见后文「隐藏输入框检测」。\n`;
+    prompt += `> **AJAX 动态渲染：** 若页面在 HTML 加载后通过 AJAX 动态渲染表单（如 ePortal），在顶层添加 \`"navigation_wait": 3\`（秒）等待表单渲染完成。若步骤间需要更长缓冲，可调整 \`"step_delay"\`（默认 0.5 秒）。\n`;
 
     // 步骤类型映射表
     prompt += `\n---\n\n## 步骤类型映射（录制器 → 任务JSON）\n\n`;
@@ -2169,16 +2183,14 @@
     prompt += `\n`;
 
     // 交叉验证指引 — 提醒 AI 不要盲信录制器选择器
-    prompt += `## ⚠️ 重要：请结合上下文 HTML 验证选择器\n\n`;
-    prompt += `录制器自动检测的选择器可能不准确。请在编写任务 JSON 前：\n\n`;
-    prompt += `1. **阅读上下文 HTML** — 仔细阅读下方的「页面上下文 HTML」，理解页面整体结构和各元素之间的关系\n`;
-    prompt += `2. **验证账号输入框** — 确认最佳选择器指向的确实是登录用的账号输入框（type="text"、有对应的 name/id/placeholder），而非搜索框或其他 text 字段\n`;
-    prompt += `3. **验证密码输入框** — 优先选择 type="password" 的输入框。如果页面同时存在 text 占位框和 password 真实框，请结合上下文自行判断。\n`;
-    prompt += `   - 该输入框的 name/id 是否符合预期（如 name="pwd"、id="password" 等）\n`;
-    prompt += `   - 如果有多个相似的输入框，选择器应指向登录用的那个，而非修改密码、确认密码等功能\n`;
-    prompt += `4. **验证提交按钮** — 确认是登录/提交按钮（type="submit" 或包含"登录"文字），而非重置或其他按钮\n`;
-    prompt += `5. **选择器优先级** — 优先使用 id 选择器，次选 name 属性选择器，避免使用易变的 class 选择器\n`;
-    prompt += `6. **隐藏输入框** — 若检测到的隐藏输入框 selector 看起来不对（指向了不相关的 input），请根据上下文 HTML 手动修正。无需在 JSON 中设置 force 字段（执行器自动降级处理，见开头说明）\n`;
+    prompt += `## ⚠️ 录制器检测的局限性\n\n`;
+    prompt += `再次强调：录制器的 \`bestSelector\` 和步骤分类是基于启发式规则自动检测的，**可能出错**。下方「录制到的元素」中的选择器仅供参考，请务必结合「页面上下文 HTML」独立判断：\n\n`;
+    prompt += `- **账号输入框**：确认指向 type="text" 的登录账号框，而非搜索框或其他 text 字段\n`;
+    prompt += `- **密码输入框**：优先 type="password"；若同时存在 text 占位框和 password 真实框，结合 HTML 判断哪个是真实输入框\n`;
+    prompt += `- **提交按钮**：确认是 type="submit" 或含"登录"文字的按钮，而非重置/其他按钮\n`;
+    prompt += `- **运营商选择**：根据 HTML 判断是原生 \`<select>\`（→ select 步骤）、自定义 div 下拉框（→ click_select）、还是平铺按钮组（→ click_select）\n`;
+    prompt += `- **隐藏输入框**：若检测到的隐藏输入框 selector 指向了不相关元素，根据 HTML 手动修正；无需设 force 字段（执行器自动降级）\n`;
+    prompt += `- **遗漏步骤**：若 HTML 中存在录制器未录制的协议勾选框、运营商选择等必要元素，请补充对应步骤\n`;
     prompt += `\n`;
 
     // 隐藏输入框警告汇总
@@ -2218,20 +2230,18 @@
           if (imgTag === "img" || imgTag === "canvas" || imgTag === "svg") {
             const charRangeDesc = imgStep?.charRange || "数字和 +-*/=xX÷ 运算符";
             prompt += `**图片形式数学验证码**（需要 OCR + eval 两步）\n\n`;
-            prompt += `第一步：ocr 步骤识别图片\n`;
-            prompt += `\n`;
-            prompt += `char_range 参数（限定识别字符，提高准确度）：\n`;
+            prompt += `第一步：ocr 步骤识别图片\n\n`;
+            prompt += `char_range 参数（限定识别字符，提高准确度），传入字符串限定允许的字符集：\n`;
             prompt += `| 值 | 字符集 |\n`;
             prompt += `|---|--------|\n`;
-            prompt += `| 0 | 纯数字 0-9 |\n`;
-            prompt += `| 1 | 纯小写英文 a-z |\n`;
-            prompt += `| 2 | 纯大写英文 A-Z |\n`;
-            prompt += `| 3 | 大写 + 小写英文 |\n`;
-            prompt += `| 4 | 小写英文 + 数字 |\n`;
-            prompt += `| 5 | 大写英文 + 数字 |\n`;
-            prompt += `| 6 | 大写 + 小写英文 + 数字 |\n`;
-            prompt += `| 7 | 默认字符库 |\n`;
-            prompt += `| 字符串 | 自定义字符集，如 "0123456789"、"0123456789+-*/=xX÷" |\n`;
+            prompt += `| "0123456789" | 纯数字 |\n`;
+            prompt += `| "abcdefghijklmnopqrstuvwxyz" | 纯小写英文 |\n`;
+            prompt += `| "ABCDEFGHIJKLMNOPQRSTUVWXYZ" | 纯大写英文 |\n`;
+            prompt += `| "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz" | 大写 + 小写英文 |\n`;
+            prompt += `| "abcdefghijklmnopqrstuvwxyz0123456789" | 小写英文 + 数字 |\n`;
+            prompt += `| "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789" | 大写英文 + 数字 |\n`;
+            prompt += `| "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789" | 大写 + 小写英文 + 数字 |\n`;
+            prompt += `| "0123456789+-*/=xX÷" | 数字 + 运算符（数学验证码） |\n`;
             prompt += `\n`;
             prompt += `\`\`\`json\n`;
             prompt += `{\n`;
@@ -2239,12 +2249,11 @@
             prompt += `  "type": "ocr",\n`;
             prompt += `  "selector": "${captchaSelector}",\n`;
             prompt += `  "store_as": "captcha_expr",\n`;
-            prompt += `  "char_range": "0123456789+-*/=xX÷",\n`;
-            prompt += `  "old": true\n`;
+            prompt += `  "char_range": "0123456789+-*/=xX÷"\n`;
             prompt += `}\n`;
-    prompt += `\`\`\`\n\n`;
-    prompt += `> \`"old": true\` 表示使用 ddddocr 旧版 OCR 模型（\`DdddOcr(old=True)\`），对部分老式验证码识别效果更好；默认 false 用新版模型，不确定时省略该字段。\n\n`;
-    prompt += `字符范围说明：${charRangeDesc}\n\n`;
+            prompt += `\`\`\`\n\n`;
+            prompt += `> 可选字段 \`"old": true\` 切换到 ddddocr 旧版 OCR 模型，对部分老式验证码识别效果更好；默认 false 用新版模型，不确定时省略该字段。\n\n`;
+            prompt += `字符范围说明：${charRangeDesc}\n\n`;
             prompt += `第二步：eval 步骤计算结果并填入\n`;
             prompt += `\n`;
             prompt += `eval 脚本采用多重匹配策略：\n`;
@@ -2328,6 +2337,7 @@
     }
 
     prompt += `## 录制到的元素 (${state.steps.length} 个步骤)\n\n`;
+    prompt += `> ⚠️ 以下选择器和分类是录制器自动检测的，**仅供参考**。请对照上方「页面上下文 HTML」逐一核实，修正错误的选择器、调整步骤顺序或补充遗漏步骤。不要原样照搬。\n`;
     prompt += `> 建议为每个步骤添加语义化 \`id\` 字段（如 \`username_input\`、\`login_submit\`），便于调试与步骤间变量引用（如 ocr 的 \`store_as\` 被 eval 引用）。\n\n`;
 
     state.steps.forEach((s, i) => {

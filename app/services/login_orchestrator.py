@@ -126,7 +126,9 @@ class LoginHandle:
 
 # ── 哨兵 ──
 
-# submit() 锁外 dispatch 时的占位哨兵，防止并发重复提交
+# submit() 锁外 dispatch 时的占位哨兵，防止并发重复提交。
+# future=None 不代表"无登录"，而是标记此句柄为占位符（非真实 Future），
+# 通过 `is _DISPATCHING` 身份检查区分，不依赖 None 语义。
 _DISPATCHING = LoginHandle(
     future=None, source="auto", cancel_event=CompositeCancelEvent()
 )

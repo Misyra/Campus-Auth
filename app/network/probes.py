@@ -10,14 +10,21 @@ from collections.abc import Iterable, Sequence
 import httpx
 import psutil
 
+from app.network.interface_bind import bind_socket_to_interface
 from app.utils.logging import get_logger
 
 logger = get_logger("network_probes", source="backend")
 
-_shutdown_event = threading.Event()
+# 探测超时默认值（秒）
+_TCP_TIMEOUT: float = 1.5
+_HTTP_TIMEOUT: float = 2.0
+_URL_CHECK_TIMEOUT: float = 3.0
+_INTERFACE_CONNECT_TIMEOUT: float = 1.0
 
 _proxy_lock = threading.Lock()
 _block_proxy = True  # 默认屏蔽系统代理，避免代理影响网络检测
+
+_shutdown_event = threading.Event()
 
 
 def shutdown_probes() -> None:
@@ -109,35 +116,42 @@ def _get_candidate_interfaces(
 
 
 async def _check_interface_connectivity(interface_name: str) -> bool:
-    """通过 TCP Connect 验证网卡连通性（async）。"""
+    """通过 TCP Connect 验证网卡连通性（async）。
+
+    绑定接口索引（IP_UNICAST_IF/SO_BINDTODEVICE/IP_BOUND_IF），
+    确保出站流量真正走指定接口，而非被默认路由接管。
+    """
+    from app.network.interface_bind import bind_socket_to_interface
+
     test_targets = [
         ("8.8.8.8", 53),
         ("114.114.114.114", 53),
         ("1.1.1.1", 53),
     ]
 
+    # 获取 fallback source IP（Linux 无 CAP_NET_RAW 时降级用）
+    fallback_ip = None
     addrs = psutil.net_if_addrs().get(interface_name, [])
-    source_ip = None
     for addr in addrs:
         if addr.family == socket.AF_INET:
-            source_ip = addr.address
+            fallback_ip = addr.address
             break
 
-    if not source_ip:
+    if not interface_name:
         return False
 
-    local_addr = (source_ip, 0)
+    loop = asyncio.get_running_loop()
     for host, port in test_targets:
-        try:
-            _, writer = await asyncio.wait_for(
-                asyncio.open_connection(host, port, local_addr=local_addr),
-                timeout=1.0,
-            )
-            writer.close()
-            await writer.wait_closed()
-            return True
-        except (OSError, TimeoutError):
-            continue
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.setblocking(False)
+            try:
+                bind_socket_to_interface(sock, interface_name, fallback_ip)
+                await asyncio.wait_for(
+                    loop.sock_connect(sock, (host, port)), timeout=_INTERFACE_CONNECT_TIMEOUT
+                )
+                return True
+            except (OSError, TimeoutError):
+                continue
 
     return False
 
@@ -204,10 +218,15 @@ async def _race_first_success_async(
 
 async def is_network_available_socket(
     test_sites: Sequence[tuple[str, int]] | None = None,
-    timeout: float = 1.5,
-    source_ip: str | None = None,
+    timeout: float = _TCP_TIMEOUT,
+    interface_name: str = "",
+    fallback_source_ip: str | None = None,
 ) -> bool:
-    """TCP 连通性检测（async）。"""
+    """TCP 连通性检测（async）。
+
+    绑定接口索引时，出站流量强制走指定接口（解决 Windows weak host model 下
+    source IP 绑定不控制出口路由的问题）。
+    """
     if _shutdown_event.is_set():
         return False
     if not test_sites:
@@ -217,22 +236,40 @@ async def is_network_available_socket(
         test_sites = parse_ping_targets(DEFAULT_NETWORK_TARGETS)
     targets = test_sites
 
-    local_addr = (source_ip, 0) if source_ip else None
+    use_interface = bool(interface_name)
+
+    loop = asyncio.get_running_loop()
 
     async def _connect_one(host: str, port: int) -> tuple[str, bool, str]:
         start = time.perf_counter()
-        try:
-            _, writer = await asyncio.wait_for(
-                asyncio.open_connection(host, port, local_addr=local_addr),
-                timeout=timeout,
-            )
-            writer.close()
-            await writer.wait_closed()
-            elapsed = (time.perf_counter() - start) * 1000
-            return (f"{host}:{port}", True, f"({elapsed:.0f}ms)")
-        except (OSError, TimeoutError):
-            elapsed = (time.perf_counter() - start) * 1000
-            return (f"{host}:{port}", False, "error")
+        # 绑网卡：手动建 socket + 绑接口 + sock_connect
+        # 不绑网卡：用 asyncio.open_connection（走系统默认路由）
+        if use_interface:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                sock.setblocking(False)
+                try:
+                    bind_socket_to_interface(sock, interface_name, fallback_source_ip)
+                    await asyncio.wait_for(
+                        loop.sock_connect(sock, (host, port)), timeout=timeout
+                    )
+                    elapsed = (time.perf_counter() - start) * 1000
+                    return (f"{host}:{port}", True, f"({elapsed:.0f}ms)")
+                except (OSError, TimeoutError):
+                    elapsed = (time.perf_counter() - start) * 1000
+                    return (f"{host}:{port}", False, "error")
+        else:
+            try:
+                _, writer = await asyncio.wait_for(
+                    asyncio.open_connection(host, port),
+                    timeout=timeout,
+                )
+                writer.close()
+                await writer.wait_closed()
+                elapsed = (time.perf_counter() - start) * 1000
+                return (f"{host}:{port}", True, f"({elapsed:.0f}ms)")
+            except (OSError, TimeoutError):
+                elapsed = (time.perf_counter() - start) * 1000
+                return (f"{host}:{port}", False, "error")
 
     tasks = [_connect_one(h, p) for h, p in targets]
     return await _race_first_success_async(
@@ -244,11 +281,9 @@ async def is_network_available_socket(
     )
 
 
-
-
 async def is_network_available_url(
     url_checks: Sequence[tuple[str, str]] | None = None,
-    timeout: float = 3.0,
+    timeout: float = _URL_CHECK_TIMEOUT,
     source_ip: str | None = None,
 ) -> bool:
     """通过网址响应检测 URL 检测网络连通性（async）。
@@ -312,7 +347,7 @@ async def is_network_available_url(
 
 async def is_network_available_http(
     test_urls: Iterable[str] | None = None,
-    timeout: float = 2.0,
+    timeout: float = _HTTP_TIMEOUT,
     follow_redirects: bool = True,
     source_ip: str | None = None,
 ) -> bool:

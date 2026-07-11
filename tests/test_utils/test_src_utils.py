@@ -174,14 +174,14 @@ class TestSystemTrayMethods:
         tray = SystemTray(on_exit=callback)
         tray.icon = MagicMock()
         tray._quit(None, None)
-        assert tray._exit_event.is_set()
+        callback.assert_called_once()
 
     def test_quit_without_icon(self):
         tray = SystemTray()
         callback = MagicMock()
         tray.on_exit = callback
         tray._quit(None, None)
-        assert tray._exit_event.is_set()
+        callback.assert_called_once()
 
     @patch("app.system_tray.threading.Thread")
     def test_start(self, mock_thread_cls):
@@ -469,16 +469,23 @@ class TestPlaywrightWorker:
 
 
 class TestCleanupOrphanBrowsers:
+    @pytest.fixture(autouse=True)
+    def _reset_cleanup_cooldown(self):
+        """每个测试前重置清理冷却时间，确保扫描逻辑被执行。"""
+        import app.workers.playwright_worker as pw
+
+        pw._last_cleanup_time = 0.0
+        yield
+        pw._last_cleanup_time = 0.0
+
     def test_kills_matching_processes(self):
         """匹配 ms-playwright + chrom 的进程应被终止。"""
         from app.workers.playwright_worker import cleanup_orphan_browsers
 
         mock_proc = MagicMock()
-        mock_proc.info = {
-            "pid": 1234,
-            "exe": "C:/ms-playwright/chromium-1234/chrome.exe",
-            "cmdline": ["chrome.exe", "--headless"],
-        }
+        mock_proc.info = {"pid": 1234, "name": "chrome.exe"}
+        mock_proc.exe.return_value = "C:/ms-playwright/chromium-1234/chrome.exe"
+        mock_proc.cmdline.return_value = ["chrome.exe", "--headless"]
         mock_proc.parent.return_value = None  # 孤儿进程，无父进程
 
         with patch("psutil.process_iter", return_value=[mock_proc]):
@@ -491,11 +498,9 @@ class TestCleanupOrphanBrowsers:
         from app.workers.playwright_worker import cleanup_orphan_browsers
 
         mock_proc = MagicMock()
-        mock_proc.info = {
-            "pid": 5678,
-            "exe": "C:/Program Files/Google/Chrome/chrome.exe",
-            "cmdline": ["chrome.exe"],
-        }
+        mock_proc.info = {"pid": 5678, "name": "chrome.exe"}
+        mock_proc.exe.return_value = "C:/Program Files/Google/Chrome/chrome.exe"
+        mock_proc.cmdline.return_value = ["chrome.exe"]
 
         with patch("psutil.process_iter", return_value=[mock_proc]):
             cleanup_orphan_browsers()
@@ -509,11 +514,9 @@ class TestCleanupOrphanBrowsers:
         from app.workers.playwright_worker import cleanup_orphan_browsers
 
         mock_proc = MagicMock()
-        mock_proc.info = {
-            "pid": 9999,
-            "exe": "C:/ms-playwright/chromium-1234/chrome.exe",
-            "cmdline": [],
-        }
+        mock_proc.info = {"pid": 9999, "name": "chrome.exe"}
+        mock_proc.exe.return_value = "C:/ms-playwright/chromium-1234/chrome.exe"
+        mock_proc.cmdline.return_value = []
         mock_proc.kill.side_effect = real_psutil.NoSuchProcess(9999)
 
         with patch("psutil.process_iter", return_value=[mock_proc]):
@@ -711,7 +714,7 @@ class TestQuit:
     """_quit。"""
 
     def test_quit_with_icon_and_callback(self):
-        """有 icon 和 on_exit 时 icon 被停止且退出事件被设置。"""
+        """有 icon 和 on_exit 时 icon 被停止且 on_exit 被调用。"""
         on_exit = MagicMock()
         tray = SystemTray(on_exit=on_exit)
         tray.icon = MagicMock()
@@ -719,17 +722,17 @@ class TestQuit:
         tray._quit(tray.icon, None)
 
         tray.icon.stop.assert_called_once()
-        assert tray._exit_event.is_set()
+        on_exit.assert_called_once()
 
     def test_quit_without_icon(self):
-        """无 icon 时仅设置退出事件。"""
+        """无 icon 时仅调用 on_exit。"""
         on_exit = MagicMock()
         tray = SystemTray(on_exit=on_exit)
         tray.icon = None
 
         tray._quit(None, None)
 
-        assert tray._exit_event.is_set()
+        on_exit.assert_called_once()
 
     def test_quit_without_callback(self):
         """无 on_exit 时仅调用 icon.stop。"""

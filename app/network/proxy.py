@@ -8,7 +8,8 @@ import socket
 import struct
 import threading
 
-from app.network.utils import is_local_address, is_routable_ip
+from app.network.interface_bind import bind_socket_to_interface
+from app.network.utils import is_local_address
 from app.utils.logging import get_logger
 
 logger = get_logger("socks5_proxy", source="backend")
@@ -17,11 +18,15 @@ MAX_CONNECTIONS = 128
 
 
 class Socks5Server:
-    """SOCKS5 代理服务器，用于浏览器流量的网卡绑定。"""
+    """SOCKS5 代理服务器，用于浏览器流量的网卡绑定。
 
-    def __init__(self, bind_ip: str) -> None:
-        self._bind_ip = bind_ip
-        self._bind_ip_lock = threading.Lock()
+    通过 IP_UNICAST_IF/SO_BINDTODEVICE/IP_BOUND_IF 绑定出站接口，
+    确保浏览器流量真正走指定网卡（而非被默认路由接管）。
+    """
+
+    def __init__(self, interface_name: str, fallback_source_ip: str) -> None:
+        self._interface_name = interface_name
+        self._fallback_ip = fallback_source_ip  # Linux 无 CAP_NET_RAW 时降级用
         self._server_sock: socket.socket | None = None
         self._accept_thread: threading.Thread | None = None
         self._stop_event = threading.Event()
@@ -61,17 +66,6 @@ class Socks5Server:
             self._accept_thread.join(timeout=5)
         logger.info("SOCKS5 Forwarder stopped")
 
-    def update_bind_ip(self, new_ip: str) -> None:
-        """更新出站连接的绑定 IP。"""
-        with self._bind_ip_lock:
-            old_ip = self._bind_ip
-            self._bind_ip = new_ip
-        logger.info("SOCKS5 bind IP updated: {} -> {}", old_ip, new_ip)
-
-    def _get_bind_ip(self) -> str:
-        with self._bind_ip_lock:
-            return self._bind_ip
-
     def _accept_loop(self) -> None:
         while not self._stop_event.is_set():
             try:
@@ -99,17 +93,19 @@ class Socks5Server:
         try:
             self._do_handshake(client)
             addr, port = self._do_connect_request(client)
-            bind_ip = self._get_bind_ip()
-            # 目标是本地地址或绑定 IP 不可路由时，不绑定 source_address
-            if is_local_address(addr) or not is_routable_ip(bind_ip):
-                source_addr = None
+
+            # 目标是本地地址时不绑接口（本地回环不该走外部网卡）
+            if is_local_address(addr):
+                remote = socket.create_connection((addr, port), timeout=10)
             else:
-                source_addr = (bind_ip, 0)
-            remote = socket.create_connection(
-                (addr, port),
-                timeout=10,
-                source_address=source_addr,
-            )
+                # 绑接口：手动建 socket + bind_socket_to_interface + connect
+                remote = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                remote.settimeout(10)
+                bind_socket_to_interface(
+                    remote, self._interface_name, self._fallback_ip
+                )
+                remote.connect((addr, port))
+
             # Success reply
             client.sendall(b"\x05\x00\x00\x01\x00\x00\x00\x00\x00\x00")
             self._relay(client, remote)

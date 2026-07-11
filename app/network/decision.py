@@ -1,6 +1,9 @@
+"""网络检测决策层 — 协调 TCP/HTTP/URL 探测，处理网卡绑定与暂停逻辑。"""
+
 from __future__ import annotations
 
 import asyncio
+import socket
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from urllib.parse import urlparse
@@ -9,6 +12,7 @@ from app.schemas import MonitorSettings, PauseSettings
 from app.utils.logging import get_logger
 from app.utils.time_utils import is_pause_enabled
 
+from .interface_bind import bind_socket_to_interface
 from .interfaces import InterfaceManager
 from .probes import (
     is_local_network_connected,
@@ -43,15 +47,22 @@ def _get_interface_mgr() -> InterfaceManager:
     return _interface_mgr
 
 
-def _resolve_source_ip(monitor: MonitorSettings) -> str | None:
-    """从 MonitorSettings 解析绑定网卡的 source_ip。"""
+def _resolve_interface(monitor: MonitorSettings) -> tuple[str, str | None]:
+    """从 MonitorSettings 解析绑定网卡信息。
+
+    Returns:
+        (interface_name, fallback_source_ip)
+        - interface_name: 网卡名，空串表示不绑定
+        - fallback_source_ip: Linux 无 CAP_NET_RAW 时降级用 source IP
+    """
     name = monitor.bind_interface_name
     if not name:
-        return None
+        return ("", None)
     ip = _get_interface_mgr().resolve_ip(name)
     if ip is None:
         logger.error("绑定网卡 {} 不可用，回退到系统默认路由", name)
-    return ip
+        return ("", None)
+    return (name, ip)
 
 
 # ── 公共 API：三个职责清晰的检查函数 ──
@@ -107,7 +118,7 @@ async def check_network_status(monitor: MonitorSettings) -> tuple[bool, str, str
 
     test_urls = monitor.test_urls if monitor.test_urls else None
 
-    source_ip = _resolve_source_ip(monitor)
+    interface_name, fallback_ip = _resolve_interface(monitor)
 
     ok = await is_network_available(
         test_sites=test_sites,
@@ -116,7 +127,8 @@ async def check_network_status(monitor: MonitorSettings) -> tuple[bool, str, str
         enable_tcp=enable_tcp,
         enable_http=enable_http,
         url_checks=url_checks,
-        source_ip=source_ip,
+        interface_name=interface_name,
+        fallback_source_ip=fallback_ip,
     )
 
     if ok:
@@ -138,8 +150,7 @@ async def check_login_prerequisites(
     monitor: MonitorSettings, auth_url: str
 ) -> tuple[bool, str]:
     """登录前置检查（async）：物理网络 + 认证地址可达性。"""
-    source_ip = _resolve_source_ip(monitor)
-    interface_name = monitor.bind_interface_name
+    interface_name, fallback_ip = _resolve_interface(monitor)
 
     # 物理网络连接检查
     if monitor.enable_local_check and not await is_local_network_connected(
@@ -152,7 +163,10 @@ async def check_login_prerequisites(
     if monitor.check_auth_url:
         extra_targets = monitor.auth_url_targets if monitor.auth_url_targets else None
         if not await _is_auth_url_reachable(
-            auth_url, extra_targets=extra_targets, source_ip=source_ip
+            auth_url,
+            extra_targets=extra_targets,
+            interface_name=interface_name,
+            fallback_source_ip=fallback_ip,
         ):
             logger.debug("认证地址不可达，跳过登录")
             return (False, "auth_url_unreachable")
@@ -170,10 +184,28 @@ async def is_network_available(
     enable_tcp: bool = True,
     enable_http: bool = True,
     url_checks: Sequence[tuple[str, str]] | None = None,
-    source_ip: str | None = None,
+    interface_name: str = "",
+    fallback_source_ip: str | None = None,
 ) -> bool:
-    """底层网络状态检测（async），不包含物理网络检查。"""
+    """底层网络状态检测（async），不包含物理网络检查。
+
+    绑定网卡时（interface_name 非空）：HTTP/URL 探测因 httpx 无法绑接口而跳过，
+    只保留 TCP 探测（绑接口后能准确判断网卡连通性）。
+    """
     enable_url = bool(url_checks)
+
+    # 绑网卡时：只保留 TCP 探测（绑接口），跳过 HTTP/URL（httpx 无法绑接口）
+    if interface_name:
+        if not enable_tcp:
+            logger.warning("绑定网卡但 TCP 检测未启用，无法判断网络状态")
+            return False
+        logger.debug("绑定网卡 {}，仅使用 TCP 探测", interface_name)
+        return await is_network_available_socket(
+            test_sites=test_sites,
+            timeout=timeout,
+            interface_name=interface_name,
+            fallback_source_ip=fallback_source_ip,
+        )
 
     if not enable_tcp and not enable_http and not enable_url:
         return True
@@ -195,7 +227,7 @@ async def is_network_available(
     if enable_tcp:
         tasks.append(
             is_network_available_socket(
-                test_sites=test_sites, timeout=timeout, source_ip=source_ip
+                test_sites=test_sites, timeout=timeout
             )
         )
     if enable_http:
@@ -204,7 +236,6 @@ async def is_network_available(
                 test_urls=urls_list,
                 timeout=max(timeout, 2.0),
                 follow_redirects=not enable_tcp,
-                source_ip=source_ip,
             )
         )
     if enable_url:
@@ -212,7 +243,6 @@ async def is_network_available(
             is_network_available_url(
                 url_checks=url_checks,
                 timeout=max(timeout, 3.0),
-                source_ip=source_ip,
             )
         )
 
@@ -241,27 +271,47 @@ async def is_network_available(
 async def _is_auth_url_reachable(
     auth_url: str,
     extra_targets: Sequence[str] | None = None,
-    source_ip: str | None = None,
+    interface_name: str = "",
+    fallback_source_ip: str | None = None,
 ) -> bool:
-    """检查认证地址及附加目标的 TCP 可达性（async）。"""
+    """检查认证地址及附加目标的 TCP 可达性（async）。
+
+    绑定网卡时用接口索引绑定，确保探测走指定接口。
+    """
     if not auth_url and not extra_targets:
         return True
 
-    local_addr = (source_ip, 0) if source_ip else None
+    use_interface = bool(interface_name)
+    loop = asyncio.get_running_loop()
 
     async def _check_host_port(host: str, port: int, label: str) -> bool:
-        try:
-            _, writer = await asyncio.wait_for(
-                asyncio.open_connection(host, port, local_addr=local_addr),
-                timeout=3,
-            )
-            writer.close()
-            await writer.wait_closed()
-            logger.debug("认证可达性检测通过: {}", label)
-            return True
-        except (OSError, TimeoutError) as exc:
-            logger.debug("认证可达性检测失败: {} -- {}", label, exc)
-            return False
+        if use_interface:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.setblocking(False)
+            try:
+                bind_socket_to_interface(sock, interface_name, fallback_source_ip)
+                await asyncio.wait_for(
+                    loop.sock_connect(sock, (host, port)), timeout=3
+                )
+                sock.close()
+                logger.debug("认证可达性检测通过: {}", label)
+                return True
+            except (OSError, TimeoutError) as exc:
+                sock.close()
+                logger.debug("认证可达性检测失败: {} -- {}", label, exc)
+                return False
+        else:
+            try:
+                _, writer = await asyncio.wait_for(
+                    asyncio.open_connection(host, port), timeout=3
+                )
+                writer.close()
+                await writer.wait_closed()
+                logger.debug("认证可达性检测通过: {}", label)
+                return True
+            except (OSError, TimeoutError) as exc:
+                logger.debug("认证可达性检测失败: {} -- {}", label, exc)
+                return False
 
     if extra_targets:
         from app.network.parsers import parse_host_port
