@@ -1,6 +1,7 @@
 """方案路由 — 配置方案的 CRUD、活动方案、网络检测、自动切换。"""
 
 from __future__ import annotations
+from typing import Any, Callable
 
 from fastapi import APIRouter, HTTPException
 
@@ -20,7 +21,7 @@ router = APIRouter()
 api_logger = get_logger("api", source="backend")
 
 
-def _safe_detect(func, label: str, default=None):
+def _safe_detect(func: Callable[..., Any], label: str, default: Any = None) -> Any:
     """安全执行检测函数，异常时记录日志并返回默认值。"""
     try:
         return func()

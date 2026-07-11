@@ -409,7 +409,7 @@ class TestLoginWithNetworkDetection:
         """引擎循环中网络检测触发登录的集成测试。"""
         svc = _make_raw_engine()
 
-        # 创建一个真实的 monitor_core（_is_monitoring 是 property，通过设置 monitor_core 控制）
+        # 创建一个真实的 monitor_core（is_monitoring 是 property，通过设置 monitor_core 控制）
         mock_core = MagicMock()
         mock_core.monitoring = True
         mock_core.check_once = AsyncMock(
@@ -455,8 +455,8 @@ class TestLoginWithNetworkDetection:
         now = time.time()
         svc._next_network_check = now  # 立即检测
 
-        # 手动执行一次循环逻辑（_is_monitoring 是 property，通过 mock_core.monitoring 控制）
-        assert svc._is_monitoring is True
+        # 手动执行一次循环逻辑（is_monitoring 是 property，通过 mock_core.monitoring 控制）
+        assert svc.is_monitoring is True
         assert now >= svc._next_network_check
         await svc._do_network_check_async()
 

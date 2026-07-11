@@ -149,25 +149,15 @@ class BrowserTaskRunner:
             )
             return await self._handle_success(page)
 
-        except (PlaywrightTimeout, OSError) as e:
-            total_elapsed = (time.perf_counter() - task_start) * 1000
-            logger.exception(
-                "任务执行异常: {} (耗时 {:.0f}ms): {}",
-                self.config.name,
-                total_elapsed,
-                e,
-            )
-            return await self._handle_failure(page, None, str(e))
         except Exception as e:
             total_elapsed = (time.perf_counter() - task_start) * 1000
             logger.exception(
-                "任务执行异常: {} (耗时 {:.0f}ms): {}",
+                "任务执行异常: {} (耗时 {:.0f}ms)",
                 self.config.name,
                 total_elapsed,
-                e,
             )
             try:
-                return await self._handle_failure(page, None, f"内部错误: {e}")
+                return await self._handle_failure(page, None, str(e))
             except Exception:
                 return (False, f"内部错误: {e}")
 
@@ -328,6 +318,7 @@ class BrowserTaskRunner:
             from app.schemas import MonitorSettings
 
             cfg = self.monitor_config
+            # 过滤逻辑：仅保留 MonitorSettings 认可的字段，排除 None 和空集合（空 list/str/dict）
             monitor = MonitorSettings(
                 **{
                     k: v
@@ -350,9 +341,8 @@ class BrowserTaskRunner:
                 logger.warning("网络仍不可达 (状态={})", status)
 
             return ok
-
-        except Exception as e:
-            logger.exception("网络验证异常: {}", e)
+        except Exception:
+            logger.exception("网络验证异常")
             return False
 
     async def _handle_success(self, page) -> tuple[bool, str]:

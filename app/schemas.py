@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 import re
 from dataclasses import dataclass
 from enum import StrEnum
@@ -13,6 +15,7 @@ from app.constants import (
     URL_PATTERN,
     VALID_LOG_LEVELS,
 )
+from app.utils.ports import DEFAULT_APP_PORT
 
 
 class StartupAction(StrEnum):
@@ -371,7 +374,7 @@ class AppSettings(BaseModel, frozen=True):
     minimize_to_tray: bool = True
     auto_open_browser: bool = False
     proxy: str = ""
-    app_port: int = Field(default=50721, ge=1, le=65535)
+    app_port: int = Field(default=DEFAULT_APP_PORT, ge=1, le=65535)
 
 
 # ── API 请求/响应模型 ──
@@ -431,12 +434,12 @@ class ConfigPatchRequest(BaseModel):
 class ConfigResponse(BaseModel):
     """GET /api/config 响应 — 完整配置快照。"""
 
-    browser: dict = Field(default_factory=dict)
-    monitor: dict = Field(default_factory=dict)
-    retry: dict = Field(default_factory=dict)
-    pause: dict = Field(default_factory=dict)
-    logging: dict = Field(default_factory=dict)
-    app_settings: dict = Field(default_factory=dict)
+    browser: dict[str, Any] = Field(default_factory=dict)
+    monitor: dict[str, Any] = Field(default_factory=dict)
+    retry: dict[str, Any] = Field(default_factory=dict)
+    pause: dict[str, Any] = Field(default_factory=dict)
+    logging: dict[str, Any] = Field(default_factory=dict)
+    app_settings: dict[str, Any] = Field(default_factory=dict)
     username: str = ""
     password: str = ""
     has_password: bool = False
@@ -447,7 +450,7 @@ class ConfigResponse(BaseModel):
 
 
 class LogLevelRequest(BaseModel):
-    level: str = Field(min_length=1, description="日志级别（DEBUG/INFO/WARNING/ERROR）")
+    level: str = Field(min_length=1, pattern=r"^(DEBUG|INFO|WARNING|ERROR)$", description="日志级别（DEBUG/INFO/WARNING/ERROR）")
 
 
 class AutoSwitchRequest(BaseModel):

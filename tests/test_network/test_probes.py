@@ -140,7 +140,7 @@ class TestTcpProbeInterfaceBind:
             return FakeLoop()
 
         monkeypatch.setattr(
-            "asyncio.get_event_loop", lambda: FakeLoop()
+            "asyncio.get_running_loop", lambda: FakeLoop()
         )
         # bind_socket_to_interface 需要 mock，否则 Windows 上会真绑
         monkeypatch.setattr(

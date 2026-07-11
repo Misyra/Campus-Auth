@@ -2,9 +2,16 @@ import { DEFAULT_CONFIG } from '../constants.js';
 
 // 深拷贝嵌套配置
 function cloneConfig(src) {
+  const m = src.monitor;
   return {
     browser: { ...src.browser },
-    monitor: { ...src.monitor },
+    monitor: {
+      ...m,
+      ping_targets: [...m.ping_targets],
+      test_urls: [...m.test_urls],
+      url_check_urls: [...m.url_check_urls],
+      auth_url_targets: [...m.auth_url_targets],
+    },
     pause: { ...src.pause },
     logging: { ...src.logging },
     retry: { ...src.retry },

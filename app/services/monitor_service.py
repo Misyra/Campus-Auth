@@ -88,6 +88,9 @@ class NetworkMonitorCore:
         # bind_interface_name 指纹：变化时需重建 SOCKS5 Forwarder
         self._last_bind_interface: str = ""
 
+        # 绑定代理 URL（由 _start_bind_proxy 设置）
+        self._bind_proxy_url: str | None = None
+
     def log_message(
         self, message: str, level: str = "INFO", exc_info: bool = False
     ) -> None:
@@ -308,7 +311,7 @@ class NetworkMonitorCore:
     @property
     def bind_proxy_url(self) -> str | None:
         """当前绑定代理 URL（供引擎传递给 Worker）。"""
-        return getattr(self, "_bind_proxy_url", None)
+        return self._bind_proxy_url
 
     def _start_bind_proxy(self) -> None:
         """根据 bind_interface_name 启动 SOCKS5 Forwarder。"""
@@ -349,8 +352,8 @@ class NetworkMonitorCore:
             self.log_message(
                 f"网卡绑定已启用: {bind_name} ({bind_ip}) -> {self._bind_proxy_url}"
             )
-        except Exception as e:
-            self.log_message(f"SOCKS5 Forwarder 启动失败，关闭绑定功能: {e}", "ERROR")
+        except Exception as exc:
+            self.log_message(f"SOCKS5 Forwarder 启动失败，关闭绑定功能: {exc}", "ERROR")
             self._socks5_server = None
             self._bind_proxy_url = None
 

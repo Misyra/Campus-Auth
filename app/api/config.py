@@ -145,54 +145,94 @@ def _flatten_dict(d: dict, parent_key: str = "") -> dict:
     return dict(items)
 
 
+# 配置字段中文名称映射（用于变更日志）
+_CONFIG_FIELD_NAMES = {
+    "browser.headless": "无头模式",
+    "browser.pure_mode": "纯净模式",
+    "browser.stealth_mode": "反检测模式",
+    "browser.low_resource_mode": "低资源模式",
+    "browser.disable_web_security": "禁用同源策略",
+    "monitor.enable_tcp_check": "TCP检测",
+    "monitor.enable_http_check": "HTTP检测",
+    "monitor.enable_local_check": "本地网络检测",
+    "monitor.check_auth_url": "认证地址检测",
+    "pause.enabled": "暂停时段",
+    "app_settings.block_proxy": "屏蔽系统代理",
+    "app_settings.minimize_to_tray": "最小化到托盘",
+    "app_settings.auto_open_browser": "自动打开浏览器",
+    "app_settings.runtime_mode": "自启动运行模式",
+    "logging.access_log": "HTTP访问日志",
+    "browser.browser_channel": "浏览器类型",
+    "browser.timeout": "浏览器超时",
+    "browser.navigation_timeout": "页面加载超时",
+    "browser.login_timeout": "登录超时",
+    "monitor.check_interval_seconds": "检测间隔",
+    "retry.max_retries": "最大重试次数",
+    "retry.retry_interval": "重试间隔",
+    "logging.log_retention_days": "日志保留天数",
+    "logging.level": "后端日志级别",
+    "app_settings.app_port": "网页端口",
+    "app_settings.proxy": "网络代理",
+    "app_settings.shell_path": "Shell路径",
+    "browser.viewport_width": "视口宽度",
+    "browser.viewport_height": "视口高度",
+    "pause.start_hour": "暂停开始时间",
+    "pause.end_hour": "暂停结束时间",
+    "monitor.network_check_timeout": "网络检测超时",
+    "isp": "运营商",
+    "carrier_custom": "自定义运营商",
+}
+
+# 变更日志中直接忽略的字段
+_CONFIG_IGNORE_FIELDS = {"password"}
+
+
+def _diff_config_changes(
+    flat_old: dict, flat_new: dict
+) -> list[str]:
+    """比较新旧扁平化配置，返回变更描述列表。"""
+    changes: list[str] = []
+
+    # 密码变更检测
+    new_pw = flat_new.get("password", "")
+    old_pw = flat_old.get("password", "")
+    if new_pw and old_pw != new_pw:
+        changes.append("密码已修改")
+
+    for field_name in flat_old:
+        if field_name in _CONFIG_IGNORE_FIELDS:
+            continue
+        old_val = flat_old.get(field_name)
+        new_val = flat_new.get(field_name)
+        if old_val == new_val:
+            continue
+        name = _CONFIG_FIELD_NAMES.get(field_name, field_name)
+        if isinstance(new_val, bool):
+            old_status = "开启" if old_val else "关闭"
+            new_status = "开启" if new_val else "关闭"
+            changes.append(f"{name}: {old_status} → {new_status}")
+        else:
+            changes.append(f"{name}已修改")
+
+    for field_name in flat_new:
+        if field_name in flat_old or field_name in _CONFIG_IGNORE_FIELDS:
+            continue
+        new_val = flat_new.get(field_name)
+        if new_val:
+            name = _CONFIG_FIELD_NAMES.get(field_name, field_name)
+            changes.append(f"{name}已设置")
+
+    return changes
+
+
 def _log_config_changes(old_dict: dict, new_payload: ConfigSaveRequest) -> None:
-    """记录配置变更日志
+    """记录配置变更日志。
 
     规则：
     - bool 字段：显示前后状态（开启/关闭）
     - int/float/string 字段：只记录"已修改"
     - password 字段：完全忽略
     """
-    FIELD_NAMES = {
-        "browser.headless": "无头模式",
-        "browser.pure_mode": "纯净模式",
-        "browser.stealth_mode": "反检测模式",
-        "browser.low_resource_mode": "低资源模式",
-        "browser.disable_web_security": "禁用同源策略",
-        "monitor.enable_tcp_check": "TCP检测",
-        "monitor.enable_http_check": "HTTP检测",
-        "monitor.enable_local_check": "本地网络检测",
-        "monitor.check_auth_url": "认证地址检测",
-        "pause.enabled": "暂停时段",
-        "app_settings.block_proxy": "屏蔽系统代理",
-        "app_settings.minimize_to_tray": "最小化到托盘",
-        "app_settings.auto_open_browser": "自动打开浏览器",
-        "app_settings.runtime_mode": "自启动运行模式",
-        "logging.access_log": "HTTP访问日志",
-        "browser.browser_channel": "浏览器类型",
-        "browser.timeout": "浏览器超时",
-        "browser.navigation_timeout": "页面加载超时",
-        "browser.login_timeout": "登录超时",
-        "monitor.check_interval_seconds": "检测间隔",
-        "retry.max_retries": "最大重试次数",
-        "retry.retry_interval": "重试间隔",
-        "logging.log_retention_days": "日志保留天数",
-        "logging.level": "后端日志级别",
-        "app_settings.app_port": "网页端口",
-        "app_settings.proxy": "网络代理",
-        "app_settings.shell_path": "Shell路径",
-        "browser.viewport_width": "视口宽度",
-        "browser.viewport_height": "视口高度",
-        "pause.start_hour": "暂停开始时间",
-        "pause.end_hour": "暂停结束时间",
-        "monitor.network_check_timeout": "网络检测超时",
-        "isp": "运营商",
-        "carrier_custom": "自定义运营商",
-    }
-
-    # 直接忽略的字段（不记录变更）
-    IGNORE_FIELDS = {"password"}
-
     # BUG-005 修复：扁平化嵌套字典后再比较
     # old_dict 来自 RuntimeConfig（credentials 嵌套），new_payload 来自 ConfigSaveRequest（凭据平铺）
     # 需要将 old_dict 的 credentials 扁平化到顶层后再比较
@@ -202,42 +242,7 @@ def _log_config_changes(old_dict: dict, new_payload: ConfigSaveRequest) -> None:
     flat_old = _flatten_dict(_old)
     flat_new = _flatten_dict(new_payload.model_dump())
 
-    changes = []
-
-    # 密码变更检测（顶层 password，不再嵌套在 credentials 下）
-    new_pw = flat_new.get("password", "")
-    old_pw = flat_old.get("password", "")
-    if new_pw and old_pw != new_pw:
-        changes.append("密码已修改")
-
-    for field_name in flat_old:
-        if field_name in IGNORE_FIELDS:
-            continue
-
-        old_val = flat_old.get(field_name)
-        new_val = flat_new.get(field_name)
-
-        if old_val == new_val:
-            continue
-
-        name = FIELD_NAMES.get(field_name, field_name)
-
-        # 布尔字段显示前后状态
-        if isinstance(new_val, bool):
-            old_status = "开启" if old_val else "关闭"
-            new_status = "开启" if new_val else "关闭"
-            changes.append(f"{name}: {old_status} → {new_status}")
-        else:
-            changes.append(f"{name}已修改")
-
-    for field_name in flat_new:
-        if field_name in flat_old or field_name in IGNORE_FIELDS:
-            continue
-        new_val = flat_new.get(field_name)
-        if new_val:
-            name = FIELD_NAMES.get(field_name, field_name)
-            changes.append(f"{name}已设置")
-
+    changes = _diff_config_changes(flat_old, flat_new)
     if changes:
         config_logger.debug("配置变更: {}", "; ".join(changes))
 

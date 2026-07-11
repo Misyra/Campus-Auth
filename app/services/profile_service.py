@@ -369,6 +369,7 @@ def save_global_and_profile(
             existing = data.profiles.get("default", Profile())
 
         # ISP 反向映射
+        # TODO: 与 config_builder.py 的 ISP 转换逻辑重复，考虑提取为公共函数
         carrier_custom = payload.carrier_custom or ""
         if carrier_custom:
             carrier = "自定义"

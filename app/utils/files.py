@@ -108,7 +108,7 @@ class DirSizeResult(NamedTuple):
     complete: bool
 
 
-def dir_size_mb(path: Path | str) -> DirSizeResult:
+def dir_size_mb(path: Path | str, max_entries: int = 100000) -> DirSizeResult:
     """递归计算目录或文件的磁盘占用（MB）。
 
     使用 rglob + stat 遍历所有文件，累加大小后转换为 MB。
@@ -116,6 +116,7 @@ def dir_size_mb(path: Path | str) -> DirSizeResult:
 
     Args:
         path: 目录或文件路径。
+        max_entries: 最大遍历条目数，防止超大目录无限遍历。默认 100000。
 
     Returns:
         DirSizeResult(size_mb, complete)。路径不存在时返回 DirSizeResult(0.0, True)。
@@ -128,10 +129,15 @@ def dir_size_mb(path: Path | str) -> DirSizeResult:
 
     total = 0
     complete = True
+    count = 0
     try:
         for f in p.rglob("*"):
             if f.is_file():
                 total += f.stat().st_size
+            count += 1
+            if count >= max_entries:
+                complete = False
+                break
     except OSError:
         complete = False
     return DirSizeResult(round(total / (1024 * 1024), 1), complete)

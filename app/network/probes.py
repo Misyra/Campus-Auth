@@ -15,10 +15,16 @@ from app.utils.logging import get_logger
 
 logger = get_logger("network_probes", source="backend")
 
-_shutdown_event = threading.Event()
+# 探测超时默认值（秒）
+_TCP_TIMEOUT: float = 1.5
+_HTTP_TIMEOUT: float = 2.0
+_URL_CHECK_TIMEOUT: float = 3.0
+_INTERFACE_CONNECT_TIMEOUT: float = 1.0
 
 _proxy_lock = threading.Lock()
 _block_proxy = True  # 默认屏蔽系统代理，避免代理影响网络检测
+
+_shutdown_event = threading.Event()
 
 
 def shutdown_probes() -> None:
@@ -134,20 +140,18 @@ async def _check_interface_connectivity(interface_name: str) -> bool:
     if not interface_name:
         return False
 
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     for host, port in test_targets:
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.setblocking(False)
-        try:
-            bind_socket_to_interface(sock, interface_name, fallback_ip)
-            await asyncio.wait_for(
-                loop.sock_connect(sock, (host, port)), timeout=1.0
-            )
-            sock.close()
-            return True
-        except (OSError, TimeoutError):
-            sock.close()
-            continue
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.setblocking(False)
+            try:
+                bind_socket_to_interface(sock, interface_name, fallback_ip)
+                await asyncio.wait_for(
+                    loop.sock_connect(sock, (host, port)), timeout=_INTERFACE_CONNECT_TIMEOUT
+                )
+                return True
+            except (OSError, TimeoutError):
+                continue
 
     return False
 
@@ -214,7 +218,7 @@ async def _race_first_success_async(
 
 async def is_network_available_socket(
     test_sites: Sequence[tuple[str, int]] | None = None,
-    timeout: float = 1.5,
+    timeout: float = _TCP_TIMEOUT,
     interface_name: str = "",
     fallback_source_ip: str | None = None,
 ) -> bool:
@@ -234,27 +238,25 @@ async def is_network_available_socket(
 
     use_interface = bool(interface_name)
 
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
 
     async def _connect_one(host: str, port: int) -> tuple[str, bool, str]:
         start = time.perf_counter()
         # 绑网卡：手动建 socket + 绑接口 + sock_connect
         # 不绑网卡：用 asyncio.open_connection（走系统默认路由）
         if use_interface:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.setblocking(False)
-            try:
-                bind_socket_to_interface(sock, interface_name, fallback_source_ip)
-                await asyncio.wait_for(
-                    loop.sock_connect(sock, (host, port)), timeout=timeout
-                )
-                sock.close()
-                elapsed = (time.perf_counter() - start) * 1000
-                return (f"{host}:{port}", True, f"({elapsed:.0f}ms)")
-            except (OSError, TimeoutError):
-                sock.close()
-                elapsed = (time.perf_counter() - start) * 1000
-                return (f"{host}:{port}", False, "error")
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                sock.setblocking(False)
+                try:
+                    bind_socket_to_interface(sock, interface_name, fallback_source_ip)
+                    await asyncio.wait_for(
+                        loop.sock_connect(sock, (host, port)), timeout=timeout
+                    )
+                    elapsed = (time.perf_counter() - start) * 1000
+                    return (f"{host}:{port}", True, f"({elapsed:.0f}ms)")
+                except (OSError, TimeoutError):
+                    elapsed = (time.perf_counter() - start) * 1000
+                    return (f"{host}:{port}", False, "error")
         else:
             try:
                 _, writer = await asyncio.wait_for(
@@ -281,7 +283,7 @@ async def is_network_available_socket(
 
 async def is_network_available_url(
     url_checks: Sequence[tuple[str, str]] | None = None,
-    timeout: float = 3.0,
+    timeout: float = _URL_CHECK_TIMEOUT,
     source_ip: str | None = None,
 ) -> bool:
     """通过网址响应检测 URL 检测网络连通性（async）。
@@ -345,7 +347,7 @@ async def is_network_available_url(
 
 async def is_network_available_http(
     test_urls: Iterable[str] | None = None,
-    timeout: float = 2.0,
+    timeout: float = _HTTP_TIMEOUT,
     follow_redirects: bool = True,
     source_ip: str | None = None,
 ) -> bool:

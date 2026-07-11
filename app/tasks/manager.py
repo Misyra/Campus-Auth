@@ -6,7 +6,7 @@ import functools
 import json
 import threading
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from app.utils.files import atomic_write
 from app.utils.logging import get_logger
@@ -21,9 +21,10 @@ _DANGEROUS_STEP_TYPES = {"eval", "custom_js"}
 SCRIPT_TASK_TYPE = "script"
 
 _INVALID_ID_MSG = "任务ID只能包含字母、数字、下划线和连字符，长度不超过64"
+_MAX_SCRIPT_SIZE_BYTES = 100 * 1024  # 脚本内容最大 100KB
 
 
-def _with_task_id_validation(func):
+def _with_task_id_validation(func: Callable[..., tuple[bool, str]]) -> Callable[..., tuple[bool, str]]:
     """装饰器：规范化 task_id 并校验有效性，无效时返回 (False, 错误消息)。"""
 
     @functools.wraps(func)
@@ -589,9 +590,8 @@ class TaskManager:
         if not content.strip():
             return False, "脚本内容不能为空"
 
-        max_size = 100 * 1024
-        if len(content.encode("utf-8")) > max_size:
-            return False, f"脚本内容超过大小限制（最大 {max_size // 1024}KB）"
+        if len(content.encode("utf-8")) > _MAX_SCRIPT_SIZE_BYTES:
+            return False, f"脚本内容超过大小限制（最大 {_MAX_SCRIPT_SIZE_BYTES // 1024}KB）"
 
         save_data = {
             "content": content,

@@ -157,7 +157,7 @@ class TestNetworkInterfacesAPI:
                 name="以太网", ip="192.168.1.5", gateway="192.168.1.1", is_up=True
             ),
         ]
-        with patch("app.api.monitor.InterfaceManager") as MockMgr:
+        with patch("app.network.interfaces.InterfaceManager") as MockMgr:
             MockMgr.return_value.list_interfaces.return_value = fake_interfaces
             resp = test_client.get("/api/network/interfaces")
 
@@ -174,7 +174,7 @@ class TestNetworkInterfacesAPI:
         from unittest.mock import patch
 
         test_client, _mock_services = api_client
-        with patch("app.api.monitor.InterfaceManager") as MockMgr:
+        with patch("app.network.interfaces.InterfaceManager") as MockMgr:
             MockMgr.return_value.list_interfaces.return_value = []
             resp = test_client.get("/api/network/interfaces")
 
@@ -193,7 +193,7 @@ class TestNetworkInterfacesAPI:
             ),
             InterfaceInfo(name="WLAN", ip="10.0.0.2", gateway="10.0.0.1", is_up=False),
         ]
-        with patch("app.api.monitor.InterfaceManager") as MockMgr:
+        with patch("app.network.interfaces.InterfaceManager") as MockMgr:
             MockMgr.return_value.list_interfaces.return_value = fake_interfaces
             resp = test_client.get("/api/network/interfaces")
 

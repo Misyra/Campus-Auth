@@ -15,7 +15,11 @@ api_logger = get_logger("api", source="backend")
 async def repo_fetch_index(
     url: str = Query(..., description="索引 JSON 地址"),
 ) -> list:
-    """代理获取任务仓库索引，避免前端跨域问题"""
+    """代理获取任务仓库索引，避免前端跨域问题
+
+    注意：async_repo_fetch_json 内部已验证响应是否为目标类型（list/dict），
+    类型不符时抛出 HTTPException(422)。
+    """
     validate_url(url)
     return await async_repo_fetch_json(url, list, "索引")
 

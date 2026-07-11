@@ -16,6 +16,7 @@ router = APIRouter()
 
 # 并发保护
 _install_lock = asyncio.Lock()
+_IDLE_TIMEOUT_SECONDS = 300  # 安装进程无输出超时（秒）
 
 
 @router.post("/api/browsers/install-playwright", response_model=ApiResponse)
@@ -54,8 +55,8 @@ async def install_playwright_chromium() -> ApiResponse:
                             last_output = time.monotonic()
                 except asyncio.TimeoutError:
                     idle = time.monotonic() - last_output
-                    if idle > 300:
-                        logger.warning("安装 Playwright 失败: 5 分钟无输出")
+                    if idle > _IDLE_TIMEOUT_SECONDS:
+                        logger.warning("安装 Playwright 失败: {}秒无输出", _IDLE_TIMEOUT_SECONDS)
                         process.kill()
                         raise
                     logger.debug("Playwright 安装 30 秒无输出，继续等待")

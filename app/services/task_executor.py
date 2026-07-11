@@ -14,7 +14,12 @@ import threading
 import time
 from collections.abc import Callable
 from concurrent.futures import Future, ThreadPoolExecutor
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from app.services.login_orchestrator import LoginOrchestrator
+    from app.services.task_registry import TaskHistoryStore, TaskRegistry
+    from app.tasks.manager import TaskManager
 
 from app.schemas import RuntimeConfig
 from app.utils.logging import get_logger
@@ -100,11 +105,11 @@ class TaskExecutor:
 
     def __init__(
         self,
-        registry: Any,
-        history_store: Any,
+        registry: TaskRegistry,
+        history_store: TaskHistoryStore,
         worker_getter: Callable,
-        login_orchestrator: Any = None,
-        task_manager: Any = None,
+        login_orchestrator: LoginOrchestrator | None = None,
+        task_manager: TaskManager | None = None,
         get_runtime_config: Callable[[], RuntimeConfig] | None = None,
     ) -> None:
         self._registry = registry
@@ -286,6 +291,7 @@ class TaskExecutor:
                     f"不支持的任务类型: {task_type}，当前支持: script、browser、shell",
                 )
         except Exception as exc:
+            logger.warning("任务执行异常", exc_info=True)
             success, message = False, f"执行异常: {exc}"
 
         duration = time.perf_counter() - start

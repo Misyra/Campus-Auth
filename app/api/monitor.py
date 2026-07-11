@@ -7,7 +7,6 @@ import asyncio
 from fastapi import APIRouter, HTTPException, Query
 
 from app.deps import MonitorServiceDep
-from app.network.interfaces import InterfaceManager
 from app.schemas import ApiResponse, LogEntry, MonitorStatusResponse, PureModeResponse
 from app.utils.logging import get_logger
 
@@ -123,6 +122,7 @@ def toggle_pure_mode(
 @router.get("/api/network/interfaces")
 async def get_network_interfaces() -> list[dict[str, object]]:
     """枚举可用物理网卡。"""
+    from app.network.interfaces import InterfaceManager
     mgr = InterfaceManager()
     interfaces = mgr.list_interfaces()
     return [

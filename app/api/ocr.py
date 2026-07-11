@@ -30,6 +30,7 @@ def _check_ddddocr_installed() -> bool:
         deps = data.get("project", {}).get("dependencies", [])
         return any("ddddocr" in dep for dep in deps)
     except Exception:
+        api_logger.debug("读取 pyproject.toml 失败", exc_info=True)
         return False
 
 

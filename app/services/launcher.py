@@ -35,8 +35,14 @@ from app.utils.shutdown import force_exit
 
 # ==================== 内部辅助函数 ====================
 
+# 进程退出等待超时（秒）
+_PROCESS_EXIT_TIMEOUT = 5
+# Web 服务就绪检查：最大重试次数和间隔（总等待 = 30 × 0.5s = 15s）
+_WEB_READY_MAX_RETRIES = 30
+_WEB_READY_CHECK_INTERVAL = 0.5
 
-def _wait_for_exit(pid: int, max_wait: int = 5) -> bool:
+
+def _wait_for_exit(pid: int, max_wait: int = _PROCESS_EXIT_TIMEOUT) -> bool:
     """等待进程退出，最多 max_wait 秒。
 
     Args:
@@ -271,10 +277,10 @@ def _open_console(
         _web_server_shutdown_event,
     )
     # 等待服务就绪
-    for _ in range(30):
+    for _ in range(_WEB_READY_MAX_RETRIES):
         if is_local_port_in_use(port):
             break
-        time.sleep(0.5)
+        time.sleep(_WEB_READY_CHECK_INTERVAL)
     # BUG-059 修复：端口未就绪时不打开浏览器
     if is_local_port_in_use(port):
         webbrowser.open(f"http://127.0.0.1:{port}")

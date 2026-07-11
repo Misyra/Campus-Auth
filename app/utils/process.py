@@ -16,6 +16,11 @@ import psutil
 
 from app.constants import AUTH_DATA_DIR
 
+# 进程创建时间匹配容差（秒）
+_CREATE_TIME_TOLERANCE: float = 1.0
+# 进程刚启动时端口尚未就绪的宽限期（秒）
+_STARTUP_GRACE_PERIOD: int = 30
+
 __all__ = [
     "cleanup_pid",
     "get_pid_file",
@@ -99,7 +104,7 @@ def verify_process_identity(pid: int, stored_create_time: float | None = None) -
         if actual_create_time is None:
             return False
         # 允许 1 秒误差
-        if abs(actual_create_time - stored_create_time) > 1.0:
+        if abs(actual_create_time - stored_create_time) > _CREATE_TIME_TOLERANCE:
             return False
 
     return True
@@ -132,7 +137,7 @@ def is_service_running() -> tuple[bool, int | None]:
         if not is_local_port_in_use(port):
             # 宽限期：进程刚启动时端口可能还未就绪
             create_time = data.get("create_time")
-            if create_time and (time.time() - create_time) < 30:
+            if create_time and (time.time() - create_time) < _STARTUP_GRACE_PERIOD:
                 return True, pid  # 刚启动，跳过端口检查
             # 进程存在但未监听端口 → 不是本应用实例，清理残留 PID 文件
             pid_file.unlink(missing_ok=True)

@@ -9,6 +9,11 @@ from app.schemas import (
     RuntimeConfig,
 )
 
+# ISP 映射常量
+_ISP_CARRIER_NONE = "无"
+_ISP_CARRIER_CUSTOM = "自定义"
+_PASSWORD_MASK_PREFIX = "•"
+
 
 def build_runtime_config(
     global_config: GlobalConfig, profile: Profile
@@ -17,16 +22,18 @@ def build_runtime_config(
     username = profile.username.strip()
     raw_password = (profile.password or "").strip()
     password = (
-        raw_password if (raw_password and not raw_password.startswith("•")) else ""
+        raw_password
+        if (raw_password and not raw_password.startswith(_PASSWORD_MASK_PREFIX))
+        else ""
     )
     auth_url = profile.auth_url.strip()
 
     # ISP 转换 — 全项目唯一
-    carrier = str(profile.carrier or "无").strip() or "无"
+    carrier = str(profile.carrier or _ISP_CARRIER_NONE).strip() or _ISP_CARRIER_NONE
     custom_isp = str(profile.carrier_custom or "").strip()
-    if carrier == "自定义":
+    if carrier == _ISP_CARRIER_CUSTOM:
         isp = custom_isp
-    elif carrier == "无":
+    elif carrier == _ISP_CARRIER_NONE:
         isp = ""
     else:
         isp = carrier

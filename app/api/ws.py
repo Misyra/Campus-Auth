@@ -10,6 +10,8 @@ ws_logger = get_logger("ws", source="backend")
 _fe_logger = get_logger("frontend", source="frontend")
 
 
+_ALLOWED_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
+
 async def websocket_logs_handler(websocket, ws_manager):
     """WebSocket /ws/logs 处理逻辑。"""
     from fastapi import WebSocketDisconnect
@@ -35,7 +37,6 @@ async def websocket_logs_handler(websocket, ws_manager):
                     message_text = str(d.get("message", ""))[:10000]
                     scope = str(d.get("scope", "?"))[:200]
                     if message_text:
-                        _ALLOWED_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
                         level_name = str(d.get("level", "INFO")).upper()
                         if level_name not in _ALLOWED_LEVELS:
                             level_name = "INFO"
@@ -47,16 +48,16 @@ async def websocket_logs_handler(websocket, ws_manager):
                     ws_logger.warning("收到未知 WebSocket 消息类型: {}", msg_type)
             except json.JSONDecodeError as e:
                 ws_logger.warning("WebSocket 消息解析失败: {}", e, exc_info=True)
-            except Exception as e:
-                ws_logger.exception("WebSocket 消息处理异常: {}", e)
+            except Exception:
+                ws_logger.exception("WebSocket 消息处理异常")
     except WebSocketDisconnect:
         try:
             await ws_manager.disconnect(websocket)
         except Exception as e:
             ws_logger.warning("WebSocket 断开连接失败: {}", e, exc_info=True)
-    except Exception as e:
-        ws_logger.exception("WebSocket 通信异常: {}", e)
+    except Exception:
+        ws_logger.exception("WebSocket 通信异常")
         try:
             await ws_manager.disconnect(websocket)
         except Exception:
-            pass
+            ws_logger.debug("WebSocket 断开清理失败", exc_info=True)

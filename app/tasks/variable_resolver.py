@@ -17,7 +17,9 @@ class VariableResolver:
     """变量解析器"""
 
     MAX_DEPTH = 8
+    # 正则匹配 {{VAR_NAME}} 模板，无法用 str.replace 替代（需要捕获组和 re.sub 回调）
     TEMPLATE_PATTERN = re.compile(r"\{\{(\w+)\}\}")
+    _CACHE_MAXSIZE = 256
 
     def __init__(self, config: TaskConfig, template_vars: dict[str, str]):
         self.config = config
@@ -113,6 +115,8 @@ class VariableResolver:
         result = self.TEMPLATE_PATTERN.sub(replacer, value)
 
         if cache_key is not None:
+            if len(self._cache) >= self._CACHE_MAXSIZE:
+                self._cache.clear()
             self._cache[cache_key] = result
 
         return result

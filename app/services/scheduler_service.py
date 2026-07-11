@@ -9,6 +9,11 @@
 from __future__ import annotations
 
 import time
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from app.services.task_executor import TaskExecutor
+    from app.services.task_registry import TaskRegistry
 
 from app.utils.logging import get_logger
 
@@ -21,7 +26,7 @@ class SchedulerService:
     # 最大追赶窗口：超过此时间不追赶（避免启动时执行过期任务）
     MAX_CATCHUP_MINUTES = 30
 
-    def __init__(self, task_registry, task_executor) -> None:
+    def __init__(self, task_registry: TaskRegistry, task_executor: TaskExecutor) -> None:
         self._task_registry = task_registry
         self._task_executor = task_executor
         self._scheduler_running = False

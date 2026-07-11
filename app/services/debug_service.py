@@ -30,19 +30,25 @@ from .debug_session import (
 debug_logger = get_logger("debug_manager", source="backend")
 
 
+_MAX_DELETE_RETRIES = 5
+_DELETE_RETRY_INTERVAL = 0.1
+
+
 def _rm(path: Path) -> None:
     """删除文件，Windows 下文件被占用时自动重试。"""
-    for _ in range(5):
+    for _ in range(_MAX_DELETE_RETRIES):
         try:
             path.unlink()
             return
         except PermissionError:
-            time.sleep(0.1)
+            time.sleep(_DELETE_RETRY_INTERVAL)
     raise OSError(f"无法删除被占用文件: {path}")
 
 
 class DebugSessionManager:
     """调试会话管理器 — 封装所有调试会话的状态和操作。"""
+
+    DEBUG_SESSION_TIMEOUT_SECONDS: float = 1800.0
 
     def __init__(self, project_root: Path):
         self._project_root = project_root
@@ -77,7 +83,7 @@ class DebugSessionManager:
         self._session._browser_active = False
 
     async def _debug_timeout_watcher(
-        self, gen: int, *, timeout_seconds: float = 1800.0
+        self, gen: int, *, timeout_seconds: float = DEBUG_SESSION_TIMEOUT_SECONDS
     ) -> None:
         """监控调试会话超时，超过 timeout_seconds 无操作则关闭浏览器。"""
         check_interval = min(60, timeout_seconds / 10)

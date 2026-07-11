@@ -51,9 +51,9 @@ class TestFullMode:
 
         # t0: boot() 已启动监控，等待引擎线程就绪
         deadline = time.time() + 5
-        while time.time() < deadline and not engine._is_monitoring:
+        while time.time() < deadline and not engine.is_monitoring:
             time.sleep(0.05)
-        assert engine._is_monitoring, "引擎监控未在 5 秒内启动"
+        assert engine.is_monitoring, "引擎监控未在 5 秒内启动"
 
         # t1: 注册定时任务（时间设为当前，确保 tick 时命中）
         now = datetime.now()
@@ -123,4 +123,4 @@ class TestFullMode:
 
         # t6: 关闭
         engine.shutdown()
-        assert not engine._is_monitoring
+        assert not engine.is_monitoring

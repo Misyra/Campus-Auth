@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import Depends, Request
 
@@ -17,7 +17,7 @@ from app.tasks import TaskManager
 def _get(attr: str):
     """生成从 request.app.state.services 取属性的 Depends 工厂。"""
 
-    def _dep(request: Request):
+    def _dep(request: Request) -> Any:
         return getattr(request.app.state.services, attr)
 
     return _dep

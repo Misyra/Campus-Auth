@@ -174,14 +174,14 @@ class TestSystemTrayMethods:
         tray = SystemTray(on_exit=callback)
         tray.icon = MagicMock()
         tray._quit(None, None)
-        assert tray._exit_event.is_set()
+        callback.assert_called_once()
 
     def test_quit_without_icon(self):
         tray = SystemTray()
         callback = MagicMock()
         tray.on_exit = callback
         tray._quit(None, None)
-        assert tray._exit_event.is_set()
+        callback.assert_called_once()
 
     @patch("app.system_tray.threading.Thread")
     def test_start(self, mock_thread_cls):
@@ -711,7 +711,7 @@ class TestQuit:
     """_quit。"""
 
     def test_quit_with_icon_and_callback(self):
-        """有 icon 和 on_exit 时 icon 被停止且退出事件被设置。"""
+        """有 icon 和 on_exit 时 icon 被停止且 on_exit 被调用。"""
         on_exit = MagicMock()
         tray = SystemTray(on_exit=on_exit)
         tray.icon = MagicMock()
@@ -719,17 +719,17 @@ class TestQuit:
         tray._quit(tray.icon, None)
 
         tray.icon.stop.assert_called_once()
-        assert tray._exit_event.is_set()
+        on_exit.assert_called_once()
 
     def test_quit_without_icon(self):
-        """无 icon 时仅设置退出事件。"""
+        """无 icon 时仅调用 on_exit。"""
         on_exit = MagicMock()
         tray = SystemTray(on_exit=on_exit)
         tray.icon = None
 
         tray._quit(None, None)
 
-        assert tray._exit_event.is_set()
+        on_exit.assert_called_once()
 
     def test_quit_without_callback(self):
         """无 on_exit 时仅调用 icon.stop。"""

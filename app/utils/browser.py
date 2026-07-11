@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """浏览器上下文管理器 — Worker 代理模式。
 
 浏览器生命周期由 PlaywrightWorker 管理，BrowserContextManager 作为轻量代理:
@@ -80,10 +82,10 @@ class BrowserContextManager:
         self.logger = get_logger("browser", source="backend")
 
         # 浏览器相关属性
-        self.playwright = None
-        self.browser = None
-        self.context = None
-        self.page = None
+        self.playwright: object | None = None
+        self.browser: object | None = None
+        self.context: object | None = None
+        self.page: object | None = None
 
     def _is_cancelled(self) -> bool:
         return self.cancel_event is not None and self.cancel_event.is_set()

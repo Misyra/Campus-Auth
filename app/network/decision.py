@@ -282,7 +282,7 @@ async def _is_auth_url_reachable(
         return True
 
     use_interface = bool(interface_name)
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
 
     async def _check_host_port(host: str, port: int, label: str) -> bool:
         if use_interface:

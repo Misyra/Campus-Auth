@@ -24,6 +24,9 @@ from .variable_resolver import VariableResolver
 
 logger = get_logger("step_handlers", source="backend")
 
+# 候选选择器降级操作的最小剩余超时（毫秒）
+_MIN_CANDIDATE_TIMEOUT_MS = 500
+
 # 强制输入 JS 脚本：绕过可见性检查，通过原生 setter 设置值并模拟完整用户交互事件
 _FORCE_INPUT_JS = """(el, params) => {
   const val = params.val;
@@ -125,39 +128,48 @@ class StepHandler(ABC):
 
         # 策略1: 快速尝试可见元素
         wait_timeout = max(1500, int(timeout * 0.15))
-        for candidate in candidates:
-            remaining = max(0, int((deadline - time.perf_counter()) * 1000))
-            if remaining <= 0:
-                break
-            try:
-                loc = ctx.locator(candidate).first
-                actual_timeout = min(wait_timeout, remaining)
-                await loc.wait_for(state="visible", timeout=actual_timeout)
-                remaining_ms = max(500, int((deadline - time.perf_counter()) * 1000))
-                await action_fn(loc, remaining_ms)
-                logger.debug("{} 普通操作成功: {}", label, candidate)
-                return True, ""
-            except Exception:
-                logger.debug("{} 普通操作候选失败: {}", label, candidate)
-                continue
+        result = await self._try_candidates_loop(
+            ctx, candidates, deadline, "visible", action_fn, label, wait_timeout
+        )
+        if result is not None:
+            return result
 
         # 策略2: 降级到 attached 元素（使用共享截止时间）
         logger.debug("{} 所有候选均未匹配可见元素，降级操作", label)
+        result = await self._try_candidates_loop(
+            ctx, candidates, deadline, "attached", fallback_fn, label
+        )
+        if result is not None:
+            return result
+
+        return False, f"未找到可用元素: {selector}"
+
+    async def _try_candidates_loop(
+        self,
+        ctx,
+        candidates: list[str],
+        deadline: float,
+        state: str,
+        callback_fn,
+        label: str,
+        initial_timeout: int | None = None,
+    ) -> tuple[bool, str] | None:
+        """遍历候选选择器，返回首个成功的结果，全部失败返回 None。"""
         for candidate in candidates:
-            remaining = max(500, int((deadline - time.perf_counter()) * 1000))
+            remaining = max(_MIN_CANDIDATE_TIMEOUT_MS, int((deadline - time.perf_counter()) * 1000))
             if remaining <= 0:
                 break
             try:
                 loc = ctx.locator(candidate).first
-                await loc.wait_for(state="attached", timeout=remaining)
-                await fallback_fn(loc, remaining)
-                logger.debug("{} 降级操作成功: {}", label, candidate)
+                actual_timeout = min(initial_timeout, remaining) if initial_timeout else remaining
+                await loc.wait_for(state=state, timeout=actual_timeout)
+                await callback_fn(loc, remaining)
+                logger.debug("{} {}操作成功: {}", label, state, candidate)
                 return True, ""
             except Exception:
-                logger.debug("{} 降级操作候选失败: {}", label, candidate)
+                logger.debug("{} {}操作候选失败: {}", label, state, candidate)
                 continue
-
-        return False, f"未找到可用元素: {selector}"
+        return None
 
     async def _resolve_frame(self, page, step: StepConfig):
         """解析 frame 上下文，返回实际操作的 page 或 frame 对象"""
