@@ -156,13 +156,7 @@ def create_tray(
         )
         tray_icon.start()
 
-        # 监控托盘退出事件，在独立线程中调用 on_exit（而非 pystray 线程）
-        def _wait_and_exit():
-            tray_icon._exit_event.wait()
-            if on_exit:
-                on_exit()
 
-        threading.Thread(target=_wait_and_exit, daemon=True).start()
         return tray_icon
     except Exception as e:
         from app.utils.logging import get_logger
