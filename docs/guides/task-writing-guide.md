@@ -183,6 +183,8 @@
 | `option_selector` | 否 | — | 选项容器的 CSS 选择器（如 `.service-option`），限定文本搜索范围，避免误匹配 |
 | `timeout` | 否 | `10000` | 超时时间（毫秒） |
 
+**选项搜索回退链：** 执行器点击触发器后会按以下顺序查找选项文本——`option_selector` 指定容器 → 触发器父容器 → 全局搜索。前一级未命中才尝试下一级，全局搜索仍未命中则步骤失败（`required: true` 时）或跳过。
+
 **容错行为：**
 - `value` 为空 → 步骤自动跳过
 - 找不到触发器 → 步骤自动跳过
@@ -201,6 +203,33 @@
   "selector": "#serviceSelector, .service-selector",
   "value": "{{ISP}}",
   "option_selector": ".service-option"
+}
+```
+
+**带 `select_delay` 的完整示例**（选项面板展开较慢时调大延迟）：
+
+```json
+{
+  "id": "select_carrier",
+  "type": "click_select",
+  "description": "选择运营商（慢展开）",
+  "selector": "#serviceSelector",
+  "value": "{{ISP}}",
+  "option_selector": ".service-option",
+  "select_delay": 1000
+}
+```
+
+**按钮组模式：** 部分校园网的运营商选择是平铺的按钮组（多个 `<button>` 或 `<a>` 标签，无需点击展开），同样使用 `click_select`。此时 `selector` 指向按钮组容器或任一按钮，`value` 用 `{{ISP}}` 按文本模糊匹配对应按钮并点击。由于按钮已可见，`select_delay` 影响不大，但执行器仍会先点击 `selector` 再搜索选项。
+
+```json
+{
+  "id": "select_carrier",
+  "type": "click_select",
+  "description": "选择运营商（按钮组）",
+  "selector": ".isp-buttons",
+  "value": "{{ISP}}",
+  "option_selector": ".isp-buttons"
 }
 ```
 
@@ -250,6 +279,8 @@
 |------|------|--------|------|
 | `script` | 是 | — | JavaScript 代码（支持变量模板） |
 | `store_as` | 否 | — | 结果存储到的变量名，后续步骤可用 `{{变量名}}` 引用 |
+
+**执行环境：** `script` 通过 Playwright 的 `page.evaluate()` 在浏览器页面上下文中执行，可访问 `document`、`window` 等页面 API。脚本可以是函数表达式（如 `() => { ... }`）或直接求值的表达式，返回值通过 `store_as` 存入运行时变量供后续步骤引用。变量模板（`{{变量}}`）会在执行前替换为实际值，含特殊字符的变量（如密码）会自动转义以防语法错误。
 
 ```json
 {
@@ -403,7 +434,9 @@ ddddocr 内置两套模型，`old` 参数控制使用哪一套：
 
 ## 成功判断
 
-系统统一使用网络连通性检测判断任务成功与否：任务步骤全部完成后，默认等待 5 秒（配置项 `post_login_delay`），然后自动检测网络是否可达。网络通 = 认证成功，网络断 = 认证失败。检测失败时会在日志中显示具体原因。
+系统统一使用网络连通性检测判断任务成功与否：任务步骤全部完成后，默认等待 5 秒，然后自动检测网络是否可达。网络通 = 认证成功，网络断 = 认证失败。检测失败时会在日志中显示具体原因。
+
+> **关于等待时间：** 等待时长由系统监控配置中的 `post_login_delay` 字段控制（默认 5 秒），属于**系统监控设置**而非任务 JSON 字段。如需调整，请在 Web 控制台的监控设置中修改，不要在任务 JSON 中添加此字段。
 
 > **注意：** 原有 `success_conditions` 字段已被废弃，不再参与成功判断。任务文件中无需再添加该字段。
 
