@@ -1,5 +1,13 @@
 # 修改日志
 
+
+### chore: 版本升级至 v4.2.1
+
+- `pyproject.toml`：version 4.2.0 → 4.2.1
+- `resources/tools/task-recorder.user.js`：@version 和 VERSION 常量同步更新至 4.2.1
+- `CLAUDE.md`：当前版本 v4.1.0 → v4.2.1（上次漏更）
+- `docs/changelog.md`：新增 v4.2.1 版本更新日志
+
 ## 2026-07-11
 
 ### perf: 优化孤儿浏览器清理与启动日志输出

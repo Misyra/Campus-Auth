@@ -85,7 +85,7 @@ class ApiResponse(BaseModel):
 ```json
 {
   "status": "ok",
-  "version": "4.1.0",
+  "version": "4.2.1",
   "python_version": "3.12.9",
   "memory": { "rss_mb": 85.2, "vms_mb": 320.1 },
   "process": { "threads": 12, "open_files": [...], "pid": 12345 }
