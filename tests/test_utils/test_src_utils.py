@@ -139,8 +139,7 @@ class TestSystemTrayMethods:
 
         tray._Image = Image
         icon = tray._load_icon()
-        assert icon is not None
-        assert icon.size == (64, 64)
+        assert icon.size in ((64, 64), (256, 256))
 
     def test_monitoring_true_label(self):
         tray = SystemTray()

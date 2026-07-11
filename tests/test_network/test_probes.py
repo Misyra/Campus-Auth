@@ -144,7 +144,7 @@ class TestTcpProbeInterfaceBind:
         )
         # bind_socket_to_interface 需要 mock，否则 Windows 上会真绑
         monkeypatch.setattr(
-            "app.network.interface_bind.bind_socket_to_interface",
+            "app.network.probes.bind_socket_to_interface",
             lambda sock, name, ip=None: "interface_index",
         )
         await probes_mod.is_network_available_socket(
