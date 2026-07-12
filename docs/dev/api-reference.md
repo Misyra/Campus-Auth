@@ -1,6 +1,6 @@
 # API 接口文档
 
-> 本文档汇总 Campus-Auth 所有 HTTP API 和 WebSocket 接口，供开发联调或前后端扩展时查阅。当前版本：v4.1.0。
+> 本文档汇总 Campus-Auth 所有 HTTP API 和 WebSocket 接口，供开发联调或前后端扩展时查阅。当前版本：v4.2.1。
 >
 > 后端基于 FastAPI，所有 API 端点（除 `/` 外）均在 OpenAPI schema 中暴露，可访问 `/docs` 查看 Swagger 文档。
 
@@ -1029,14 +1029,18 @@ class AppSettings(BaseModel, frozen=True):
 ## 附录：API 统计
 
 | 指标 | 数量 |
-| HTTP 路由总数 | 67 |
+| HTTP 路由总数 | 75 |
 | WebSocket 路由 | 1 |
 | 静态挂载 | 3 |
-| GET 路由 | 24 |
-| POST 路由 | 28 |
+| GET 路由 | 32 |
+| POST 路由 | 30 |
 | PUT 路由 | 6 |
 | PATCH 路由 | 1 |
 | DELETE 路由 | 6 |
-| 请求模型 | 9 |
-| 响应模型 | 25 |
+| 请求模型 | 10 |
+| 响应模型 | 20 |
 | 路由文件数 | 16 |
+
+> 请求模型 = 作为 JSON 请求体使用的具名 Pydantic 模型（PUT/PATCH/POST 路由中 `payload:`/`body:` 参数类型）。
+> 响应模型 = 经 `response_model=` 引用的具名模型去重计数（含 `list[X]` 内层模型；`dict`/`list[dict]` 不计入）。
+> 另有 21 个配置子集/内部模型（`BrowserSettings`、`MonitorSettings`、`RuntimeConfig` 等）不直接作为 API 响应信封，未计入响应模型。
