@@ -392,7 +392,7 @@ async def is_network_available_http(
                 if "generate_204" in url or "connectivitycheck" in url:
                     ok = resp.status_code == 204
                 else:
-                    ok = 200 <= resp.status_code < 300
+                    ok = 200 <= resp.status_code < 400
                 if ok:
                     return (url, True, f"HTTP {resp.status_code} ({elapsed:.0f}ms)")
                 return (url, False, f"HTTP {resp.status_code} ({elapsed:.0f}ms)")

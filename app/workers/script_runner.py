@@ -9,6 +9,7 @@ import platform
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 from pathlib import Path
 
@@ -51,6 +52,7 @@ class ScriptRunner:
         script_path: 脚本文件路径（.json 或 .py）
         timeout: 脚本执行超时秒数
         script_type: 脚本类型，如 "py", "bat", "ps1", "sh", "exe"
+        cancel_event: 可选的取消事件，设置后终止正在执行的子进程
     """
 
     def __init__(
@@ -58,11 +60,13 @@ class ScriptRunner:
         script_path: Path,
         timeout: int = DEFAULT_TIMEOUT,
         script_type: str = "py",
+        cancel_event: threading.Event | None = None,
     ):
         self.script_path = script_path
         self.timeout = timeout
         self.script_type = script_type
         self._script_content: str | None = None
+        self._cancel_event = cancel_event
 
     def _load_script_content(self) -> str | None:
         """从 JSON 文件加载脚本内容。
@@ -151,6 +155,8 @@ class ScriptRunner:
         """
         # exe 类型：直接启动进程，不走 ShellCommandPolicy
         if self.script_type == "exe":
+            if self._cancel_event is not None and self._cancel_event.is_set():
+                return False, "任务已被取消"
             try:
                 exe_path = self._load_exe_path()
             except ValueError as e:
@@ -192,6 +198,7 @@ class ScriptRunner:
             returncode, stdout_str, stderr_str = policy.run_sync(
                 cmd,
                 timeout=self.timeout,
+                cancel_event=self._cancel_event,
                 **kwargs,
             )
         except PermissionError as e:

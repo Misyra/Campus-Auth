@@ -208,7 +208,8 @@ async def is_network_available(
         )
 
     if not enable_tcp and not enable_http and not enable_url:
-        return True
+        # B20 修复：与 check_network_status 保持一致，全部禁用时返回 False
+        return False
 
     if enable_http and not test_urls:
         from app.constants import DEFAULT_HTTP_TARGETS

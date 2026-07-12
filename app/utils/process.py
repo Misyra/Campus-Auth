@@ -133,7 +133,8 @@ def is_service_running() -> tuple[bool, int | None]:
     if mode != "lightweight":
         from app.utils.ports import resolve_port
 
-        port = resolve_port()
+        # B16 修复：优先使用 PID 文件中记录的端口，回退到当前环境推导
+        port = data.get("port") or resolve_port()
         if not is_local_port_in_use(port):
             # 宽限期：进程刚启动时端口可能还未就绪
             create_time = data.get("create_time")
@@ -142,8 +143,6 @@ def is_service_running() -> tuple[bool, int | None]:
             # 进程存在但未监听端口 → 不是本应用实例，清理残留 PID 文件
             pid_file.unlink(missing_ok=True)
             return False, None
-
-    return True, pid
 
 
 def is_local_port_in_use(port: int, host: str = "127.0.0.1") -> bool:
@@ -165,6 +164,7 @@ def is_local_port_in_use(port: int, host: str = "127.0.0.1") -> bool:
 def write_pid(mode: str | None = None) -> None:
     """写入当前进程的 PID 文件（JSON 格式）。"""
     from app.utils.files import atomic_write
+    from app.utils.ports import resolve_port
 
     AUTH_DATA_DIR.mkdir(exist_ok=True)
     pid_file = get_pid_file()
@@ -174,6 +174,7 @@ def write_pid(mode: str | None = None) -> None:
         "create_time": psutil.Process().create_time(),
         "proc_name": Path(sys.executable).name,
         "mode": mode,
+        "port": resolve_port(),
     }
     atomic_write(pid_file, json.dumps(data, ensure_ascii=False))
 

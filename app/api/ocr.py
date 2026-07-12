@@ -128,6 +128,9 @@ def ocr_uninstall() -> ApiResponse:
             error_msg = result.stderr.strip() or result.stdout.strip() or "未知错误"
             api_logger.warning("卸载 ddddocr 失败: {}", error_msg)
             return ApiResponse(success=False, message=f"卸载失败: {error_msg}")
+    except subprocess.TimeoutExpired:
+        api_logger.warning("卸载 ddddocr 失败: 超时")
+        return ApiResponse(success=False, message="卸载超时，请稍后重试")
     except FileNotFoundError:
         return ApiResponse(success=False, message="未找到 uv 包管理器")
     except Exception as e:

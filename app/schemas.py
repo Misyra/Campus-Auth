@@ -300,6 +300,7 @@ class LoginCredentials(BaseModel, frozen=True):
     auth_url: str = ""
     isp: str = ""
     carrier_custom: str = ""
+    password_decryption_failed: bool = False
 
 
 def _parse_targets(raw: str) -> list[str]:

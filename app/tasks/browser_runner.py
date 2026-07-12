@@ -334,7 +334,9 @@ class BrowserTaskRunner:
             await asyncio.sleep(delay if delay is not None else 5)
 
             ok, status, method = await check_network_status(monitor)
-
+            if status == "all_disabled":
+                logger.debug("[network_check] 所有检测方式已禁用，信任登录结果")
+                return True
             if ok:
                 logger.info("网络已恢复，登录认证生效 (检测方式={})", method)
             else:

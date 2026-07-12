@@ -16,7 +16,9 @@ _PASSWORD_MASK_PREFIX = "•"
 
 
 def build_runtime_config(
-    global_config: GlobalConfig, profile: Profile
+    global_config: GlobalConfig,
+    profile: Profile,
+    password_decryption_failed: bool = False,
 ) -> RuntimeConfig:
     """构建运行时配置。ISP 转换、密码过滤只在此处发生。"""
     username = profile.username.strip()
@@ -44,6 +46,7 @@ def build_runtime_config(
         auth_url=auth_url,
         isp=isp,
         carrier_custom=custom_isp,
+        password_decryption_failed=password_decryption_failed,
     )
 
     return RuntimeConfig(

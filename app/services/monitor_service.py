@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import datetime
 import threading
 import time
@@ -80,7 +79,6 @@ class NetworkMonitorCore:
         # 自动切换相关
         self._profile_service: ProfileService | None = None
         self._last_profile_id: str | None = None
-        self._profile_switch_needed: bool = False
 
         # 一次性告警去重：所有网络检测均未启用时仅首次告警 WARNING
         self._detection_disabled_warned: bool = False
@@ -285,8 +283,7 @@ class NetworkMonitorCore:
                 status_detail="网络异常：待登录",
             )
 
-        # 自动切换检测
-        await self._check_profile_switch()
+        # 方案自动切换已移至 _handle_start 启动时一次性检测
 
         return CheckOnceResult(
             paused=False,
@@ -403,54 +400,33 @@ class NetworkMonitorCore:
             result = parse_ping_targets(self.DEFAULT_PING_TARGETS)
         return result
 
-    async def _check_profile_switch(self) -> None:
-        """检测网关 IP 并自动切换方案。
+    def check_and_switch_profile_sync(self) -> bool:
+        """启动时一次性检测并自动切换方案（同步版本）。
 
-        检测到方案变化时设置标志位并停止监控循环，由外部重启。
-        内部同步磁盘 IO 通过 asyncio.to_thread() 包装，避免阻塞事件循环。
+        Returns:
+            True 如果切换了方案（调用方需重载配置）
         """
         if not self._profile_service:
-            return
-
+            return False
         try:
-            data = await asyncio.to_thread(self._profile_service.load)
+            data = self._profile_service.load()
             if not data.auto_switch:
-                return
-
-            matched_id = await asyncio.to_thread(
-                self._profile_service.detect_matching_profile, data
-            )
+                return False
+            matched_id = self._profile_service.detect_matching_profile(data)
             if matched_id and matched_id != self._last_profile_id:
                 profile = data.profiles.get(matched_id)
                 profile_name = profile.name if profile else matched_id
                 old_profile = data.profiles.get(self._last_profile_id)
-                old_name = (
-                    old_profile.name if old_profile else (self._last_profile_id or "无")
-                )
-
-                self.log_message(
-                    f"方案切换: {old_name} 至 {profile_name}",
-                    "INFO",
-                )
-
+                old_name = old_profile.name if old_profile else (self._last_profile_id or "无")
+                self.log_message(f"启动时方案切换: {old_name} → {profile_name}", "INFO")
                 self._last_profile_id = matched_id
-                ok, msg = await asyncio.to_thread(
-                    self._profile_service.set_active_profile, matched_id
-                )
+                ok, msg = self._profile_service.set_active_profile(matched_id)
                 if not ok:
-                    # 方案可能在检测后被删除，回退缓存状态
-                    reloaded = await asyncio.to_thread(self._profile_service.load)
+                    reloaded = self._profile_service.load()
                     self._last_profile_id = reloaded.active_profile
                     self.log_message(f"方案切换失败: {matched_id}, {msg}", "WARNING")
-                else:
-                    # 方案切换成功，设置标志位
-                    self._profile_switch_needed = True
+                    return False
+                return True
         except Exception as exc:
             self.log_message(f"方案切换检测失败: {exc}", "WARNING")
-
-    def consume_profile_switch_flag(self) -> bool:
-        """消费重启标志位（由引擎线程串行调用，无需额外同步）。"""
-        if self._profile_switch_needed:
-            self._profile_switch_needed = False
-            return True
         return False

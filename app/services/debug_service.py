@@ -277,17 +277,19 @@ class DebugSessionManager:
         async with self._lock:
             self._require_debug_session()
             session = self._session
-            from_idx = session.current_step
-
-            if from_idx >= len(session.steps):
-                return {
-                    **debug_to_response(self._session),
-                    "message": "所有步骤已执行完毕",
-                }
 
         # 一次性获取信号量，持有到整个批量执行完成，防止 next_step 插入
         async with self._exec_sem:
+            async with self._lock:
+                from_idx = session.current_step
+                if from_idx >= len(session.steps):
+                    return {
+                        **debug_to_response(self._session),
+                        "message": "所有步骤已执行完毕",
+                    }
+
             worker = get_worker()
+
             results: list[dict] = []
             all_success = True
 

@@ -133,11 +133,14 @@ def dir_size_mb(path: Path | str, max_entries: int = 100000) -> DirSizeResult:
     try:
         for f in p.rglob("*"):
             if f.is_file():
-                total += f.stat().st_size
-            count += 1
-            if count >= max_entries:
-                complete = False
-                break
+                try:
+                    total += f.stat().st_size
+                    count += 1
+                except OSError:
+                    pass
+                if count >= max_entries:
+                    complete = False
+                    break
     except OSError:
         complete = False
     return DirSizeResult(round(total / (1024 * 1024), 1), complete)

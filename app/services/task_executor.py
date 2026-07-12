@@ -321,6 +321,7 @@ class TaskExecutor:
             script_path=script_path,
             script_type=task["type"],
             timeout=timeout,
+            cancel_event=cancel_event,
         )
         return runner.run()
 

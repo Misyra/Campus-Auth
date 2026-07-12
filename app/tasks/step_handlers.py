@@ -361,8 +361,9 @@ class SelectHandler(StepHandler):
         if not selector:
             return False, "选择步骤需要 selector"
 
-        # value 为空或包含未解析变量时跳过
         if not value or "{{" in value:
+            if step.required:
+                return False, f"select 步骤 value 为空或未解析: '{value}'"
             logger.debug("[select] value 为空或包含未解析变量，跳过: {}", value)
             return True, ""
 
@@ -463,8 +464,9 @@ class ClickSelectHandler(StepHandler):
 
         if not selector:
             return False, "click_select 步骤需要 selector"
-        # value 为空或包含未解析变量时跳过
         if not value or "{{" in value:
+            if step.required:
+                return False, f"click_select 步骤 value 为空或未解析: '{value}'"
             logger.debug("[click_select] value 为空或包含未解析变量，跳过: {}", value)
             return True, ""
 
@@ -582,6 +584,7 @@ class WaitUrlHandler(StepHandler):
     ) -> tuple[bool, str]:
         params = self.resolve_params(step, resolver)
         pattern = params.get("pattern", "")
+        ctx = await self._resolve_frame(page, step)
         timeout = step.timeout or DEFAULT_STEP_TIMEOUT_MS
 
         if not pattern:
@@ -598,7 +601,7 @@ class WaitUrlHandler(StepHandler):
         logger.debug("[wait_url] pattern={}", pattern)
         deadline = time.monotonic() + timeout / 1000
         while True:
-            current_url = page.url
+            current_url = ctx.url
             if compiled.search(current_url):
                 logger.debug("[wait_url] URL 已匹配: {}", current_url)
                 return True, ""

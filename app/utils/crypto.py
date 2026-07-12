@@ -264,12 +264,15 @@ def save_password_field(raw: str | None, existing_encrypted: str) -> str:
     """处理前端提交的密码。
 
     语义：
-    - raw is None 或 "" → 不修改，返回 existing_encrypted
+    - raw is None → 不修改，返回 existing_encrypted
+    - raw == "" → 清空密码，返回 ""
     - raw startswith "ENC:" → 已是加密值，原样返回
     - 其他（明文密码） → 加密后返回
     """
-    if raw is None or raw == "":
+    if raw is None:
         return existing_encrypted
+    if raw == "":
+        return ""
     if raw.startswith("ENC:"):
         return raw
     return encrypt_password(raw)
@@ -279,7 +282,7 @@ def decrypt_password_field(
     raw_pwd: str,
     fallback_pwd: str = "",
     label: str = "",
-) -> tuple[str, bool]:
+) -> tuple[str, bool, bool]:
     """解密密码字段，支持 ENC: 前缀和掩码回退。
 
     与 save_password_field 对称：save 处理写入加密，decrypt 处理读取解密。
@@ -290,41 +293,41 @@ def decrypt_password_field(
         label: 日志标签（如方案名称）
 
     Returns:
-        (解密结果, 是否有错误)
+        (解密结果, 是否有错误, 解密是否失败)
     """
     if raw_pwd.startswith("ENC:"):
         try:
-            return (decrypt_password(raw_pwd), False)
+            return (decrypt_password(raw_pwd), False, False)
         except _DecryptionError as e:
             if label:
                 logger.warning("{} 密码解密失败: {}", label, e)
             else:
                 logger.warning("密码解密失败: {}", e)
-            return ("", True)
+            return ("", True, True)
     elif raw_pwd.startswith("•"):
         if fallback_pwd:
             try:
-                return (decrypt_password(fallback_pwd), False)
+                return (decrypt_password(fallback_pwd), False, False)
             except _DecryptionError as e:
                 if label:
                     logger.warning("{} 回退密码解密失败: {}", label, e)
                 else:
                     logger.warning("回退密码解密失败: {}", e)
-                return ("", True)
+                return ("", True, True)
         else:
             if label:
                 logger.warning("{} 密码为掩码但回退密码为空", label)
-            return ("", False)
+            return ("", False, False)
     elif raw_pwd:
-        return (raw_pwd, False)
+        return (raw_pwd, False, False)
     else:
         if fallback_pwd:
             if label:
                 logger.debug("{} 密码为空，使用回退密码", label)
             try:
-                return (decrypt_password(fallback_pwd), False)
+                return (decrypt_password(fallback_pwd), False, False)
             except _DecryptionError as e:
                 logger.warning("回退密码解密失败，使用空密码: {}", e)
-                return ("", True)
+                return ("", True, True)
         else:
-            return ("", False)
+            return ("", False, False)

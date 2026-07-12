@@ -55,10 +55,12 @@ def update_scheduled_task(
     if not existing:
         raise HTTPException(status_code=404, detail="定时任务不存在")
 
-    merged = {**existing, **payload}
-    if "schedule" in payload:
-        merged["schedule"] = {**existing.get("schedule", {}), **payload["schedule"]}
-
+    merged = {**existing}
+    for k, v in payload.items():
+        if isinstance(v, dict) and isinstance(merged.get(k), dict):
+            merged[k] = {**merged[k], **v}
+        else:
+            merged[k] = v
     try:
         config_model = ScheduledTaskConfig.model_validate(merged)
     except ValueError as e:

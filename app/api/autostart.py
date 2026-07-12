@@ -27,8 +27,8 @@ def _read_runtime_mode(request: Request) -> RuntimeMode:
         return RuntimeMode.LIGHTWEIGHT
 
 
-def _save_runtime_mode(request: Request, runtime_mode: RuntimeMode) -> None:
-    """保存自启动运行模式到配置。"""
+def _save_runtime_mode(request: Request, runtime_mode: RuntimeMode) -> bool:
+    """保存自启动运行模式到配置。返回是否成功。"""
     try:
         ps = request.app.state.services.profile_service
         ps.update(
@@ -44,8 +44,10 @@ def _save_runtime_mode(request: Request, runtime_mode: RuntimeMode) -> None:
                 }
             )
         )
+        return True
     except Exception as e:
         api_logger.warning("保存自启动运行模式失败: {}", e)
+        return False
 
 
 @router.get("/api/autostart/status", response_model=AutoStartStatusResponse)
@@ -93,8 +95,10 @@ def set_autostart_mode(
     body: AutostartModeRequest,
 ) -> ApiResponse:
     """切换自启动运行模式（仅保存配置，不重新生成脚本）。"""
-    _save_runtime_mode(request, body.runtime_mode)
+    saved = _save_runtime_mode(request, body.runtime_mode)
     mode_label = "完整模式" if body.runtime_mode == RuntimeMode.FULL else "轻量模式"
+    if not saved:
+        return ApiResponse(success=False, message=f"保存自启动模式失败: {mode_label}")
     api_logger.info("切换自启动模式: {}", body.runtime_mode.value)
     if body.runtime_mode == RuntimeMode.LIGHTWEIGHT:
         api_logger.info(

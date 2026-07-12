@@ -61,7 +61,9 @@ export const actionMethods = {
     this.busy.login = true;
     try {
       this.frontendLogger.info('action', '手动登录请求');
-      const loginTimeoutMs = (this.config.browser.login_timeout || 90) * 1000;
+      // B5 修复：后端 dispatch 超时 = max(login_timeout, 60) + 10s，前端多留 15s 缓冲
+      const loginTimeout = this.config.browser.login_timeout || 90;
+      const loginTimeoutMs = (Math.max(loginTimeout, 60) + 25) * 1000;
       const data = await this.$apiService.actions.login(loginTimeoutMs);
       this.notify(data.success, this.stripScreenshotHint(data.message), 'login');
       // 登录完成后刷新登录历史
