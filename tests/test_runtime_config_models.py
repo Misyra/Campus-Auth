@@ -50,13 +50,13 @@ def test_monitor_settings_validation():
 def test_runtime_config_composition():
     """RuntimeConfig 组合所有子模型。"""
     from app.schemas import (
-        RuntimeConfig,
         BrowserSettings,
+        LoggingSettings,
         LoginCredentials,
         MonitorSettings,
         PauseSettings,
-        LoggingSettings,
         RetrySettings,
+        RuntimeConfig,
     )
 
     rc = RuntimeConfig(
@@ -78,13 +78,13 @@ def test_runtime_config_composition():
 def test_runtime_config_frozen():
     """RuntimeConfig 整体不可变。"""
     from app.schemas import (
-        RuntimeConfig,
         BrowserSettings,
+        LoggingSettings,
         LoginCredentials,
         MonitorSettings,
         PauseSettings,
-        LoggingSettings,
         RetrySettings,
+        RuntimeConfig,
     )
 
     rc = RuntimeConfig(

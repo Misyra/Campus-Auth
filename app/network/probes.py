@@ -147,7 +147,8 @@ async def _check_interface_connectivity(interface_name: str) -> bool:
             try:
                 bind_socket_to_interface(sock, interface_name, fallback_ip)
                 await asyncio.wait_for(
-                    loop.sock_connect(sock, (host, port)), timeout=_INTERFACE_CONNECT_TIMEOUT
+                    loop.sock_connect(sock, (host, port)),
+                    timeout=_INTERFACE_CONNECT_TIMEOUT,
                 )
                 return True
             except (OSError, TimeoutError):
@@ -193,7 +194,9 @@ async def _race_first_success_async(
             try:
                 result = await coro
             except Exception as e:
-                logger.debug("{} 探测异常: {} - {}", label, type(e).__name__, e, exc_info=True)
+                logger.debug(
+                    "{} 探测异常: {} - {}", label, type(e).__name__, e, exc_info=True
+                )
                 continue
 
             if isinstance(result, tuple) and len(result) == 3:

@@ -26,6 +26,7 @@ def _ensure_bg_dir() -> None:
     """确保背景图片目录存在（延迟创建）。"""
     BG_DIR.mkdir(parents=True, exist_ok=True)
 
+
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg"}
 MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
 

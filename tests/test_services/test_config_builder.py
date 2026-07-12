@@ -8,13 +8,10 @@ from app.schemas import (
     AppSettings,
     BrowserSettings,
     GlobalConfig,
-    LoginCredentials,
     MonitorSettings,
     Profile,
-    RuntimeConfig,
 )
 from app.services.config_builder import build_runtime_config
-
 
 # ── helper ──
 
@@ -142,7 +139,6 @@ class TestFieldCompleteness:
         gc = _default_global_config(
             app_settings=AppSettings(
                 block_proxy=False,
-                shell_path="/usr/bin/bash",
                 minimize_to_tray=False,
                 startup_action="monitor",
                 runtime_mode="lightweight",
@@ -154,7 +150,6 @@ class TestFieldCompleteness:
         )
         rc = build_runtime_config(gc, _default_profile())
         assert rc.app_settings.block_proxy is False
-        assert rc.app_settings.shell_path == "/usr/bin/bash"
         assert rc.app_settings.minimize_to_tray is False
         assert rc.app_settings.startup_action == "monitor"
         assert rc.app_settings.runtime_mode == "lightweight"
@@ -212,7 +207,6 @@ class TestEndToEnd:
         gc = _default_global_config(
             app_settings=AppSettings(
                 block_proxy=False,
-                shell_path="/bin/zsh",
                 minimize_to_tray=False,
                 startup_action="login_once",
                 runtime_mode="lightweight",

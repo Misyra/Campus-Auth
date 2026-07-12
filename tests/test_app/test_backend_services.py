@@ -20,19 +20,17 @@ from app.schemas import (
     RuntimeConfig,
 )
 from app.services.config_builder import build_runtime_config
-from app.services.profile_service import ProfileService
 from app.services.debug_session import (
     DebugSession,
     _next_debug_gen,
     debug_to_response,
 )
-from app.services.login_history_service import LoginHistoryService
 from app.services.profile_service import ProfileService
 from app.tasks.manager import (
     _DANGEROUS_STEP_TYPES,
+    TaskManager,
     _check_dangerous_steps,
 )
-from app.tasks.manager import TaskManager
 
 # =====================================================================
 # _check_dangerous_steps
@@ -973,9 +971,7 @@ class TestListScripts:
         scripts_dir = tmp_path / "tasks" / "scripts"
         scripts_dir.mkdir(parents=True, exist_ok=True)
         (scripts_dir / "my_script.json").write_text(
-            json.dumps(
-                {"type": "script", "name": "我的脚本", "content": 'print("hi")'}
-            ),
+            json.dumps({"type": "py", "name": "我的脚本", "content": 'print("hi")'}),
             encoding="utf-8",
         )
         scripts = service.list_script_tasks()
@@ -994,35 +990,25 @@ class TestSaveScriptTask:
         return TaskManager(tmp_path / "tasks")
 
     def test_save_script_success(self, service: TaskManager):
-        config = {"type": "script", "content": 'print("hello")', "name": "测试脚本"}
+        config = {"type": "py", "content": 'print("hello")', "name": "测试脚本"}
         ok, msg = service.save_task_with_validation("my_script", config)
         assert ok is True
         assert "脚本" in msg
 
     def test_save_script_empty_content(self, service: TaskManager):
-        config = {"type": "script", "content": "", "name": "空脚本"}
+        config = {"type": "py", "content": "", "name": "空脚本"}
         ok, msg = service.save_task_with_validation("empty_script", config)
         assert ok is False
         assert "内容" in msg
 
     def test_save_script_whitespace_content(self, service: TaskManager):
-        config = {"type": "script", "content": "   \n  ", "name": "空白脚本"}
+        config = {"type": "py", "content": "   \n  ", "name": "空白脚本"}
         ok, msg = service.save_task_with_validation("ws_script", config)
         assert ok is False
         assert "内容" in msg
 
-    def test_save_script_with_binary_path(self, service: TaskManager):
-        config = {
-            "type": "script",
-            "content": 'print("custom binary")',
-            "name": "自定义二进制",
-            "binary_path": "/usr/bin/python3",
-        }
-        ok, msg = service.save_task_with_validation("custom_bin", config)
-        assert ok is True
-
     def test_save_script_invalid_id(self, service: TaskManager):
-        config = {"type": "script", "content": 'print("hi")'}
+        config = {"type": "py", "content": 'print("hi")'}
         ok, msg = service.save_task_with_validation("bad id!", config)
         assert ok is False
         assert "ID" in msg
@@ -1039,25 +1025,13 @@ class TestGetTaskScript:
         return TaskManager(tmp_path / "tasks")
 
     def test_get_script_task(self, service: TaskManager):
-        config = {"type": "script", "content": 'print("test")', "name": "测试"}
+        config = {"type": "py", "content": 'print("test")', "name": "测试"}
         service.save_task_with_validation("test_script", config)
         task = service.get_task_detail("test_script")
         assert task is not None
-        assert task["type"] == "script"
+        assert task["type"] == "py"
         assert task["content"] == 'print("test")'
         assert task["name"] == "测试"
-
-    def test_get_script_task_with_binary(self, service: TaskManager):
-        config = {
-            "type": "script",
-            "content": 'print("binary")',
-            "name": "二进制脚本",
-            "binary_path": "/usr/bin/python3",
-        }
-        service.save_task_with_validation("bin_script", config)
-        task = service.get_task_detail("bin_script")
-        assert task is not None
-        assert task["binary_path"] == "/usr/bin/python3"
 
     def test_get_browser_task(self, service: TaskManager):
         config = {

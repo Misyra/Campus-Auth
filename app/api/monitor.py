@@ -123,6 +123,7 @@ def toggle_pure_mode(
 async def get_network_interfaces() -> list[dict[str, object]]:
     """枚举可用物理网卡。"""
     from app.network.interfaces import InterfaceManager
+
     mgr = InterfaceManager()
     interfaces = mgr.list_interfaces()
     return [

@@ -191,23 +191,6 @@ export const configMethods = {
       this.toastOnly(false, '获取默认配置失败');
     }
   },
-  onShellFileSelected(e) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    this.config.app_settings.shell_path = file.path || file.name;
-    e.target.value = '';
-  },
-  async fetchShells() {
-    try {
-      const data = await this.$apiService.autostart.fetchShells();
-      this.availableShells = data.shells || [];
-      this.defaultShell = data.default || '';
-    } catch (error) {
-      this.frontendLogger.warn('config', '获取 Shell 列表失败', error);
-      this.availableShells = [];
-      this.defaultShell = '';
-    }
-  },
   async loadDefaultStealthScript() {
     try {
       const data = await this.$apiService.config.fetchStealthScript();

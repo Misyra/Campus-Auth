@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from typing import Any
-
 import re
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import Any
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -180,7 +179,6 @@ class TaskSummary(BaseModel):
     name: str = ""
     description: str = ""
     type: str = ""
-    binary_path: str = ""
 
 
 class LogLevelResponse(BaseModel):
@@ -367,7 +365,6 @@ class AppSettings(BaseModel, frozen=True):
     """
 
     block_proxy: bool = True
-    shell_path: str = ""
     startup_action: StartupAction = StartupAction.NONE
     runtime_mode: RuntimeMode = RuntimeMode.FULL
     lightweight_tray: bool = True  # 仅 runtime_mode=lightweight 时生效
@@ -450,7 +447,11 @@ class ConfigResponse(BaseModel):
 
 
 class LogLevelRequest(BaseModel):
-    level: str = Field(min_length=1, pattern=r"^(DEBUG|INFO|WARNING|ERROR)$", description="日志级别（DEBUG/INFO/WARNING/ERROR）")
+    level: str = Field(
+        min_length=1,
+        pattern=r"^(DEBUG|INFO|WARNING|ERROR)$",
+        description="日志级别（DEBUG/INFO/WARNING/ERROR）",
+    )
 
 
 class AutoSwitchRequest(BaseModel):
@@ -487,21 +488,6 @@ class HealthResponse(BaseModel):
     python_version: str = ""
     memory: dict = Field(default_factory=dict)
     process: dict = Field(default_factory=dict)
-
-
-class ShellInfo(BaseModel):
-    """Shell 信息。"""
-
-    name: str = ""
-    path: str = ""
-    description: str = ""
-
-
-class ShellListResponse(BaseModel):
-    """GET /api/shells 响应。"""
-
-    shells: list[ShellInfo] = Field(default_factory=list)
-    default: str = ""
 
 
 class DebugSessionResponse(BaseModel):
@@ -548,13 +534,6 @@ class NetworkDetectResponse(BaseModel):
     ssid: str | None = None
     matched_profile_id: str | None = None
     matched_profile_name: str | None = None
-
-
-class BinaryInfo(BaseModel):
-    """可执行二进制信息。"""
-
-    path: str = ""
-    name: str = ""
 
 
 class OcrStatusResponse(BaseModel):
@@ -647,18 +626,14 @@ class ScheduledTaskConfig(BaseModel):
 
     name: str = Field(min_length=1, description="任务名称")
     description: str = ""
-    type: str = Field(pattern=r"^(script|browser|shell)$", description="任务类型")
+    type: str = Field(pattern=r"^(script|browser)$", description="任务类型")
     target_id: str = ""
-    command: str = ""
-    shell_path: str = ""
     enabled: bool = True
     schedule: ScheduleTime
     timeout: int = Field(default=60, ge=5, le=3600)
 
     @model_validator(mode="after")
     def validate_type_fields(self) -> ScheduledTaskConfig:
-        if self.type == "shell" and not self.command:
-            raise ValueError("Shell 命令不能为空")
         if self.type in ("script", "browser") and not self.target_id:
             raise ValueError("请选择目标任务")
         return self

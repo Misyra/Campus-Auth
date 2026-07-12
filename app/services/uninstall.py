@@ -107,7 +107,7 @@ def _get_autostart_service():
 def _check_autostart() -> dict:
     try:
         return _get_autostart_service().status()
-    except Exception as e:
+    except Exception:
         logger.warning("检查自启动状态失败", exc_info=True)
         return {
             "enabled": False,

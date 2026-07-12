@@ -156,13 +156,11 @@ def create_tray(
         )
         tray_icon.start()
 
-
         return tray_icon
     except Exception as e:
         from app.utils.logging import get_logger
-        get_logger("startup", source="backend").warning(
-            "启动系统托盘失败: {}", e
-        )
+
+        get_logger("startup", source="backend").warning("启动系统托盘失败: {}", e)
         return None
 
 
@@ -240,6 +238,7 @@ def _start_web_server(
     def _worker():
         try:
             from app.application import run
+
             run(
                 existing_container=container,
                 server_ref=_web_server_state["server_ref"],

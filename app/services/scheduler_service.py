@@ -26,7 +26,9 @@ class SchedulerService:
     # 最大追赶窗口：超过此时间不追赶（避免启动时执行过期任务）
     MAX_CATCHUP_MINUTES = 30
 
-    def __init__(self, task_registry: TaskRegistry, task_executor: TaskExecutor) -> None:
+    def __init__(
+        self, task_registry: TaskRegistry, task_executor: TaskExecutor
+    ) -> None:
         self._task_registry = task_registry
         self._task_executor = task_executor
         self._scheduler_running = False
@@ -137,10 +139,12 @@ class SchedulerService:
 
     def sync_state(self) -> None:
         """根据是否有启用任务自动启停调度器。"""
-        has_tasks = self._task_executor.registry.has_enabled_tasks() if self._task_executor else False
+        has_tasks = (
+            self._task_executor.registry.has_enabled_tasks()
+            if self._task_executor
+            else False
+        )
         if has_tasks and not self._scheduler_running:
             self.start()
         elif not has_tasks and self._scheduler_running:
             self.stop()
-
-

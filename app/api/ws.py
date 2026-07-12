@@ -12,6 +12,7 @@ _fe_logger = get_logger("frontend", source="frontend")
 
 _ALLOWED_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
 
+
 async def websocket_logs_handler(websocket, ws_manager):
     """WebSocket /ws/logs 处理逻辑。"""
     from fastapi import WebSocketDisconnect

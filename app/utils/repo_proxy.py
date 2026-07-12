@@ -112,6 +112,4 @@ async def async_repo_fetch_json(
         raise
     except Exception as exc:
         logger.warning("远程{}获取失败: {} ({})", label, exc, url)
-        raise HTTPException(
-            status_code=502, detail=f"获取{label}失败: {exc}"
-        ) from exc
+        raise HTTPException(status_code=502, detail=f"获取{label}失败: {exc}") from exc

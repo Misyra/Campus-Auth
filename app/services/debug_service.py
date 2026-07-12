@@ -155,7 +155,9 @@ class DebugSessionManager:
         core = getattr(monitor_service, "_monitor_core", None)
         bind_proxy = getattr(core, "bind_proxy_url", None) if core else None
         worker_data = {
-            "config": runtime_config_to_worker_dict(runtime_config, bind_proxy=bind_proxy),
+            "config": runtime_config_to_worker_dict(
+                runtime_config, bind_proxy=bind_proxy
+            ),
             "task_url": url if url else "",
             "task_data": task.to_dict(),
             "template_vars": template_vars,

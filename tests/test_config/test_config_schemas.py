@@ -6,23 +6,21 @@
 
 from __future__ import annotations
 
-import json
-
 import pytest
 from pydantic import ValidationError
 
 from app.schemas import (
     ApiResponse,
-    Profile,
     AutoStartStatusResponse,
     LogEntry,
+    LoginCredentials,
     MonitorStatusResponse,
+    Profile,
     ProfilesData,
+    RuntimeConfig,
 )
-from app.utils.crypto import decrypt_password_field
-from app.schemas import LoginCredentials, RuntimeConfig
 from app.utils.config_utils import validate_env_config
-from app.utils.crypto import encrypt_password
+from app.utils.crypto import decrypt_password_field
 from app.utils.logging import normalize_level as _normalize_level
 
 # =====================================================================

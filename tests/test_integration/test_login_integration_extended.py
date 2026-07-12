@@ -207,6 +207,7 @@ class TestNetworkDetectionLogin:
         )
         try:
             import asyncio
+
             loop = asyncio.new_event_loop()
             result = loop.run_until_complete(engine._do_async_login())
             loop.close()

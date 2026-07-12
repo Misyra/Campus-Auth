@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import time
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 
-from app.tasks.models import StepConfig
+from app.tasks.models import StepConfig, TaskConfig
 from app.tasks.step_handlers import WaitUrlHandler
 from app.tasks.variable_resolver import VariableResolver
-from app.tasks.models import TaskConfig
 
 
 def _make_resolver() -> VariableResolver:

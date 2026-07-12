@@ -7,11 +7,8 @@ import time
 from datetime import datetime
 from unittest.mock import patch
 
-import pytest
-
-from app.schemas import AppSettings, ConfigSaveRequest, RuntimeConfig
+from app.schemas import AppSettings, ConfigSaveRequest, LoginCredentials
 from app.services.profile_service import save_global_and_profile
-from app.schemas import LoginCredentials
 from app.workers.playwright_worker import WorkerResponse
 
 
@@ -61,8 +58,8 @@ class TestFullMode:
             "test_task",
             {
                 "name": "测试任务",
-                "type": "shell",
-                "command": "echo hello",
+                "type": "script",
+                "target_id": "test_script",
                 "enabled": True,
                 "schedule": {"hour": now.hour, "minute": now.minute},
             },

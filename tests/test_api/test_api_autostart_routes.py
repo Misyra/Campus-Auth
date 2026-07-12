@@ -10,24 +10,6 @@ from unittest.mock import MagicMock, patch
 from app.services.autostart import AutoStartService, _autostart_cli_args
 
 
-class TestListShells:
-    """测试 GET /api/shells 端点。"""
-
-    @patch("app.api.autostart.get_default_shell", return_value="/bin/bash")
-    @patch("app.api.autostart.detect_available_shells")
-    def test_list_shells_returns_200(self, mock_detect, mock_default, api_client):
-        test_client, _ = api_client
-        mock_detect.return_value = [
-            {"name": "bash", "path": "/bin/bash", "description": "Bourne Again Shell"}
-        ]
-        resp = test_client.get("/api/shells")
-        assert resp.status_code == 200
-        data = resp.json()
-        assert "shells" in data
-        assert "default" in data
-        assert isinstance(data["shells"], list)
-
-
 class TestAutostartStatus:
     """测试 GET /api/autostart/status 端点。"""
 

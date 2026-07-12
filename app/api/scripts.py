@@ -8,9 +8,9 @@ from concurrent.futures import ThreadPoolExecutor
 from fastapi import APIRouter, HTTPException, Request
 
 from app.deps import TaskManagerDep
-from app.schemas import ApiResponse, BinaryInfo, TaskSummary
+from app.schemas import ApiResponse, TaskSummary
 from app.utils.logging import get_logger
-from app.workers.script_runner import ScriptRunner, detect_available_binaries
+from app.workers.script_runner import ScriptRunner
 
 router = APIRouter()
 api_logger = get_logger("api", source="backend")
@@ -32,13 +32,6 @@ def list_scripts(
     return task_mgr.list_script_tasks()
 
 
-@router.get("/api/scripts/binaries", response_model=list[BinaryInfo])
-def list_binaries() -> list[BinaryInfo]:
-    """获取系统可用的执行二进制列表。"""
-    raw = detect_available_binaries()
-    return [BinaryInfo(path=b.get("path", ""), name=b.get("name", "")) for b in raw]
-
-
 @router.get("/api/scripts/{task_id}")
 def get_script(
     task_id: str,
@@ -46,7 +39,7 @@ def get_script(
 ) -> dict:
     """获取脚本任务详情（含脚本内容）。"""
     task = task_mgr.get_task_detail(task_id)
-    if not task or task.get("type") != "script":
+    if not task or task.get("type") not in ("py", "bat", "ps1", "sh", "exe"):
         raise HTTPException(status_code=404, detail="脚本任务不存在")
     return task
 
@@ -58,7 +51,7 @@ def save_script(
     task_mgr: TaskManagerDep,
 ) -> ApiResponse:
     """保存自定义脚本任务。"""
-    data = {**payload, "type": "script"}
+    data = payload
     ok, message = task_mgr.save_task_with_validation(task_id, data)
     if ok:
         api_logger.info("保存脚本 {} 成功", task_id)
@@ -89,7 +82,7 @@ async def run_script(
 ) -> ApiResponse:
     """手动执行脚本任务（测试用）。"""
     task = task_mgr.get_task_detail(task_id)
-    if not task or task.get("type") != "script":
+    if not task or task.get("type") not in ("py", "bat", "ps1", "sh", "exe"):
         raise HTTPException(status_code=404, detail="脚本任务不存在")
 
     # 通过 TaskManager 公共 API 查找脚本文件
@@ -104,8 +97,11 @@ async def run_script(
     except Exception:
         timeout = 60
 
-    binary_path = task.get("binary_path", "")
-    runner = ScriptRunner(script_path, timeout=timeout, binary_path=binary_path)
+    runner = ScriptRunner(
+        script_path=script_path,
+        script_type=task["type"],
+        timeout=timeout,
+    )
 
     loop = asyncio.get_running_loop()
     success, message = await loop.run_in_executor(_script_executor, runner.run)

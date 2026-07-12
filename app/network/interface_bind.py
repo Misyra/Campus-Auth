@@ -70,7 +70,9 @@ def get_interface_index(if_name: str) -> int | None:
             continue
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
-                sock.setsockopt(socket.IPPROTO_IP, _IP_UNICAST_IF, struct.pack("!I", if_index))
+                sock.setsockopt(
+                    socket.IPPROTO_IP, _IP_UNICAST_IF, struct.pack("!I", if_index)
+                )
                 # UDP connect 不发包，只触发内核选路
                 sock.connect(("8.8.8.8", 53))
                 local_ip = sock.getsockname()[0]

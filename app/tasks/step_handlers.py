@@ -156,12 +156,16 @@ class StepHandler(ABC):
     ) -> tuple[bool, str] | None:
         """遍历候选选择器，返回首个成功的结果，全部失败返回 None。"""
         for candidate in candidates:
-            remaining = max(_MIN_CANDIDATE_TIMEOUT_MS, int((deadline - time.perf_counter()) * 1000))
+            remaining = max(
+                _MIN_CANDIDATE_TIMEOUT_MS, int((deadline - time.perf_counter()) * 1000)
+            )
             if remaining <= 0:
                 break
             try:
                 loc = ctx.locator(candidate).first
-                actual_timeout = min(initial_timeout, remaining) if initial_timeout else remaining
+                actual_timeout = (
+                    min(initial_timeout, remaining) if initial_timeout else remaining
+                )
                 await loc.wait_for(state=state, timeout=actual_timeout)
                 await callback_fn(loc, remaining)
                 logger.debug("{} {}操作成功: {}", label, state, candidate)

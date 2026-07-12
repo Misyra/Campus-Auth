@@ -357,8 +357,16 @@ class TestCheckLoginPrerequisites:
         defaults.update(overrides)
         return MonitorSettings(**defaults)
 
-    @patch("app.network.decision._is_auth_url_reachable", new_callable=AsyncMock, return_value=True)
-    @patch("app.network.decision.is_local_network_connected", new_callable=AsyncMock, return_value=True)
+    @patch(
+        "app.network.decision._is_auth_url_reachable",
+        new_callable=AsyncMock,
+        return_value=True,
+    )
+    @patch(
+        "app.network.decision.is_local_network_connected",
+        new_callable=AsyncMock,
+        return_value=True,
+    )
     async def test_all_pass(self, *mocks):
         ok, reason = await check_login_prerequisites(
             self._make_config(), "http://10.0.0.1/login"
@@ -366,7 +374,11 @@ class TestCheckLoginPrerequisites:
         assert ok is True
         assert reason == ""
 
-    @patch("app.network.decision.is_local_network_connected", new_callable=AsyncMock, return_value=False)
+    @patch(
+        "app.network.decision.is_local_network_connected",
+        new_callable=AsyncMock,
+        return_value=False,
+    )
     async def test_local_disconnected(self, *mocks):
         ok, reason = await check_login_prerequisites(
             self._make_config(), "http://10.0.0.1/login"
@@ -374,8 +386,16 @@ class TestCheckLoginPrerequisites:
         assert ok is False
         assert reason == "local_disconnected"
 
-    @patch("app.network.decision._is_auth_url_reachable", new_callable=AsyncMock, return_value=False)
-    @patch("app.network.decision.is_local_network_connected", new_callable=AsyncMock, return_value=True)
+    @patch(
+        "app.network.decision._is_auth_url_reachable",
+        new_callable=AsyncMock,
+        return_value=False,
+    )
+    @patch(
+        "app.network.decision.is_local_network_connected",
+        new_callable=AsyncMock,
+        return_value=True,
+    )
     async def test_auth_url_unreachable(self, *mocks):
         ok, reason = await check_login_prerequisites(
             self._make_config(), "http://10.0.0.1/login"
@@ -383,8 +403,16 @@ class TestCheckLoginPrerequisites:
         assert ok is False
         assert reason == "auth_url_unreachable"
 
-    @patch("app.network.decision._is_auth_url_reachable", new_callable=AsyncMock, return_value=False)
-    @patch("app.network.decision.is_local_network_connected", new_callable=AsyncMock, return_value=False)
+    @patch(
+        "app.network.decision._is_auth_url_reachable",
+        new_callable=AsyncMock,
+        return_value=False,
+    )
+    @patch(
+        "app.network.decision.is_local_network_connected",
+        new_callable=AsyncMock,
+        return_value=False,
+    )
     async def test_local_check_disabled(self, *mocks):
         ok, reason = await check_login_prerequisites(
             self._make_config(enable_local_check=False),
@@ -393,8 +421,16 @@ class TestCheckLoginPrerequisites:
         assert ok is False
         assert reason == "auth_url_unreachable"
 
-    @patch("app.network.decision._is_auth_url_reachable", new_callable=AsyncMock, return_value=True)
-    @patch("app.network.decision.is_local_network_connected", new_callable=AsyncMock, return_value=True)
+    @patch(
+        "app.network.decision._is_auth_url_reachable",
+        new_callable=AsyncMock,
+        return_value=True,
+    )
+    @patch(
+        "app.network.decision.is_local_network_connected",
+        new_callable=AsyncMock,
+        return_value=True,
+    )
     async def test_auth_url_check_disabled(self, *mocks):
         ok, reason = await check_login_prerequisites(
             self._make_config(check_auth_url=False),
@@ -403,8 +439,16 @@ class TestCheckLoginPrerequisites:
         assert ok is True
         assert reason == ""
 
-    @patch("app.network.decision._is_auth_url_reachable", new_callable=AsyncMock, return_value=False)
-    @patch("app.network.decision.is_local_network_connected", new_callable=AsyncMock, return_value=False)
+    @patch(
+        "app.network.decision._is_auth_url_reachable",
+        new_callable=AsyncMock,
+        return_value=False,
+    )
+    @patch(
+        "app.network.decision.is_local_network_connected",
+        new_callable=AsyncMock,
+        return_value=False,
+    )
     async def test_both_disabled(self, *mocks):
         ok, reason = await check_login_prerequisites(
             self._make_config(enable_local_check=False, check_auth_url=False),
@@ -469,7 +513,9 @@ class TestIsAuthUrlReachable:
             raise OSError("DNS failure")
 
         with patch("asyncio.open_connection", fake_open_connection):
-            assert await _is_auth_url_reachable("http://nonexistent.local/login") is False
+            assert (
+                await _is_auth_url_reachable("http://nonexistent.local/login") is False
+            )
 
     async def test_https_default_port(self):
         from app.network.decision import _is_auth_url_reachable
@@ -554,7 +600,8 @@ class TestIsAuthUrlReachable:
 
         with patch("asyncio.open_connection", fake_open_connection):
             assert (
-                await _is_auth_url_reachable("http://10.0.0.1/login", extra_targets=[]) is False
+                await _is_auth_url_reachable("http://10.0.0.1/login", extra_targets=[])
+                is False
             )
 
 

@@ -53,10 +53,12 @@ async def install_playwright_chromium() -> ApiResponse:
                         line = await process.stdout.readline()
                         if line:
                             last_output = time.monotonic()
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     idle = time.monotonic() - last_output
                     if idle > _IDLE_TIMEOUT_SECONDS:
-                        logger.warning("安装 Playwright 失败: {}秒无输出", _IDLE_TIMEOUT_SECONDS)
+                        logger.warning(
+                            "安装 Playwright 失败: {}秒无输出", _IDLE_TIMEOUT_SECONDS
+                        )
                         process.kill()
                         raise
                     logger.debug("Playwright 安装 30 秒无输出，继续等待")

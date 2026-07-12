@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from fastapi import WebSocket
+
     from app.utils.logging import DashboardSink
 
 from app.utils.logging import get_logger
@@ -74,7 +75,7 @@ class WebSocketManager:
             # 有些任务被取消了，没机会执行清理，需要手动处理
             to_close = []
             async with self._lock:
-                for ws, task in zip(connections, tasks):
+                for ws, task in zip(connections, tasks, strict=False):
                     if not task.done() and ws in self._connections:
                         self._connections.remove(ws)
                         to_close.append(ws)

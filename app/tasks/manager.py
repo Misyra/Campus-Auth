@@ -5,8 +5,9 @@ from __future__ import annotations
 import functools
 import json
 import threading
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from app.utils.files import atomic_write
 from app.utils.logging import get_logger
@@ -18,13 +19,14 @@ logger = get_logger("task_manager", source="backend")
 
 _DANGEROUS_STEP_TYPES = {"eval", "custom_js"}
 
-SCRIPT_TASK_TYPE = "script"
 
 _INVALID_ID_MSG = "任务ID只能包含字母、数字、下划线和连字符，长度不超过64"
 _MAX_SCRIPT_SIZE_BYTES = 100 * 1024  # 脚本内容最大 100KB
 
 
-def _with_task_id_validation(func: Callable[..., tuple[bool, str]]) -> Callable[..., tuple[bool, str]]:
+def _with_task_id_validation(
+    func: Callable[..., tuple[bool, str]],
+) -> Callable[..., tuple[bool, str]]:
     """装饰器：规范化 task_id 并校验有效性，无效时返回 (False, 错误消息)。"""
 
     @functools.wraps(func)
@@ -130,13 +132,12 @@ class TaskManager:
         if task_type == "browser":
             search_dirs = [(self.browser_dir, ".json")]
         elif task_type == "scripts":
-            search_dirs = [(self.scripts_dir, ".json"), (self.scripts_dir, ".py")]
+            search_dirs = [(self.scripts_dir, ".json")]
         else:
-            # 搜索顺序：browser/*.json → scripts/*.json → scripts/*.py
+            # 搜索顺序：browser/*.json → scripts/*.json
             search_dirs = [
                 (self.browser_dir, ".json"),
                 (self.scripts_dir, ".json"),
-                (self.scripts_dir, ".py"),
             ]
         for subdir, ext in search_dirs:
             candidate = (subdir / f"{normalized}{ext}").absolute()
@@ -154,64 +155,6 @@ class TaskManager:
         """返回 .json 路径（根据任务类型选择子目录）。"""
         subdir = self.scripts_dir if task_type == "scripts" else self.browser_dir
         return self._safe_subdir_path(subdir, task_id, ".json")
-
-    def _safe_meta_path(self, task_id: str) -> Path | None:
-        """返回 scripts/ 下的 .meta.json 路径。"""
-        return self._safe_subdir_path(self.scripts_dir, task_id, ".meta.json")
-
-    def _read_meta(self, task_id: str) -> dict[str, str]:
-        """读取脚本元数据文件。"""
-        meta_path = self._safe_meta_path(task_id)
-        if meta_path and meta_path.exists():
-            try:
-                return json.loads(meta_path.read_text(encoding="utf-8"))
-            except Exception:
-                logger.debug("读取脚本元数据失败: {}", meta_path, exc_info=True)
-        return {}
-
-    def _write_meta(self, task_id: str, meta: dict[str, str]) -> bool:
-        """写入脚本元数据文件。"""
-        meta_path = self._safe_meta_path(task_id)
-        if meta_path is None:
-            return False
-        try:
-            atomic_write(meta_path, json.dumps(meta, ensure_ascii=False, indent=2))
-            return True
-        except Exception as e:
-            logger.warning("保存脚本元数据失败 {}: {}", task_id, e)
-            return False
-
-    @staticmethod
-    def _extract_script_metadata(file: Path) -> dict[str, str]:
-        """从 Python 脚本的注释和 docstring 中提取 name 和 description。
-
-        支持格式：
-            # name: 任务名称
-            # description: 任务描述
-        或者使用模块级 docstring 的第一行作为 name。
-        """
-        name = file.stem
-        description = ""
-        try:
-            content = file.read_text(encoding="utf-8")
-            lines = content.splitlines()[:10]
-            for line in lines:
-                stripped = line.strip()
-                if stripped.lower().startswith("# name:"):
-                    name = stripped.split(":", 1)[1].strip()
-                elif stripped.lower().startswith("# description:"):
-                    description = stripped.split(":", 1)[1].strip()
-            # 如果没找到 name 注释，尝试 docstring
-            if name == file.stem:
-                import ast
-
-                tree = ast.parse(content)
-                docstring = ast.get_docstring(tree)
-                if docstring:
-                    name = docstring.split("\n")[0][:80]
-        except Exception:
-            logger.debug("解析脚本 docstring 失败: {}", file, exc_info=True)
-        return {"name": name, "description": description}
 
     # ── CRUD ──
 
@@ -272,9 +215,7 @@ class TaskManager:
     def list_script_tasks(self) -> list[dict[str, str]]:
         """列出所有自定义脚本任务（scripts/ 目录）。"""
         tasks: list[dict[str, str]] = []
-        seen_ids: set[str] = set()
 
-        # 1. 扫描 scripts/ 下的 JSON 文件（排除 .meta.json）
         for file in self.scripts_dir.glob("*.json"):
             if file.name.lower().endswith(".meta.json"):
                 continue
@@ -287,38 +228,11 @@ class TaskManager:
                         "id": file.stem,
                         "name": data.get("name", file.stem),
                         "description": data.get("description", ""),
-                        "binary_path": data.get("binary_path", ""),
+                        "type": data.get("type", ""),
                     }
                 )
-                seen_ids.add(file.stem)
             except Exception as e:
                 logger.warning("读取脚本 JSON 失败 {}: {}", file, e)
-
-        # 2. 扫描 scripts/ 下的 .py 文件（兼容旧格式）
-        for file in self.scripts_dir.glob("*.py"):
-            if not is_valid_task_id(file.stem) or file.stem in seen_ids:
-                continue
-            try:
-                file_meta = self._read_meta(file.stem)
-                if file_meta:
-                    name = file_meta.get("name", file.stem)
-                    description = file_meta.get("description", "")
-                    binary_path = file_meta.get("binary_path", "")
-                else:
-                    comment_meta = self._extract_script_metadata(file)
-                    name = comment_meta["name"]
-                    description = comment_meta["description"]
-                    binary_path = ""
-                tasks.append(
-                    {
-                        "id": file.stem,
-                        "name": name,
-                        "description": description,
-                        "binary_path": binary_path,
-                    }
-                )
-            except Exception as e:
-                logger.warning("读取脚本文件失败 {}: {}", file, e)
 
         return self._sort_by_order(tasks, "scripts")
 
@@ -335,35 +249,15 @@ class TaskManager:
             )
 
             if is_script:
-                # 脚本任务
-                if file.suffix.lower() == ".json":
-                    data = json.loads(file.read_text(encoding="utf-8"))
-                    return ScriptTaskInfo(
-                        task_id=task_id,
-                        name=data.get("name", task_id),
-                        description=data.get("description", ""),
-                        script_path=file,
-                        binary_path=data.get("binary_path", ""),
-                    )
-                # .py 文件（兼容旧格式）
-                if file.suffix.lower() == ".py":
-                    file_meta = self._read_meta(task_id)
-                    if file_meta:
-                        name = file_meta.get("name", file.stem)
-                        description = file_meta.get("description", "")
-                        binary_path = file_meta.get("binary_path", "")
-                    else:
-                        comment_meta = self._extract_script_metadata(file)
-                        name = comment_meta["name"]
-                        description = comment_meta["description"]
-                        binary_path = ""
-                    return ScriptTaskInfo(
-                        task_id=task_id,
-                        name=name,
-                        description=description,
-                        script_path=file,
-                        binary_path=binary_path,
-                    )
+                # 脚本任务（仅 JSON 格式）
+                data = json.loads(file.read_text(encoding="utf-8"))
+                return ScriptTaskInfo(
+                    task_id=task_id,
+                    name=data.get("name", task_id),
+                    description=data.get("description", ""),
+                    script_path=file,
+                    script_type=data.get("type", ""),
+                )
             else:
                 # 浏览器任务
                 data = json.loads(file.read_text(encoding="utf-8"))
@@ -406,22 +300,37 @@ class TaskManager:
 
     def _save_script_task(self, task_id: str, config: dict[str, Any]) -> bool:
         """保存自定义脚本任务（JSON 格式，存入 scripts/ 目录）。"""
-        script_content = config.get("content", "")
-        if not script_content.strip():
-            logger.warning("脚本内容不能为空")
+        script_type = config.get("type", "")
+        if script_type not in ("py", "bat", "ps1", "sh", "exe"):
+            logger.warning("无效的脚本类型: {}", script_type)
             return False
+
+        if script_type == "exe":
+            path = config.get("path", "")
+            if not path.strip():
+                logger.warning("exe 类型脚本路径不能为空")
+                return False
+            save_data = {
+                "type": script_type,
+                "name": config.get("name", task_id),
+                "description": config.get("description", ""),
+                "path": path,
+            }
+        else:
+            script_content = config.get("content", "")
+            if not script_content.strip():
+                logger.warning("脚本内容不能为空")
+                return False
+            save_data = {
+                "type": script_type,
+                "name": config.get("name", task_id),
+                "description": config.get("description", ""),
+                "content": script_content,
+            }
 
         file = self._safe_json_path(task_id, task_type="scripts")
         if file is None:
             return False
-
-        save_data = {
-            "type": SCRIPT_TASK_TYPE,
-            "name": config.get("name", task_id),
-            "description": config.get("description", ""),
-            "binary_path": config.get("binary_path", ""),
-            "content": script_content,
-        }
 
         try:
             atomic_write(str(file), json.dumps(save_data, ensure_ascii=False, indent=2))
@@ -440,7 +349,7 @@ class TaskManager:
             deleted = False
             # 从两个子目录中删除
             for subdir in (self.browser_dir, self.scripts_dir):
-                for ext in (".json", ".py", ".meta.json"):
+                for ext in (".json",):
                     file = subdir / f"{normalized}{ext}"
                     if file.exists():
                         try:
@@ -468,9 +377,8 @@ class TaskManager:
             return None
         if (self.browser_dir / f"{normalized}.json").exists():
             return "browser"
-        for ext in (".json", ".py"):
-            if (self.scripts_dir / f"{normalized}{ext}").exists():
-                return "scripts"
+        if (self.scripts_dir / f"{normalized}.json").exists():
+            return "scripts"
         return None
 
     def get_active_task(self) -> str:
@@ -524,28 +432,22 @@ class TaskManager:
             return None
 
         if isinstance(task, ScriptTaskInfo):
-            content = ""
-            if task.script_path.suffix.lower() == ".json":
-                try:
-                    data = json.loads(task.script_path.read_text(encoding="utf-8"))
-                    content = data.get("content", "")
-                except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
-                    logger.warning("读取脚本 JSON 失败 {}: {}", task.script_path, exc)
-                    return None
-            else:
-                try:
-                    content = task.script_path.read_text(encoding="utf-8")
-                except (OSError, UnicodeDecodeError) as exc:
-                    logger.warning("读取脚本文件失败 {}: {}", task.script_path, exc)
-                    return None
-            return {
+            try:
+                data = json.loads(task.script_path.read_text(encoding="utf-8"))
+            except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+                logger.warning("读取脚本 JSON 失败 {}: {}", task.script_path, exc)
+                return None
+            result: dict[str, Any] = {
                 "id": task_id,
                 "name": task.name,
                 "description": task.description,
-                "type": "script",
-                "content": content,
-                "binary_path": task.binary_path,
+                "type": task.script_type,
             }
+            if task.script_type == "exe":
+                result["path"] = data.get("path", "")
+            else:
+                result["content"] = data.get("content", "")
+            return result
 
         result = task.to_dict()
         result["id"] = task_id
@@ -564,7 +466,7 @@ class TaskManager:
     ) -> tuple[bool, str]:
         """保存任务（含危险步骤检查和 ID 校验）。"""
         task_type = config.get("type", "browser")
-        if task_type == SCRIPT_TASK_TYPE:
+        if task_type in ("py", "bat", "ps1", "sh", "exe"):
             return self._save_script_task_validated(task_id, config)
 
         if not config.get("name"):
@@ -586,19 +488,36 @@ class TaskManager:
         self, task_id: str, config: dict[str, Any]
     ) -> tuple[bool, str]:
         """保存自定义脚本任务（含验证）。"""
-        content = config.get("content", "")
-        if not content.strip():
-            return False, "脚本内容不能为空"
+        script_type = config.get("type", "")
+        if script_type not in ("py", "bat", "ps1", "sh", "exe"):
+            return False, "无效的脚本类型"
 
-        if len(content.encode("utf-8")) > _MAX_SCRIPT_SIZE_BYTES:
-            return False, f"脚本内容超过大小限制（最大 {_MAX_SCRIPT_SIZE_BYTES // 1024}KB）"
+        if script_type == "exe":
+            path = config.get("path", "")
+            if not path.strip():
+                return False, "exe 类型脚本路径不能为空"
+            save_data = {
+                "type": script_type,
+                "name": config.get("name", ""),
+                "description": config.get("description", ""),
+                "path": path,
+            }
+        else:
+            content = config.get("content", "")
+            if not content.strip():
+                return False, "脚本内容不能为空"
+            if len(content.encode("utf-8")) > _MAX_SCRIPT_SIZE_BYTES:
+                return (
+                    False,
+                    f"脚本内容超过大小限制（最大 {_MAX_SCRIPT_SIZE_BYTES // 1024}KB）",
+                )
+            save_data = {
+                "type": script_type,
+                "name": config.get("name", ""),
+                "description": config.get("description", ""),
+                "content": content,
+            }
 
-        save_data = {
-            "content": content,
-            "name": config.get("name", ""),
-            "description": config.get("description", ""),
-            "binary_path": config.get("binary_path", ""),
-        }
         success = self.save_task(task_id, save_data, task_type="scripts")
         if success:
             logger.info("保存脚本任务 {} 成功", task_id)

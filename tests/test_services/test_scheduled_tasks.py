@@ -3,13 +3,10 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import MagicMock
 
 import pytest
 
-from app.services.task_executor import TaskExecutor
 from app.services.task_registry import MAX_HISTORY_SIZE, TaskHistoryStore, TaskRegistry
-from app.utils.shell_utils import get_default_shell
 
 
 @pytest.fixture
@@ -49,10 +46,9 @@ def test_save_and_get_task(scheduler):
     config = {
         "name": "测试任务",
         "description": "这是一个测试任务",
-        "type": "shell",
-        "command": "echo hello",
+        "type": "script",
+        "target_id": "test_script",
         "enabled": True,
-        "shell_path": "",
         "schedule": {"hour": 8, "minute": 30},
         "timeout": 60,
     }
@@ -67,8 +63,8 @@ def test_save_and_get_task(scheduler):
     assert task is not None
     assert task["id"] == task_id
     assert task["name"] == "测试任务"
-    assert task["type"] == "shell"
-    assert task["command"] == "echo hello"
+    assert task["type"] == "script"
+    assert task["target_id"] == "test_script"
 
 
 def test_list_tasks(scheduler):
@@ -79,10 +75,9 @@ def test_list_tasks(scheduler):
             f"task_{i}",
             {
                 "name": f"任务 {i}",
-                "type": "shell",
-                "command": f"echo {i}",
+                "type": "script",
+                "target_id": "test_script",
                 "enabled": True,
-                "shell_path": "",
                 "schedule": {"hour": i, "minute": 0},
                 "timeout": 60,
             },
@@ -99,10 +94,9 @@ def test_delete_task(scheduler):
         task_id,
         {
             "name": "待删除任务",
-            "type": "shell",
-            "command": "echo delete me",
+            "type": "script",
+            "target_id": "test_script",
             "enabled": True,
-            "shell_path": "",
             "schedule": {"hour": 0, "minute": 0},
             "timeout": 60,
         },
@@ -126,10 +120,9 @@ def test_history(scheduler):
         task_id,
         {
             "name": "历史任务",
-            "type": "shell",
-            "command": "echo history",
+            "type": "script",
+            "target_id": "test_script",
             "enabled": True,
-            "shell_path": "",
             "schedule": {"hour": 0, "minute": 0},
             "timeout": 60,
         },
@@ -144,68 +137,6 @@ def test_history(scheduler):
     assert len(history) == 2
     assert history[0]["status"] == "failure"  # 最新的在前
     assert history[1]["status"] == "success"
-
-
-class TestExecuteShellUsesPolicy:
-    """测试 TaskExecutor._execute_shell 使用 ShellCommandPolicy 进行安全校验。"""
-
-    @pytest.fixture
-    def executor(self, project_root):
-        """创建 TaskExecutor 实例。"""
-        registry = TaskRegistry(project_root / "tasks" / "scheduled")
-        history_store = TaskHistoryStore(
-            project_root / "tasks" / "scheduled" / "history"
-        )
-        return TaskExecutor(
-            registry=registry,
-            history_store=history_store,
-            worker_getter=lambda: None,
-            login_orchestrator=MagicMock(),
-        )
-
-    def test_execute_shell_uses_policy(self, executor):
-        """_execute_shell 应通过 ShellCommandPolicy 验证路径并钳制超时。"""
-        mock_policy = MagicMock()
-        mock_policy.run_sync = MagicMock(return_value=(0, "hello", ""))
-        executor._shell_policy = mock_policy
-
-        success, message = executor._execute_shell("echo hello", 60, "cmd.exe")
-
-        mock_policy.run_sync.assert_called_once()
-        assert success is True
-
-    def test_execute_shell_rejects_unknown_path(self, executor):
-        """_execute_shell 应拒绝不在白名单中的 shell 路径。"""
-        success, message = executor._execute_shell(
-            "echo hello",
-            60,
-            "/malicious/shell",
-        )
-        assert success is False
-        assert (
-            "白名单" in message
-            or "拒绝" in message
-            or "Permission" in message.lower()
-            or "不在" in message
-        )
-
-    def test_execute_shell_timeout_clamped(self, executor):
-        """_execute_shell 的超时应通过 ShellCommandPolicy 被 clamp 到 [1, 300]。"""
-        mock_policy = MagicMock()
-        mock_policy.run_sync = MagicMock(return_value=(0, "ok", ""))
-        executor._shell_policy = mock_policy
-
-        success, message = executor._execute_shell("echo test", 999, "cmd.exe")
-
-        assert success is True
-        mock_policy.run_sync.assert_called_once()
-
-
-class TestGetDefaultShell:
-    def test_returns_nonempty_string(self):
-        shell = get_default_shell()
-        assert isinstance(shell, str)
-        assert len(shell) > 0
 
 
 # =====================================================================
@@ -258,8 +189,8 @@ class TestScheduleEngineCRUD:
             "b_task",
             {
                 "name": "Banana",
-                "type": "shell",
-                "command": "echo b",
+                "type": "script",
+                "target_id": "test_script",
                 "schedule": {"hour": 1, "minute": 0},
             },
         )
@@ -267,8 +198,8 @@ class TestScheduleEngineCRUD:
             "a_task",
             {
                 "name": "Apple",
-                "type": "shell",
-                "command": "echo a",
+                "type": "script",
+                "target_id": "test_script",
                 "schedule": {"hour": 0, "minute": 0},
             },
         )
@@ -282,8 +213,8 @@ class TestScheduleEngineCRUD:
             "normal",
             {
                 "name": "正常",
-                "type": "shell",
-                "command": "echo ok",
+                "type": "script",
+                "target_id": "test_script",
                 "schedule": {"hour": 0, "minute": 0},
             },
         )
@@ -300,8 +231,8 @@ class TestScheduleEngineCRUD:
             "good",
             {
                 "name": "好的",
-                "type": "shell",
-                "command": "echo ok",
+                "type": "script",
+                "target_id": "test_script",
                 "schedule": {"hour": 0, "minute": 0},
             },
         )
@@ -317,8 +248,8 @@ class TestScheduleEngineCRUD:
             "my_task",
             {
                 "name": "测试",
-                "type": "shell",
-                "command": "echo ok",
+                "type": "script",
+                "target_id": "test_script",
                 "schedule": {"hour": 0, "minute": 0},
             },
         )
@@ -343,8 +274,8 @@ class TestScheduleEngineCRUD:
             "del_task",
             {
                 "name": "待删",
-                "type": "shell",
-                "command": "echo del",
+                "type": "script",
+                "target_id": "test_script",
                 "schedule": {"hour": 0, "minute": 0},
             },
         )

@@ -72,4 +72,3 @@ class TestConfigBuilderBuild:
         result = build_runtime_config(config, profile)
         assert result.credentials.username == "new"
         assert result.credentials.password == "new_pwd"
-

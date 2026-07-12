@@ -1,7 +1,6 @@
 {
-  "type": "script",
+  "type": "py",
   "name": "HTTP 登录测试",
   "description": "使用 httpx 发送 POST 请求登录校园网",
-  "binary_path": "E:\\Campus-Auth\\.venv\\Scripts\\python.exe",
   "content": "#!/usr/bin/env python3\n# name: HTTP 登录测试\n# description: 使用 httpx 发送 POST 请求登录校园网\nimport httpx\n\n# 按实际情况修改以下参数\nLOGIN_URL = \"http://10.0.0.1/login\"\nUSERNAME = \"your_username\"\nPASSWORD = \"your_password\"\nISP = \"cmcc\"  # 运营商：cmcc / unicom / telecom，无则留空\n\ntry:\n    resp = httpx.post(LOGIN_URL, data={\n        \"username\": USERNAME,\n        \"password\": PASSWORD,\n        \"operator\": ISP,\n    }, timeout=30)\n    print(f\"HTTP {resp.status_code}\")\nexcept Exception as e:\n    print(str(e))\n    exit(1)\n"
 }
