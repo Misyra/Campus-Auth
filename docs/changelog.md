@@ -1,5 +1,18 @@
 # 更新日志
 
+## v4.2.2
+
+### 修复
+
+- 修复 `compare_versions` 相同版本号返回 1（应返回 0）
+- 修复 `is_service_running` 在 lightweight 模式下缺少返回路径，导致始终返回服务未运行
+- 修复 `save_password_field` 空串未清空已有密码（应返回空）
+- 修复 `is_network_available` 所有检测方式禁用时返回 True（应返回 False）
+- 移除已废弃的运行期自动切方案测试（`TestProfileSwitchFlag`），对齐运行期行为：仅启动时 `_handle_start` 一次性检测
+- 修复 `atomic_write` 相对路径测试因 cwd 不确定导致偶发失败
+
+# 更新日志
+
 ## v4.2.1
 
 ### 新增功能
