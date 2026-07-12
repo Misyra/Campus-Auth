@@ -58,8 +58,8 @@ class TestFullMode:
             "test_task",
             {
                 "name": "测试任务",
-                "type": "shell",
-                "command": "echo hello",
+                "type": "script",
+                "target_id": "test_script",
                 "enabled": True,
                 "schedule": {"hour": now.hour, "minute": now.minute},
             },

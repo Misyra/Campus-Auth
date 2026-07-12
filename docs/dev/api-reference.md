@@ -504,7 +504,7 @@ class ApiResponse(BaseModel):
 **响应 `list[TaskSummary]`：**
 ```json
 [
-  { "id": "login", "name": "校园网登录", "description": "校园网认证登录", "type": "browser", "binary_path": "" }
+  { "id": "login", "name": "校园网登录", "description": "校园网认证登录", "type": "browser" }
 ]
 ```
 
@@ -541,22 +541,11 @@ class ApiResponse(BaseModel):
 | 方法 | 路径 | 请求体 | 响应模型 |
 |------|------|--------|---------|
 | GET | `/api/scripts` | — | `list[TaskSummary]` |
-| GET | `/api/scripts/binaries` | — | `list[BinaryInfo]` |
 | GET | `/api/scripts/{task_id}` | — | `dict` |
 | PUT | `/api/scripts/{task_id}` | `dict` | `ApiResponse` |
 | DELETE | `/api/scripts/{task_id}` | — | `ApiResponse` |
 | POST | `/api/scripts/{task_id}/run` | — | `ApiResponse` |
 
-### GET /api/scripts/binaries
-
-获取系统可用的脚本解释器列表。
-
-**响应 `list[BinaryInfo]`：**
-```json
-[
-  { "path": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe", "name": "PowerShell" }
-]
-```
 
 ### POST /api/scripts/{task_id}/run
 
@@ -564,9 +553,8 @@ class ApiResponse(BaseModel):
 
 ---
 
-## 定时任务
+> 定时任务支持两种类型：`script`（脚本任务）、`browser`（浏览器任务）。执行历史存储在 `tasks/scheduled/history/` 目录。
 
-> 定时任务支持三种类型：`script`（脚本任务）、`browser`（浏览器任务）、`shell`（Shell 命令）。执行历史存储在 `tasks/scheduled/history/` 目录。
 
 | 方法 | 路径 | 请求体 | 响应模型 |
 |------|------|--------|---------|
@@ -589,17 +577,14 @@ class ApiResponse(BaseModel):
   "description": "每天早上 8 点执行登录",
   "type": "browser",
   "target_id": "login",
-  "command": "",
-  "shell_path": "",
   "enabled": true,
   "schedule": { "hour": 8, "minute": 0 },
   "timeout": 60
 }
 ```
 
-- `type` 取值：`"script"`、`"browser"`、`"shell"`
-- `type == "shell"` 时必需 `command`
-- `type == "script"` 或 `"browser"` 时必需 `target_id`
+- `type` 取值：`"script"`、`"browser"`
+- 必需 `target_id`
 - `timeout` 范围：5~3600 秒
 
 ### PUT /api/scheduled-tasks/{task_id}
@@ -675,25 +660,11 @@ class ApiResponse(BaseModel):
 
 | 方法 | 路径 | 请求体 | 响应模型 |
 |------|------|--------|---------|
-| GET | `/api/shells` | — | `ShellListResponse` |
 | GET | `/api/autostart/status` | — | `AutoStartStatusResponse` |
 | POST | `/api/autostart/enable` | — | `ApiResponse` |
 | POST | `/api/autostart/disable` | — | `ApiResponse` |
 | POST | `/api/autostart/mode` | `AutostartModeRequest` | `ApiResponse` |
 
-### GET /api/shells
-
-获取系统可用 Shell 列表。
-
-**响应 `ShellListResponse`：**
-```json
-{
-  "shells": [
-    { "name": "PowerShell 7", "path": "C:\\Program Files\\PowerShell\\7\\pwsh.exe", "description": "PowerShell 7" }
-  ],
-  "default": "pwsh"
-}
-```
 
 ### GET /api/autostart/status
 
@@ -1044,7 +1015,6 @@ class RetrySettings(BaseModel, frozen=True):
 ```python
 class AppSettings(BaseModel, frozen=True):
     block_proxy: bool = True            # 屏蔽系统代理
-    shell_path: str = ""                # Shell 路径
     startup_action: StartupAction = StartupAction.NONE       # 启动后动作
     runtime_mode: RuntimeMode = RuntimeMode.FULL             # 运行模式
     lightweight_tray: bool = True       # 轻量模式系统托盘
@@ -1058,8 +1028,7 @@ class AppSettings(BaseModel, frozen=True):
 
 ## 附录：API 统计
 
-| 类别 | 数量 |
-|------|:----:|
+| 指标 | 数量 |
 | HTTP 路由总数 | 67 |
 | WebSocket 路由 | 1 |
 | 静态挂载 | 3 |
