@@ -75,7 +75,6 @@ export const appOptions = {
       frontendLogger: createFrontendLogger('INFO'),
       appVersion: 'unknown',
       pythonVersion: '',
-      shellCustomMode: false,
       networkInterfaces: [],
     };
   },
@@ -97,7 +96,7 @@ export const appOptions = {
         { value: '', label: '请选择...' },
         ...this.scripts.map(s => ({
           value: s.id,
-          label: s.name + (s.binary_path ? ' (' + this.getBinaryName(s.binary_path) + ')' : ''),
+          label: s.name + (s.type ? ' (' + s.type + ')' : ''),
         })),
       ];
     },
@@ -174,28 +173,6 @@ export const appOptions = {
     uninstallCheckedCount() {
       return this.uninstall.items.filter(it => it.exists && it.checked).length;
     },
-    shellPathMode: {
-      get() {
-        if (this.shellCustomMode) return '__custom__';
-        if (!this.config.app_settings.shell_path) return '';
-        if (this.availableShells.some(s => s.path === this.config.app_settings.shell_path)) return this.config.app_settings.shell_path;
-        return '__custom__';
-      },
-      set(val) {
-        this.shellCustomMode = (val === '__custom__');
-        if (val !== '__custom__') this.config.app_settings.shell_path = val;
-      },
-    },
-    shellPathOptions() {
-      return [
-        { value: '', label: '自动检测（推荐）' },
-        ...this.availableShells.map(s => ({
-          value: s.path,
-          label: (s.name || s.path) + (s.description ? ' - ' + s.description : ''),
-        })),
-        { value: '__custom__', label: '自定义路径...' },
-      ];
-    },
     logLevelOptions() {
       return LOG_LEVELS;
     },
@@ -217,12 +194,13 @@ export const appOptions = {
       const opt = this.loginActionOptions.find(o => o.value === this.config.app_settings.startup_action);
       return opt ? opt.label.replace('（推荐）', '') : '不自动执行';
     },
-    binaryOptions() {
+    scriptTypeOptions() {
       return [
-        { value: '', label: '选择执行程序...' },
-        ...this.availableBinaries.map(b => ({ value: b.path, label: b.name })),
-        { value: '__custom_python__', label: 'Python (自定义环境)' },
-        { value: '__custom__', label: '自定义路径...' },
+        { value: 'py', label: 'Python' },
+        { value: 'bat', label: 'Batch (bat)' },
+        { value: 'ps1', label: 'PowerShell' },
+        { value: 'sh', label: 'Shell' },
+        { value: 'exe', label: '可执行文件' },
       ];
     },
     networkInterfaceOptions() {

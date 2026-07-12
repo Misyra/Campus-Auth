@@ -9,7 +9,9 @@ logger = get_logger("system_tray", source="backend")
 
 
 class SystemTray:
-    def __init__(self, port: int = DEFAULT_APP_PORT, on_exit=None, on_open_console=None):
+    def __init__(
+        self, port: int = DEFAULT_APP_PORT, on_exit=None, on_open_console=None
+    ):
         self.port = port
         self.on_exit = on_exit
         self.on_open_console = on_open_console

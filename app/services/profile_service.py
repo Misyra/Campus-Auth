@@ -330,8 +330,6 @@ class SaveResult:
     message: str
 
 
-
-
 def save_global_and_profile(
     payload: ConfigSaveRequest,
     profile_service: ProfileService,

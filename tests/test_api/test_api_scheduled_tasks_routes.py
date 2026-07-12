@@ -4,32 +4,11 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-
 # ── 创建定时任务 ──
 
 
 class TestCreateScheduledTask:
     """POST /api/scheduled-tasks"""
-
-    def test_create_shell_task_success(self, api_client):
-        """创建 Shell 类型任务成功。"""
-        test_client, mock_services = api_client
-        mock_engine = MagicMock()
-        mock_tasks = MagicMock()
-        mock_engine.tasks = mock_tasks
-        mock_services.engine = mock_engine
-        mock_tasks.registry.save_task.return_value = (True, "创建成功")
-        resp = test_client.post(
-            "/api/scheduled-tasks",
-            json={
-                "name": "测试任务",
-                "type": "shell",
-                "command": "echo hello",
-                "schedule": {"hour": 8, "minute": 30},
-            },
-        )
-        assert resp.status_code == 200
-        assert resp.json()["success"] is True
 
     def test_create_script_task_success(self, api_client):
         """创建 script 类型任务成功。"""
@@ -81,8 +60,8 @@ class TestCreateScheduledTask:
         resp = test_client.post(
             "/api/scheduled-tasks",
             json={
-                "type": "shell",
-                "command": "echo",
+                "type": "script",
+                "target_id": "test_script",
                 "schedule": {"hour": 0, "minute": 0},
             },
         )
@@ -105,22 +84,6 @@ class TestCreateScheduledTask:
         )
         assert resp.status_code == 422
 
-    def test_create_shell_missing_command(self, api_client):
-        """Shell 类型缺少命令返回 422（Pydantic model_validator）。"""
-        test_client, mock_services = api_client
-        mock_engine = MagicMock()
-        mock_tasks = MagicMock()
-        mock_engine.tasks = mock_tasks
-        mock_services.engine = mock_engine
-        resp = test_client.post(
-            "/api/scheduled-tasks",
-            json={
-                "name": "test",
-                "type": "shell",
-                "schedule": {"hour": 0, "minute": 0},
-            },
-        )
-        assert resp.status_code == 422
 
     def test_create_script_missing_target(self, api_client):
         """script 类型缺少 target_id 返回 422（Pydantic model_validator）。"""
@@ -148,7 +111,7 @@ class TestCreateScheduledTask:
         mock_services.engine = mock_engine
         resp = test_client.post(
             "/api/scheduled-tasks",
-            json={"name": "test", "type": "shell", "command": "echo"},
+            json={"name": "test", "type": "script", "target_id": "test_script"},
         )
         assert resp.status_code == 422
 
@@ -164,8 +127,8 @@ class TestCreateScheduledTask:
             "/api/scheduled-tasks",
             json={
                 "name": "test",
-                "type": "shell",
-                "command": "echo",
+                "type": "script",
+                "target_id": "test_script",
                 "enabled": True,
                 "schedule": {"hour": 0, "minute": 0},
             },
@@ -190,8 +153,8 @@ class TestUpdateScheduledTask:
         mock_tasks.registry.get_task.return_value = {
             "id": "task1",
             "name": "旧名称",
-            "type": "shell",
-            "command": "echo old",
+            "type": "script",
+            "target_id": "old_script",
             "enabled": True,
             "schedule": {"hour": 8, "minute": 0},
             "timeout": 60,
@@ -199,7 +162,7 @@ class TestUpdateScheduledTask:
         mock_tasks.registry.save_task.return_value = (True, "更新成功")
         resp = test_client.put(
             "/api/scheduled-tasks/task1",
-            json={"name": "新名称", "command": "echo new"},
+            json={"name": "新名称", "target_id": "new_script"},
         )
         assert resp.status_code == 200
         assert resp.json()["success"] is True
@@ -228,8 +191,8 @@ class TestUpdateScheduledTask:
         mock_tasks.registry.get_task.return_value = {
             "id": "task1",
             "name": "旧名称",
-            "type": "shell",
-            "command": "echo",
+            "type": "script",
+            "target_id": "s1",
             "schedule": {"hour": 0, "minute": 0},
         }
         resp = test_client.put(
@@ -248,8 +211,8 @@ class TestUpdateScheduledTask:
         mock_tasks.registry.get_task.return_value = {
             "id": "task1",
             "name": "test",
-            "type": "shell",
-            "command": "echo",
+            "type": "script",
+            "target_id": "s1",
             "schedule": {"hour": 0, "minute": 0},
         }
         resp = test_client.put(
@@ -257,27 +220,6 @@ class TestUpdateScheduledTask:
             json={"type": "invalid"},
         )
         assert resp.status_code == 400
-
-    def test_update_to_shell_without_command(self, api_client):
-        """更新为 shell 类型但无命令返回 400（Pydantic model_validator）。"""
-        test_client, mock_services = api_client
-        mock_engine = MagicMock()
-        mock_tasks = MagicMock()
-        mock_engine.tasks = mock_tasks
-        mock_services.engine = mock_engine
-        mock_tasks.registry.get_task.return_value = {
-            "id": "task1",
-            "name": "test",
-            "type": "script",
-            "target_id": "s1",
-            "schedule": {"hour": 0, "minute": 0},
-        }
-        resp = test_client.put(
-            "/api/scheduled-tasks/task1",
-            json={"type": "shell"},
-        )
-        assert resp.status_code == 400
-
 
 # ── 切换启用/禁用 ──
 
@@ -296,8 +238,8 @@ class TestToggleScheduledTask:
             "id": "task1",
             "name": "test",
             "enabled": False,
-            "type": "shell",
-            "command": "echo",
+            "type": "script",
+            "target_id": "s1",
             "schedule": {"hour": 0, "minute": 0},
         }
         mock_tasks.registry.save_task.return_value = (True, "成功")
@@ -317,8 +259,8 @@ class TestToggleScheduledTask:
             "id": "task1",
             "name": "test",
             "enabled": True,
-            "type": "shell",
-            "command": "echo",
+            "type": "script",
+            "target_id": "s1",
             "schedule": {"hour": 0, "minute": 0},
         }
         mock_tasks.registry.save_task.return_value = (True, "成功")

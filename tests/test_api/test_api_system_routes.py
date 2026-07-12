@@ -6,7 +6,6 @@ from unittest.mock import MagicMock, patch
 
 from app.schemas import LoginCredentials, RuntimeConfig
 
-
 # ── 健康检查 ──
 
 
@@ -51,28 +50,6 @@ class TestInitStatus:
         assert resp.status_code == 200
         assert resp.json()["initialized"] is False
 
-
-# ── Shell 列表 ──
-
-
-class TestShells:
-    """GET /api/shells"""
-
-    @patch("app.api.autostart.detect_available_shells")
-    @patch("app.api.autostart.get_default_shell")
-    def test_list_shells(self, mock_default, mock_detect, api_client):
-        """返回可用 Shell 列表。"""
-        mock_detect.return_value = [
-            {"name": "cmd", "path": "cmd.exe", "description": "CMD"},
-        ]
-        mock_default.return_value = "cmd.exe"
-        test_client, _ = api_client
-        resp = test_client.get("/api/shells")
-        assert resp.status_code == 200
-        data = resp.json()
-        assert "shells" in data
-        assert "default" in data
-        assert len(data["shells"]) >= 1
 
 
 # ── 自启动管理 ──

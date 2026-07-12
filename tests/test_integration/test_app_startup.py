@@ -3,12 +3,10 @@
 from __future__ import annotations
 
 import asyncio
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import APIRouter
-
 
 # ── 辅助 fixtures ──
 
@@ -78,6 +76,7 @@ class TestCreateAppInitialization:
     def test_returns_fastapi_instance(self, mock_all_routers, mock_deps):
         """create_app 应返回 FastAPI 实例。"""
         from fastapi import FastAPI
+
         from app.application import create_app
 
         result = create_app()
@@ -131,6 +130,7 @@ class TestCreateAppInitialization:
     def test_accepts_existing_container(self, mock_all_routers, mock_deps):
         """create_app 接受 existing_container 参数。"""
         from fastapi import FastAPI
+
         from app.application import create_app
 
         mock_container = _make_mock_container()
@@ -401,7 +401,7 @@ class TestDependencyInjection:
 
     def test_access_log_event_controlled_by_flag(self, mock_all_routers, mock_deps):
         """access_log_enabled 参数应控制 _access_log_event。"""
-        from app.application import run, _access_log_event
+        from app.application import _access_log_event, run
 
         mock_server = MagicMock()
         mock_server.run = MagicMock()

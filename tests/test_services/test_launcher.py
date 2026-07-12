@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 
 class TestShutdownContainer:
     """shutdown_container 幂等性测试。"""

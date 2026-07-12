@@ -8,9 +8,11 @@ from __future__ import annotations
 
 import contextlib
 import platform
-import psutil
 import subprocess
 import sys
+
+import psutil
+
 from .logging import get_logger
 from .platform import CREATE_NO_WINDOW_FLAG
 

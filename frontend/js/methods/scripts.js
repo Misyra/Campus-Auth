@@ -1,7 +1,6 @@
-import { extractApiError, getBinaryName, safeApiCall, pickFile, downloadBlob } from './utils.js';
+import { extractApiError, safeApiCall, pickFile, downloadBlob } from './utils.js';
 
 export const scriptMethods = {
-  getBinaryName,
 
   async fetchScripts() {
     try {
@@ -12,50 +11,16 @@ export const scriptMethods = {
     }
   },
 
-  async fetchAvailableBinaries() {
-    try {
-      const { data } = await this.$api.get('/api/scripts/binaries');
-      this.availableBinaries = data;
-    } catch (error) {
-      this.frontendLogger.error('scripts', '获取可用二进制列表失败', error);
-    }
-  },
-
   async showScriptEditor(taskId) {
-    // 确保二进制列表已加载
-    if (!this.availableBinaries.length) {
-      await this.fetchAvailableBinaries();
-    }
-
     if (taskId) {
       try {
         const { data } = await this.$api.get(`/api/scripts/${taskId}`);
-        const binaryPath = data.binary_path || '';
-        const realBinaries = this.availableBinaries.filter(b => b.path !== '__custom_python__');
-        const isKnownBinary = binaryPath && realBinaries.some(b => b.path === binaryPath);
-
-        let selectValue = binaryPath;
-        let customBinary = '';
-        let customPythonBinary = '';
-
-        if (!isKnownBinary && binaryPath) {
-          if (binaryPath.toLowerCase().includes('python')) {
-            selectValue = '__custom_python__';
-            customPythonBinary = binaryPath;
-          } else {
-            selectValue = '__custom__';
-            customBinary = binaryPath;
-          }
-        }
-
         this.editingTask = {
           id: taskId,
           name: data.name || '',
           description: data.description || '',
-          content: data.content || '',
-          binary_path: selectValue,
-          _customBinary: customBinary,
-          _customPythonBinary: customPythonBinary,
+          type: data.type || 'py',
+          content: data.type === 'exe' ? (data.path || '') : (data.content || ''),
           _isNew: false,
         };
         this.editingTaskType = 'script';
@@ -68,25 +33,10 @@ export const scriptMethods = {
         id: '',
         name: '',
         description: '',
+        type: 'py',
         content: '#!/usr/bin/env python3\n"""自定义登录脚本"""\nimport httpx\n\n',
-        binary_path: '',
-        _customBinary: '',
-        _customPythonBinary: '',
         _isNew: true,
       };
-    }
-  },
-
-  onBinarySelectChange() {
-    if (this.editingTask.binary_path === '__custom__') {
-      this.editingTask._customBinary = this.editingTask._customBinary || '';
-    } else {
-      this.editingTask._customBinary = '';
-    }
-    if (this.editingTask.binary_path === '__custom_python__') {
-      this.editingTask._customPythonBinary = this.editingTask._customPythonBinary || '';
-    } else {
-      this.editingTask._customPythonBinary = '';
     }
   },
 
@@ -102,31 +52,27 @@ export const scriptMethods = {
       this.toastOnly(false, '脚本ID必须以字母开头，且只能包含字母、数字和下划线');
       return;
     }
-    if (!this.editingTask.content.trim()) {
-      this.toastOnly(false, '脚本内容不能为空');
+    const isExe = this.editingTask.type === 'exe';
+    const value = this.editingTask.content.trim();
+    if (!value) {
+      this.toastOnly(false, isExe ? '可执行文件路径不能为空' : '脚本内容不能为空');
       return;
     }
 
-    // 脚本内容大小限制（100KB）
-    const maxSize = 100 * 1024;
-    if (new TextEncoder().encode(this.editingTask.content).length > maxSize) {
-      this.toastOnly(false, `脚本内容超过大小限制（最大 ${maxSize / 1024}KB）`);
-      return;
-    }
-
-    // 处理二进制路径
-    let binaryPath = this.editingTask.binary_path;
-    if (binaryPath === '__custom__') {
-      binaryPath = this.editingTask._customBinary || '';
-    } else if (binaryPath === '__custom_python__') {
-      binaryPath = this.editingTask._customPythonBinary || '';
+    // 脚本内容大小限制（100KB）— 仅文本脚本
+    if (!isExe) {
+      const maxSize = 100 * 1024;
+      if (new TextEncoder().encode(value).length > maxSize) {
+        this.toastOnly(false, `脚本内容超过大小限制（最大 ${maxSize / 1024}KB）`);
+        return;
+      }
     }
 
     const payload = {
       name: this.editingTask.name || id,
       description: this.editingTask.description || '',
-      content: this.editingTask.content,
-      binary_path: binaryPath,
+      type: this.editingTask.type || 'py',
+      ...(isExe ? { path: value } : { content: value }),
     };
 
     try {
@@ -171,7 +117,11 @@ export const scriptMethods = {
     const resp = await safeApiCall(this, () => this.$api.get(`/api/scripts/${taskId}`), '导出失败');
     if (!resp) return;
     const data = resp.data;
-    const ext = this._inferScriptExtension(data.binary_path, data.content);
+    if (data.type === 'exe') {
+      this.toastOnly(true, `可执行文件路径: ${data.path}`);
+      return;
+    }
+    const ext = { py: '.py', bat: '.bat', ps1: '.ps1', sh: '.sh' }[data.type] || '.txt';
     downloadBlob(data.content || '', `${taskId}${ext}`, 'text/plain');
   },
 
@@ -190,21 +140,20 @@ export const scriptMethods = {
           return;
         }
       }
+      const ext = file.name.split('.').pop().toLowerCase();
+      const typeMap = { py: 'py', bat: 'bat', ps1: 'ps1', sh: 'sh' };
       this.editingTaskType = 'script';
       this.editingTask = {
         id: id,
         name: '',
         description: '',
+        type: typeMap[ext] || 'py',
         content: content,
-        binary_path: '',
-        _customBinary: '',
-        _customPythonBinary: '',
         _isNew: true,
       };
       this.currentPage = 'scripts';
       this.frontendLogger.info('scripts', '已导入脚本文件，请检查后保存');
     };
-    reader.readAsText(file);
   },
 
   loadScriptTemplate() {
@@ -262,24 +211,5 @@ print(f"HTTP {resp.status_code}")
     } catch (error) {
       this.toastOnly(false, extractApiError(error, '设置失败'));
     }
-  },
-
-  // 根据 binary_path 和脚本内容推断导出文件扩展名
-  _inferScriptExtension(binaryPath, content) {
-    if (binaryPath) {
-      const base = binaryPath.split(/[/\\]/).pop().toLowerCase();
-      if (base.startsWith('python') || base === 'py' || (base.endsWith('.exe') && base.includes('python'))) return '.py';
-      if (base === 'bash' || base === 'sh' || base === 'zsh') return '.sh';
-      if (base === 'cmd' || base === 'cmd.exe' || base === 'bat') return '.bat';
-      if (base === 'powershell' || base === 'pwsh') return '.ps1';
-    }
-    // 从 shebang 推断
-    if (content) {
-      const firstLine = content.split('\n')[0];
-      if (firstLine.includes('python')) return '.py';
-      if (firstLine.includes('bash') || firstLine.includes('sh')) return '.sh';
-      if (firstLine.includes('powershell') || firstLine.includes('pwsh')) return '.ps1';
-    }
-    return '.py';
   },
 };

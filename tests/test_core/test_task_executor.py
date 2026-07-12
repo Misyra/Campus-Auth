@@ -29,7 +29,6 @@ from app.tasks.step_handlers import (
     ScreenshotHandler,
     SelectHandler,
     SleepHandler,
-    StepHandler,
     WaitHandler,
     WaitUrlHandler,
 )

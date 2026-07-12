@@ -17,16 +17,6 @@ export function extractApiError(error, fallback = '操作失败') {
   return detail || error?.response?.data?.message || error?.message || fallback;
 }
 
-/**
- * 从路径中提取程序名称（去掉目录和扩展名）。
- * @param {string} path - 完整路径
- * @returns {string}
- */
-export function getBinaryName(path) {
-  if (!path) return 'Python';
-  const name = path.split(/[/\\]/).pop() || path;
-  return name.replace(/\.(exe|cmd|bat|sh)$/i, '') || name;
-}
 
 /**
  * 包装 API 调用，统一处理错误 toast。

@@ -114,7 +114,7 @@ def run_scheduled_task(
                 api_logger.info("执行定时任务 {} 成功", task_id)
             else:
                 api_logger.warning("执行定时任务 {} 失败: {}", task_id, message)
-        except Exception as e:
+        except Exception:
             api_logger.error("执行定时任务 {} 异常", task_id, exc_info=True)
 
     bg_tasks.add_task(_execute)

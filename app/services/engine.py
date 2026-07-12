@@ -508,7 +508,7 @@ class ScheduleEngine:
                 # 定时任务
                 if self._scheduler and self._scheduler.should_tick(now):
                     self._scheduler.tick(now)
-            except Exception as e:
+            except Exception:
                 logger.exception("引擎循环异常，继续运行")
                 await asyncio.sleep(1)
 
@@ -605,7 +605,7 @@ class ScheduleEngine:
 
             self._next_network_check = time.time() + result.interval
             self._update_status_snapshot(force=True)
-        except Exception as e:
+        except Exception:
             logger.exception("网络检测异常")
             self._next_network_check = time.time() + self._monitor_check_interval
 

@@ -9,6 +9,7 @@ from .logging import get_logger
 
 _logger = get_logger("cancel_token", source="backend")
 
+
 class CompositeCancelEvent(threading.Event):
     """组合多个 cancel_event：任一源被 set，则 is_set() 返回 True。
 

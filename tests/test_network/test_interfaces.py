@@ -188,6 +188,7 @@ class TestInterfaceManager:
 
         assert call_count == 2  # 首次 + 过期后
 
+
 class TestInterfaceManagerGateway:
     """网关解析测试。"""
 

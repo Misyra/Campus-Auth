@@ -134,7 +134,9 @@ class ServiceContainer:
                 format="{message}",
                 level="DEBUG",
             )
-            self.engine._status_manager.set_dashboard_sink(dashboard_sink)  # for list_logs
+            self.engine._status_manager.set_dashboard_sink(
+                dashboard_sink
+            )  # for list_logs
             self.ws_manager.set_dashboard_sink(dashboard_sink)  # for broadcast
         self._ws_drain_task = asyncio.create_task(self.ws_manager.ws_drain_loop())
         self._web_services_started = True

@@ -2,10 +2,10 @@
 
 import asyncio
 import contextlib
+import logging
 import mimetypes
 import threading
 import time
-import logging
 from contextlib import asynccontextmanager
 
 # Windows 上 mimetypes 模块可能无法正确识别 .js 的 MIME 类型
@@ -77,7 +77,6 @@ def _cleanup_screenshots() -> None:
     """启动时清理截图文件。"""
     _cleanup_temp_screenshots()
     _cleanup_dated_screenshots()
-
 
 
 _access_log_event = threading.Event()  # 默认未 set（即关闭）
@@ -277,7 +276,7 @@ def create_app(existing_container=None, boot_engine=False):
             若为 None，创建新的 ServiceContainer 并执行完整启动。
         boot_engine: 是否在 lifespan 内启动监控引擎（仅 existing_container 分支有效）。
     """
-    from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
+    from fastapi import FastAPI, Request, WebSocket
     from fastapi.middleware.cors import CORSMiddleware
     from fastapi.responses import JSONResponse
 
@@ -381,9 +380,7 @@ class _UvicornLogHandler(logging.Handler):
     """将 uvicorn 的标准 logging 路由到 loguru。"""
 
     def emit(self, record: logging.LogRecord) -> None:
-        logger.opt(exception=record.exc_info).log(
-            record.levelno, record.getMessage()
-        )
+        logger.opt(exception=record.exc_info).log(record.levelno, record.getMessage())
 
 
 def _setup_logging(
@@ -479,7 +476,9 @@ def run(
     """
     global app
 
-    _setup_logging(access_log_enabled, log_retention, logging_settings, existing_container)
+    _setup_logging(
+        access_log_enabled, log_retention, logging_settings, existing_container
+    )
 
     # 创建 FastAPI 应用
     _app = create_app(existing_container=existing_container, boot_engine=boot_engine)
@@ -492,7 +491,6 @@ def run(
     if server_ref is not None:
         server_ref[0] = uv_server
     uv_server.run()
-
 
 
 if __name__ == "__main__":

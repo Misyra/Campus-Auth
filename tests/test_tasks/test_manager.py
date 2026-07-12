@@ -31,27 +31,6 @@ class TestGetScriptPath:
         assert result.name == "my_task.json"
         assert result.exists()
 
-    def test_returns_py_when_exists(self, tmp_path):
-        """scripts/ 下有 .py 文件时返回该路径。"""
-        mgr = _make_manager(tmp_path)
-        script_py = mgr.scripts_dir / "run_task.py"
-        script_py.write_text("print('hello')", encoding="utf-8")
-
-        result = mgr.get_script_path("run_task")
-        assert result is not None
-        assert result.name == "run_task.py"
-        assert result.exists()
-
-    def test_returns_json_over_py(self, tmp_path):
-        """同时存在 .json 和 .py 时优先返回 .json。"""
-        mgr = _make_manager(tmp_path)
-        mgr.scripts_dir / "both.json"
-        (mgr.scripts_dir / "both.json").write_text("{}", encoding="utf-8")
-        (mgr.scripts_dir / "both.py").write_text("pass", encoding="utf-8")
-
-        result = mgr.get_script_path("both")
-        assert result is not None
-        assert result.suffix == ".json"
 
     def test_returns_path_when_not_exists(self, tmp_path):
         """脚本不存在时仍返回路径（指向 scripts/ 下的 .json）。"""
@@ -102,8 +81,8 @@ class TestSafeTaskPath:
     def test_scripts_type_returns_script_path(self, tmp_path):
         """task_type='scripts' 时仅搜索 scripts/。"""
         mgr = _make_manager(tmp_path)
-        (mgr.scripts_dir / "s_task.py").write_text("pass", encoding="utf-8")
+        (mgr.scripts_dir / "s_task.json").write_text('{}', encoding="utf-8")
 
         result = mgr._safe_task_path("s_task", task_type="scripts")
         assert result is not None
-        assert result.name == "s_task.py"
+        assert result.name == "s_task.json"

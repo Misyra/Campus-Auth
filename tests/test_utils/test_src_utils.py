@@ -9,9 +9,7 @@ from __future__ import annotations
 
 import contextlib
 import os
-
 import threading
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -39,7 +37,6 @@ from app.workers.playwright_worker import (
     WorkerCommand,
     WorkerResponse,
 )
-
 
 # ─────────────────────────────────────────────────────────────────────
 #  浏览器管理 (src/utils/browser.py)

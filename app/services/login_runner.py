@@ -11,7 +11,6 @@ if TYPE_CHECKING:
     from app.schemas import ApplicationContext
 
 
-
 def execute_login_with_retries(runtime_config: RuntimeConfig, logger) -> LoginResult:
     """执行登录（重试由 Worker 内的 LoginSession 负责）。
 

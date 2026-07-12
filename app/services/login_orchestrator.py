@@ -53,7 +53,6 @@ def runtime_config_to_worker_dict(
     d["retry_settings"] = config.retry.model_dump()
     d["active_task"] = config.active_task
     d["block_proxy"] = config.app_settings.block_proxy
-    d["shell_path"] = config.app_settings.shell_path
     d["access_log"] = config.logging.access_log
     d["log_retention_days"] = config.logging.log_retention_days
 

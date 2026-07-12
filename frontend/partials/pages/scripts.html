@@ -52,8 +52,7 @@
             <div class="task-info">
               <h3>{{ script.name }}</h3>
               <p class="task-desc">
-                <span v-if="script.binary_path" class="binary-badge">{{ getBinaryName(script.binary_path) }}</span>
-                <span v-else class="binary-badge binary-default">Python</span>
+                <span class="type-badge">{{ script.type || 'py' }}</span>
                 <span v-if="script.description"> · {{ script.description }}</span>
               </p>
             </div>
@@ -96,28 +95,16 @@
           <input id="script-desc" v-model="editingTask.description" type="text" placeholder="脚本描述（可选）" />
         </div>
         <div class="form-group">
-          <label for="script-binary">执行程序</label>
-          <div class="binary-input-group">
-            <custom-select v-model="editingTask.binary_path" :options="binaryOptions" @change="onBinarySelectChange"></custom-select>
-            <input
-              v-if="editingTask.binary_path === '__custom_python__'"
-              v-model="editingTask._customPythonBinary"
-              type="text"
-              placeholder="输入 Python 解释器的完整路径"
-              class="mt-2"
-            />
-            <input
-              v-if="editingTask.binary_path === '__custom__'"
-              v-model="editingTask._customBinary"
-              type="text"
-              placeholder="输入可执行文件的完整路径"
-              class="mt-2"
-            />
-          </div>
-          <span class="hint" v-if="editingTask.binary_path && editingTask.binary_path !== '__custom__' && editingTask.binary_path !== '__custom_python__'">当前: {{ editingTask.binary_path }}</span>
-          <span class="hint" v-else>选择执行此脚本的程序，默认使用当前 Python 解释器</span>
+          <label for="script-type">类型</label>
+          <custom-select v-model="editingTask.type" :options="scriptTypeOptions"></custom-select>
+          <span class="hint">选择脚本类型，决定执行方式</span>
         </div>
-        <div class="form-group">
+        <div v-if="editingTask.type === 'exe'" class="form-group">
+          <label for="script-path">可执行文件路径</label>
+          <input id="script-path" v-model="editingTask.content" type="text" placeholder="C:\path\to\program.exe 或 /usr/bin/program" />
+          <span class="hint">输入可执行文件的完整路径</span>
+        </div>
+        <div v-else class="form-group">
           <label for="script-content">脚本内容</label>
           <textarea
             id="script-content"

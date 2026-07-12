@@ -16,8 +16,8 @@ CREATE_NO_WINDOW_FLAG: int = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
 __all__ = [
     "CREATE_NO_WINDOW_FLAG",
-    "get_playwright_cache_dir",
     "get_platform",
+    "get_playwright_cache_dir",
     "is_linux",
     "is_macos",
     "is_windows",

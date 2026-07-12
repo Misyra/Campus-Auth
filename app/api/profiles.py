@@ -1,7 +1,9 @@
 """方案路由 — 配置方案的 CRUD、活动方案、网络检测、自动切换。"""
 
 from __future__ import annotations
-from typing import Any, Callable
+
+from collections.abc import Callable
+from typing import Any
 
 from fastapi import APIRouter, HTTPException
 

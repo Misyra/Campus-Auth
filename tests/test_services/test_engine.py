@@ -331,7 +331,9 @@ class TestHandleStart:
 
     @patch("app.services.engine.validate_env_config", return_value=(True, ""))
     @patch("app.services.engine.NetworkMonitorCore")
-    def test_handle_start_creates_core(self, mock_core_cls, _mock_validate, engine_factory):
+    def test_handle_start_creates_core(
+        self, mock_core_cls, _mock_validate, engine_factory
+    ):
         """正常启动时创建 NetworkMonitorCore。"""
         svc = engine_factory(raw=True)
         svc._profile_service = MagicMock()
@@ -349,7 +351,9 @@ class TestHandleStart:
 
     @patch("app.services.engine.validate_env_config", return_value=(True, ""))
     @patch("app.services.engine.NetworkMonitorCore")
-    def test_handle_start_pure_mode(self, mock_core_cls, _mock_validate, engine_factory):
+    def test_handle_start_pure_mode(
+        self, mock_core_cls, _mock_validate, engine_factory
+    ):
         """纯净模式标志通过 getter 传递。"""
         svc = engine_factory(raw=True)
         svc._profile_service = MagicMock()
@@ -885,7 +889,9 @@ class TestNetworkCheckBackoff:
         # attempt=3 → delay_before(3)=20.0 → 设置到 _next_retry_time
         assert svc._next_retry_time > time.time() + 19
 
-    async def test_on_done_manual_login_does_not_affect_failure_count(self, engine_factory):
+    async def test_on_done_manual_login_does_not_affect_failure_count(
+        self, engine_factory
+    ):
         """手动登录结果不应影响自动登录的退避计数。"""
         svc = engine_factory(raw=True)
         svc._runtime_config = RuntimeConfig(
@@ -904,7 +910,9 @@ class TestNetworkCheckBackoff:
         # 手动登录不应递增
         assert svc._retry_policy._attempt == 2
 
-    async def test_on_done_manual_success_does_not_clear_failure_count(self, engine_factory):
+    async def test_on_done_manual_success_does_not_clear_failure_count(
+        self, engine_factory
+    ):
         """手动登录成功不应清空自动登录的退避计数。"""
         svc = engine_factory(raw=True)
         svc._runtime_config = RuntimeConfig(

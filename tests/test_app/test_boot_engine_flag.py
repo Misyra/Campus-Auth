@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch, call
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import APIRouter
@@ -244,13 +244,13 @@ class TestRunFullNoDirectBoot:
 
     def test_run_full_does_not_call_boot_directly(self):
         """_run_full 应将 boot_engine 传递给 run()，而非直接调 boot()。"""
-        from app.services.launcher import launch_full as _run_full
         from app.schemas import (
-            ApplicationContext,
             AppConfig,
+            ApplicationContext,
             LaunchContext,
             LaunchSource,
         )
+        from app.services.launcher import launch_full as _run_full
 
         ctx = ApplicationContext(
             config=AppConfig(),
@@ -287,13 +287,13 @@ class TestRunFullNoDirectBoot:
 
     def test_run_full_passes_boot_engine_false(self):
         """should_boot_engine=False 时传递 boot_engine=False。"""
-        from app.services.launcher import launch_full as _run_full
         from app.schemas import (
-            ApplicationContext,
             AppConfig,
+            ApplicationContext,
             LaunchContext,
             LaunchSource,
         )
+        from app.services.launcher import launch_full as _run_full
 
         ctx = ApplicationContext(
             config=AppConfig(),
@@ -333,8 +333,8 @@ class TestContainerStartupOrder:
 
     def test_startup_calls_start_web_services_before_boot(self):
         """startup() 应先调 start_web_services() 再调 engine.boot()。"""
+
         from app.container import ServiceContainer
-        from pathlib import Path
 
         with (
             patch.object(ServiceContainer, "__init__", lambda self, *a, **kw: None),
