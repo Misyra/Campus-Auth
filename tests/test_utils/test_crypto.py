@@ -412,9 +412,13 @@ class TestSavePasswordField:
         result = crypto_mod.save_password_field("••••••••", "ENC:old")
         assert result.startswith("ENC:")
 
-    def test_raw_empty_preserves_existing(self, _reset_crypto_cache):
-        """空串应保留已有加密值。"""
-        assert crypto_mod.save_password_field("", "ENC:old") == "ENC:old"
+    def test_raw_empty_clears_existing(self, _reset_crypto_cache):
+        """空串应清空密码（返回空），与 crypto.save_password_field 文档契约一致。
+
+        注：PATCH 配置时「不修改密码」通过 password=None 传递（见 app/api/config.py），
+        而非空串；空串在此表示显式清空。
+        """
+        assert crypto_mod.save_password_field("", "ENC:old") == ""
 
     def test_raw_enc_returns_same(self, _reset_crypto_cache):
         """已加密值应原样返回。"""

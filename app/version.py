@@ -49,4 +49,4 @@ def compare_versions(a: str, b: str) -> int:
         return 0
     except (ValueError, AttributeError):
         logger.warning("版本号解析失败: a={!r}, b={!r}", a, b)
-        return 1
+        return 0

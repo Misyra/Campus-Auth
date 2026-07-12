@@ -144,6 +144,9 @@ def is_service_running() -> tuple[bool, int | None]:
             pid_file.unlink(missing_ok=True)
             return False, None
 
+    # 函数到达此处说明服务确实在运行（lightweight 模式，或 full 模式端口已在监听）
+    return True, pid
+
 
 def is_local_port_in_use(port: int, host: str = "127.0.0.1") -> bool:
     """检查本地端口是否被占用。

@@ -365,6 +365,8 @@ class TestHandleStart:
         svc._pure_mode = True
         mock_core = MagicMock()
         mock_core_cls.return_value = mock_core
+        # 避免 check_and_switch_profile_sync 默认返回真值 MagicMock 误触发 _reload_config_internal 覆盖 _runtime_config
+        mock_core.check_and_switch_profile_sync.return_value = False
         cmd = EngineCommand(type=EngineCmdType.START, data={})
         svc._handle_start(cmd)
         get_config = mock_core_cls.call_args[1]["get_config"]
@@ -740,7 +742,10 @@ class TestDoNetworkCheck:
         await svc._do_network_check_async()
         assert svc._retry_policy._attempt == 0
 
-    async def test_do_network_check_profile_switch(self, engine_factory):
+    async def test_do_network_check_runs_without_runtime_profile_switch(
+        self, engine_factory
+    ):
+        """网络检测正常执行；运行期自动切方案已按计划移除（仅启动时 _handle_start 一次性检测）。"""
         svc = engine_factory(raw=True)
         mock_core = MagicMock()
         mock_core.check_once = AsyncMock(
@@ -756,15 +761,13 @@ class TestDoNetworkCheck:
                 ),
             )
         )
-        mock_core.consume_profile_switch_flag.return_value = True
         svc._monitor_core = mock_core
-        svc._handle_stop = MagicMock()
-        svc._reload_config_internal = MagicMock()
-        svc._handle_start = MagicMock()
+
         await svc._do_network_check_async()
-        svc._handle_stop.assert_called_once()
-        svc._reload_config_internal.assert_called_once()
-        svc._handle_start.assert_called_once()
+
+        # 运行期不再触发 stop/reload/start
+        mock_core.check_once.assert_awaited_once()
+        assert svc._next_network_check > time.time()
 
     async def test_do_network_check_exception(self, engine_factory):
         svc = engine_factory(raw=True)
@@ -1332,7 +1335,8 @@ class TestStartStopMonitoring:
         mock_core.monitoring = True
         svc._monitor_core = mock_core
         ok, msg = svc.start_monitoring()
-        assert ok is False
+        # 幂等语义：已在运行时返回成功（而非失败）
+        assert ok is True
         assert "已在运行" in msg
 
     def test_start_monitoring_invalid_config(self, engine_factory):

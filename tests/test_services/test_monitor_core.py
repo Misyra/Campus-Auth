@@ -8,50 +8,6 @@ from app.schemas import RuntimeConfig
 from app.services.monitor_service import NetworkMonitorCore
 
 
-class TestProfileSwitchFlag:
-    """测试自动切换方案的标志位逻辑。"""
-
-    async def test_check_profile_switch_sets_flag(self):
-        """测试自动切换方案设置标志位"""
-
-        core = NetworkMonitorCore(get_config=lambda: RuntimeConfig())
-        mock_profile_service = MagicMock()
-        mock_profile_service.load.return_value.auto_switch = True
-        mock_profile_service.detect_matching_profile.return_value = "new_profile"
-        mock_profile_service.set_active_profile.return_value = (True, "ok")
-        core._profile_service = mock_profile_service
-        core._last_profile_id = "old_profile"
-
-        await core._check_profile_switch()
-
-        assert core._profile_switch_needed is True
-        assert core._last_profile_id == "new_profile"
-
-    async def test_check_profile_switch_no_change(self):
-        """测试方案未变化时不设置标志位"""
-
-        core = NetworkMonitorCore(get_config=lambda: RuntimeConfig())
-        mock_profile_service = MagicMock()
-        mock_profile_service.load.return_value.auto_switch = True
-        mock_profile_service.detect_matching_profile.return_value = "same_profile"
-        core._profile_service = mock_profile_service
-        core._last_profile_id = "same_profile"
-
-        await core._check_profile_switch()
-
-        assert core._profile_switch_needed is False
-
-    def test_consume_profile_switch_flag(self):
-        """测试消费标志位"""
-
-        core = NetworkMonitorCore(get_config=lambda: RuntimeConfig())
-        core._profile_switch_needed = True
-
-        assert core.consume_profile_switch_flag() is True
-        assert core._profile_switch_needed is False
-        assert core.consume_profile_switch_flag() is False
-
-
 class TestGetterInjection:
     """getter 注入：config 通过 getter 实时获取，不持有副本。"""
 

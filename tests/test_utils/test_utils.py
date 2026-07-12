@@ -170,8 +170,8 @@ class TestAtomicWriteCrossFilesystem:
 
         assert captured_dir == str(tmp_path)
 
-    def test_temp_file_created_in_parent_for_relative_path(self):
-        """验证相对路径时临时文件在当前目录创建。"""
+    def test_temp_file_created_in_parent_for_relative_path(self, tmp_path: Path):
+        """验证相对路径时临时文件在当前目录创建（切到隔离目录确保 cwd 确定，避免偶发）。"""
         captured_dir = None
         original_mkstemp = tempfile.mkstemp
 
@@ -180,10 +180,16 @@ class TestAtomicWriteCrossFilesystem:
             captured_dir = kwargs.get("dir")
             return original_mkstemp(**kwargs)
 
-        with patch("app.utils.files.tempfile.mkstemp", side_effect=mock_mkstemp):
-            atomic_write("test_relative_file.txt", "hello")
-            if os.path.exists("test_relative_file.txt"):
-                os.unlink("test_relative_file.txt")
+        # 切到隔离目录，保证相对路径的 cwd 确定，消除组合运行时的偶发失败
+        saved_cwd = os.getcwd()
+        os.chdir(tmp_path)
+        try:
+            with patch("app.utils.files.tempfile.mkstemp", side_effect=mock_mkstemp):
+                atomic_write("test_relative_file.txt", "hello")
+                if os.path.exists("test_relative_file.txt"):
+                    os.unlink("test_relative_file.txt")
+        finally:
+            os.chdir(saved_cwd)
 
         assert captured_dir == "."
 

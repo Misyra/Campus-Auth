@@ -318,8 +318,8 @@ class TestLoginWithNetworkDetection:
 
         assert svc._monitor_check_interval == 120
 
-    async def test_network_check_with_profile_switch(self):
-        """网络检测时检测到方案切换，重启监控。"""
+    async def test_network_check_runs_without_runtime_profile_switch(self):
+        """网络检测正常执行；运行期自动切方案已按计划移除（仅启动时 _handle_start 一次性检测）。"""
         svc = _make_raw_engine()
         mock_core = MagicMock()
         mock_core.check_once = AsyncMock(
@@ -335,17 +335,13 @@ class TestLoginWithNetworkDetection:
                 ),
             )
         )
-        mock_core.consume_profile_switch_flag.return_value = True
         svc._monitor_core = mock_core
-        svc._handle_stop = MagicMock()
-        svc._reload_config_internal = MagicMock()
-        svc._handle_start = MagicMock()
 
         await svc._do_network_check_async()
 
-        svc._handle_stop.assert_called_once()
-        svc._reload_config_internal.assert_called_once()
-        svc._handle_start.assert_called_once()
+        # 运行期不再触发 stop/reload/start
+        mock_core.check_once.assert_awaited_once()
+        assert svc._next_network_check > time.time()
 
     async def test_network_check_exception_continues(self):
         """网络检测异常时不影响引擎运行，设置下次检测时间。"""

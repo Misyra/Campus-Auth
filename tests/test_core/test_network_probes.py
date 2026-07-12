@@ -611,13 +611,14 @@ class TestIsAuthUrlReachable:
 
 
 class TestIsNetworkAvailable:
-    async def test_all_disabled_returns_true(self):
+    async def test_all_disabled_returns_false(self):
+        # B20 修复：所有检测方式均禁用时 is_network_available 返回 False（与 check_network_status 一致）
         result = await is_network_available(
             enable_tcp=False,
             enable_http=False,
             url_checks=None,
         )
-        assert result is True
+        assert result is False
 
     @patch("app.network.decision.is_network_available_socket", return_value=True)
     @patch("app.network.decision.is_network_available_http", return_value=True)

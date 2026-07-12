@@ -283,7 +283,7 @@ def patch_config(
         creds = current.pop("credentials", {})
         current.update(creds)
         # password 空串语义为不修改（见 save_password_field），不回填运行时明文以免无谓重新加密
-        current["password"] = ""
+        current["password"] = None
 
         patch_data = payload.model_dump(exclude_none=True)
 
