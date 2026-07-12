@@ -31,8 +31,8 @@ class TestToggleNoSideEffect:
             "id": "task1",
             "name": "test",
             "enabled": False,
-            "type": "shell",
-            "command": "echo",
+            "type": "script",
+            "target_id": "test_script",
             "schedule": {"hour": 0, "minute": 0},
         }
         mock_tasks.registry.get_task.return_value = original_task
@@ -67,8 +67,8 @@ class TestToggleNoSideEffect:
             "id": "task2",
             "name": "test2",
             "enabled": True,
-            "type": "shell",
-            "command": "echo",
+            "type": "script",
+            "target_id": "test_script",
             "schedule": {"hour": 8, "minute": 0},
         }
         mock_tasks.registry.get_task.return_value = original_task

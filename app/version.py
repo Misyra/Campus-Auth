@@ -10,6 +10,7 @@ from app.utils.logging import get_logger
 
 logger = get_logger("version", source="backend")
 
+
 def get_project_version(project_root: Path | None = None) -> str:
     """从 pyproject.toml 读取项目版本，读取失败时返回 unknown。
 

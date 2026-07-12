@@ -15,11 +15,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.schemas import MonitorSettings, RuntimeConfig
+from app.services.login_attempt import SCREENSHOT_URL_PATTERN, LoginAttempt
 from app.services.monitor_service import (
     NetworkMonitorCore,
     NetworkState,
 )
-from app.services.login_attempt import SCREENSHOT_URL_PATTERN, LoginAttempt
 
 # ── 第一部分：LoginAttempt（原 test_login.py）──
 

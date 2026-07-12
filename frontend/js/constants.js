@@ -147,7 +147,6 @@ export const DEFAULT_CONFIG = {
   active_task: "",
   app_settings: {
     block_proxy: true,
-    shell_path: "",
     startup_action: "none",
     runtime_mode: "full",
     lightweight_tray: true,

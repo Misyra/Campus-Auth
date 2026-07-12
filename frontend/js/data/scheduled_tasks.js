@@ -8,8 +8,6 @@ export function scheduledTasksData() {
       description: '',
       type: 'script',
       target_id: '',
-      command: '',
-      shell_path: '',
       enabled: true,
       schedule: {
         hour: 8,

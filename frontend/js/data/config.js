@@ -32,8 +32,6 @@ export function configData() {
     defaultUrlCheckUrls: [...DEFAULT_CONFIG.monitor.url_check_urls],
     dangerConfirm: null,
     dangerCountdown: 0,
-    availableShells: [],
-    defaultShell: '',
     // OCR 依赖管理
     ocrStatus: { installed: false, size_mb: 0 },
     // 并发锁（防止重复请求）

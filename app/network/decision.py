@@ -208,7 +208,8 @@ async def is_network_available(
         )
 
     if not enable_tcp and not enable_http and not enable_url:
-        return True
+        # B20 修复：与 check_network_status 保持一致，全部禁用时返回 False
+        return False
 
     if enable_http and not test_urls:
         from app.constants import DEFAULT_HTTP_TARGETS
@@ -226,9 +227,7 @@ async def is_network_available(
     tasks = []
     if enable_tcp:
         tasks.append(
-            is_network_available_socket(
-                test_sites=test_sites, timeout=timeout
-            )
+            is_network_available_socket(test_sites=test_sites, timeout=timeout)
         )
     if enable_http:
         tasks.append(
@@ -290,9 +289,7 @@ async def _is_auth_url_reachable(
             sock.setblocking(False)
             try:
                 bind_socket_to_interface(sock, interface_name, fallback_source_ip)
-                await asyncio.wait_for(
-                    loop.sock_connect(sock, (host, port)), timeout=3
-                )
+                await asyncio.wait_for(loop.sock_connect(sock, (host, port)), timeout=3)
                 sock.close()
                 logger.debug("认证可达性检测通过: {}", label)
                 return True

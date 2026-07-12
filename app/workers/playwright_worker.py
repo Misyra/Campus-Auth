@@ -311,6 +311,11 @@ class PlaywrightWorker:
         if not cmd.response_event.wait(timeout=timeout):
             # 超时：标记命令为已取消
             cmd.cancelled = True
+            # 传播取消信号：若命令携带 cancel_event，设置它以中断正在执行的会话
+            # （例如 LoginSession 在重试循环中会检查 cancel_event）
+            cancel = cmd.data.get("cancel_event")
+            if cancel is not None:
+                cancel.set()
             return WorkerResponse(success=False, error="命令执行超时或无响应")
 
         if isinstance(cmd.response_data, WorkerResponse):

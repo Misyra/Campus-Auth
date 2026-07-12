@@ -173,7 +173,6 @@ _CONFIG_FIELD_NAMES = {
     "logging.level": "后端日志级别",
     "app_settings.app_port": "网页端口",
     "app_settings.proxy": "网络代理",
-    "app_settings.shell_path": "Shell路径",
     "browser.viewport_width": "视口宽度",
     "browser.viewport_height": "视口高度",
     "pause.start_hour": "暂停开始时间",
@@ -187,9 +186,7 @@ _CONFIG_FIELD_NAMES = {
 _CONFIG_IGNORE_FIELDS = {"password"}
 
 
-def _diff_config_changes(
-    flat_old: dict, flat_new: dict
-) -> list[str]:
+def _diff_config_changes(flat_old: dict, flat_new: dict) -> list[str]:
     """比较新旧扁平化配置，返回变更描述列表。"""
     changes: list[str] = []
 
@@ -286,7 +283,7 @@ def patch_config(
         creds = current.pop("credentials", {})
         current.update(creds)
         # password 空串语义为不修改（见 save_password_field），不回填运行时明文以免无谓重新加密
-        current["password"] = ""
+        current["password"] = None
 
         patch_data = payload.model_dump(exclude_none=True)
 

@@ -133,11 +133,14 @@ class VariableResolver:
             return value
 
         # 构建白名单：config.variables（递归解析）→ template_vars → runtime_vars
+        # B19 修复：所有变量值都先递归解析，避免嵌套 {{...}} 在 JSON 编码后被二次替换
         known_vars: dict[str, Any] = {}
         for k, v in self.config.variables.items():
             known_vars[k] = self.resolve(v) if isinstance(v, str) else v
-        known_vars.update(self.template_vars)
-        known_vars.update(self.runtime_vars)
+        for k, v in self.template_vars.items():
+            known_vars[k] = self.resolve(v) if isinstance(v, str) else v
+        for k, v in self.runtime_vars.items():
+            known_vars[k] = self.resolve(v) if isinstance(v, str) else v
 
         for name, raw in known_vars.items():
             placeholder = f"{{{{{name}}}}}"

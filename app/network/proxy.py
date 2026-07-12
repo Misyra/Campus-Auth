@@ -164,25 +164,31 @@ class Socks5Server:
 
     def _relay(self, client: socket.socket, remote: socket.socket) -> None:
         sel = selectors.DefaultSelector()
-        sel.register(client, selectors.EVENT_READ)
-        sel.register(remote, selectors.EVENT_READ)
+        client_alive = True
+        remote_alive = True
         try:
-            while True:
-                events = sel.select(timeout=5.0)
-                if not events:
-                    break  # idle timeout
+            sel.register(client, selectors.EVENT_READ, "client")
+            sel.register(remote, selectors.EVENT_READ, "remote")
+            while (client_alive or remote_alive) and not self._stop_event.is_set():
+                events = sel.select(timeout=1.0)
                 for key, _ in events:
-                    try:
-                        data = key.fileobj.recv(65536)  # type: ignore[union-attr]
-                    except OSError:
-                        return
+                    data = key.fileobj.recv(4096)
                     if not data:
-                        return
-                    target = remote if key.fileobj is client else client
-                    try:
-                        target.sendall(data)
-                    except OSError:
-                        return
+                        if key.data == "client":
+                            client_alive = False
+                            sel.unregister(client)
+                            with contextlib.suppress(OSError):
+                                remote.shutdown(socket.SHUT_WR)
+                        else:
+                            remote_alive = False
+                            sel.unregister(remote)
+                            with contextlib.suppress(OSError):
+                                client.shutdown(socket.SHUT_WR)
+                        continue
+                    if key.fileobj is client:
+                        remote.sendall(data)
+                    else:
+                        client.sendall(data)
         finally:
             sel.close()
 

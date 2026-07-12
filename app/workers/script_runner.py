@@ -3,70 +3,42 @@
 from __future__ import annotations
 
 import contextlib
+import json
 import os
 import platform
-import re
+import subprocess
 import sys
 import tempfile
+import threading
 import time
 from pathlib import Path
-from typing import Any
 
 from app.utils.logging import get_logger
 from app.utils.shell_policy import ShellCommandPolicy
-from app.utils.shell_utils import detect_binaries
 
 logger = get_logger("script_runner", source="backend")
 
 # 默认脚本超时（秒）
 DEFAULT_TIMEOUT = 60
 
-# 正则提取解释器名：匹配字母前缀 + 可选版本号（如 python3、python3.12）
-_EXEC_NAME_RE = re.compile(r"^([a-zA-Z]+)(?:\d+\.?\d*)?$")
-
-# 解释器 → 临时文件后缀映射
-_BINARY_EXT_MAP = {
-    "python": ".py",
-    "python3": ".py",
-    "node": ".js",
-    "ruby": ".rb",
-    "php": ".php",
-    "perl": ".pl",
-    "raku": ".raku",
-    "lua": ".lua",
-    "r": ".R",
-    "rscript": ".R",
-    "cmd": ".bat",
-    "powershell": ".ps1",
-    "pwsh": ".ps1",
-    "bash": ".sh",
+# script_type → 临时文件后缀
+_TEMP_EXT: dict[str, str] = {
+    "py": ".py",
+    "bat": ".bat",
+    "ps1": ".ps1",
     "sh": ".sh",
-    "zsh": ".sh",
-    "fish": ".fish",
 }
 
+# 文本脚本类型
+_TEXT_TYPES = frozenset({"py", "bat", "ps1", "sh"})
 
-def _get_interpreter_name(binary: str) -> str:
-    """从解释器路径中提取语言名称（小写）。
-
-    使用 Path.stem 提取文件名，正则匹配字母前缀。
-    例如: /usr/bin/python3.12 → python, C:\\Python312\\python.exe → python
-    """
-    stem = Path(binary).stem
-    match = _EXEC_NAME_RE.match(stem)
-    if match:
-        return match.group(1).lower()
-    return stem.lower()
-
-
-def _get_temp_extension(binary: str) -> str:
-    """根据解释器名推断临时文件后缀。"""
-    lang = _get_interpreter_name(binary)
-    return _BINARY_EXT_MAP.get(lang, "")
-
-
-# 向后兼容：保留旧名称供 API 路由使用
-detect_available_binaries = detect_binaries
+# ShellCommandPolicy 允许的二进制列表
+_ALLOWED_BINARIES: list[str] = [
+    sys.executable,  # py
+    "cmd.exe",  # bat (Windows)
+    "powershell.exe",  # ps1 (Windows)
+    "sh",  # sh (Unix)
+]
 
 
 class ScriptRunner:
@@ -75,31 +47,37 @@ class ScriptRunner:
     脚本自行硬编码账号密码等参数，通过 stdout 输出信息。
     成功与否由网络检测判断，脚本只需发请求。
     支持 .py 文件和 JSON 格式（包含 content 字段）。
+
+    Args:
+        script_path: 脚本文件路径（.json 或 .py）
+        timeout: 脚本执行超时秒数
+        script_type: 脚本类型，如 "py", "bat", "ps1", "sh", "exe"
+        cancel_event: 可选的取消事件，设置后终止正在执行的子进程
     """
 
     def __init__(
         self,
         script_path: Path,
         timeout: int = DEFAULT_TIMEOUT,
-        binary_path: str = "",
+        script_type: str = "py",
+        cancel_event: threading.Event | None = None,
     ):
         self.script_path = script_path
         self.timeout = timeout
-        self.binary_path = binary_path or sys.executable
+        self.script_type = script_type
         self._script_content: str | None = None
-        self._cache_available_binaries: list[dict[str, Any]] | None = None
+        self._cancel_event = cancel_event
 
     def _load_script_content(self) -> str | None:
         """从 JSON 文件加载脚本内容。
 
-        .json 文件解析失败时抛出 ValueError，避免静默降级为 .py 执行。
+        .json 文件解析失败时抛出 ValueError，避免静默降级。
+        非 JSON 文件返回 None。
         """
         if self._script_content is not None:
             return self._script_content
 
         if self.script_path.suffix.lower() == ".json":
-            import json
-
             try:
                 data = json.loads(self.script_path.read_text(encoding="utf-8"))
             except Exception as e:
@@ -107,70 +85,46 @@ class ScriptRunner:
             self._script_content = data.get("content", "")
             return self._script_content
 
-        # .py 文件直接返回 None，由 _build_cmd 处理
         return None
 
-    def _build_cmd(self, script_file: str | None = None) -> list[str]:
-        """构建执行命令。
+    def _load_exe_path(self) -> str:
+        """从 JSON 文件读取 exe 的 path 字段。
 
-        Args:
-            script_file: 可选，指定要执行的脚本文件路径。
-                         为 None 时使用 self.script_path（仅文件脚本）。
+        Raises:
+            ValueError: JSON 格式错误或缺少 path 字段
         """
-        exe_name = _get_interpreter_name(self.binary_path)
+        try:
+            data = json.loads(self.script_path.read_text(encoding="utf-8"))
+        except Exception as e:
+            raise ValueError(f"JSON 脚本格式错误或编码不支持: {e}") from e
+        exe_path = data.get("path", "")
+        if not exe_path:
+            raise ValueError("JSON 中缺少 'path' 字段")
+        return exe_path
 
-        # 指定了脚本文件（临时文件或普通文件）：统一按文件执行
-        if script_file is not None:
-            if platform.system() == "Windows":
-                if exe_name in ("powershell", "pwsh"):
-                    return [
-                        self.binary_path,
-                        "-NoProfile",
-                        "-ExecutionPolicy",
-                        "Bypass",
-                        "-WindowStyle",
-                        "Hidden",
-                        "-File",
-                        script_file,
-                    ]
-                elif exe_name == "cmd":
-                    # cmd /c 直接执行脚本文件，无需 call（call 用于调用另一个 bat 并返回）
-                    return [self.binary_path, "/c", script_file]
-            else:
-                if exe_name in ("bash", "sh", "zsh", "fish"):
-                    return [self.binary_path, script_file]
-            return [self.binary_path, script_file]
-
-        script = str(self.script_path)
-
-        # JSON 格式脚本：不应该走到这里（应通过 script_file 参数传入临时文件）
-        content = self._load_script_content()
-        if content is not None:
-            raise RuntimeError("JSON 内容脚本必须通过临时文件执行，请使用 run() 方法")
-
-        # .py 或其他文件
-        if platform.system() == "Windows":
-            if exe_name in ("powershell", "pwsh"):
-                return [
-                    self.binary_path,
-                    "-NoProfile",
-                    "-WindowStyle",
-                    "Hidden",
-                    "-File",
-                    script,
-                ]
-            elif exe_name == "cmd":
-                # cmd /c 直接执行脚本文件，无需 call（call 用于调用另一个 bat 并返回）
-                return [self.binary_path, "/c", script]
+    def _build_cmd(self, script_file: str) -> list[str]:
+        """根据 script_type 构建固定命令模板。"""
+        if self.script_type == "py":
+            return [sys.executable, script_file]
+        elif self.script_type == "bat":
+            return ["cmd.exe", "/c", script_file]
+        elif self.script_type == "ps1":
+            return [
+                "powershell.exe",
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-File",
+                script_file,
+            ]
+        elif self.script_type == "sh":
+            return ["sh", script_file]
         else:
-            if exe_name in ("bash", "sh", "zsh", "fish"):
-                return [self.binary_path, script]
-
-        return [self.binary_path, script]
+            raise ValueError(f"不支持的 script_type: {self.script_type}")
 
     def _content_temp_file(self, content: str) -> str:
-        """将 JSON 内容写入临时文件，返回文件路径。"""
-        ext = _get_temp_extension(self.binary_path)
+        """将脚本内容写入临时文件，返回文件路径。"""
+        ext = _TEMP_EXT.get(self.script_type, "")
         tf = tempfile.NamedTemporaryFile(
             "w",
             suffix=ext,
@@ -181,14 +135,38 @@ class ScriptRunner:
         tf.close()
         return tf.name
 
+    def _run_exe(self, path: str) -> tuple[bool, str]:
+        """直接启动 exe 程序（fire-and-forget）。"""
+        try:
+            subprocess.Popen([path], close_fds=True)
+            return True, f"已启动: {path}"
+        except FileNotFoundError:
+            return False, f"文件不存在: {path}"
+        except PermissionError as e:
+            return False, f"权限不足: {e}"
+        except Exception as e:
+            return False, f"启动失败: {e}"
+
     def run(self) -> tuple[bool, str]:
         """执行脚本并返回 (执行是否成功, 输出信息)。
 
         注意：这里的 success 表示脚本是否正常执行完毕（exit code 0），
         不代表登录是否成功。登录成功与否由调用方通过网络检测判断。
         """
-        if not self.binary_path:
-            return False, "未指定执行二进制"
+        # exe 类型：直接启动进程，不走 ShellCommandPolicy
+        if self.script_type == "exe":
+            if self._cancel_event is not None and self._cancel_event.is_set():
+                return False, "任务已被取消"
+            try:
+                exe_path = self._load_exe_path()
+            except ValueError as e:
+                logger.warning("exe 脚本加载失败 (script={}): {}", self.script_path, e)
+                return False, str(e)
+            return self._run_exe(exe_path)
+
+        # 文本脚本类型
+        if self.script_type not in _TEXT_TYPES:
+            return False, f"不支持的脚本类型: {self.script_type}"
 
         start = time.perf_counter()
         env = _build_minimal_env()
@@ -201,20 +179,15 @@ class ScriptRunner:
             return False, str(e)
 
         if content is not None:
-            # JSON 内容脚本：写入临时文件执行，绕过命令行引号转义问题
+            # JSON 内容脚本：写入临时文件执行
             temp_path = self._content_temp_file(content)
             cmd = self._build_cmd(script_file=temp_path)
         else:
-            cmd = self._build_cmd()
+            # 文件脚本：直接使用文件路径
+            cmd = self._build_cmd(script_file=str(self.script_path))
 
         # 使用 ShellCommandPolicy 进行安全校验和执行
-        if self._cache_available_binaries is None:
-            self._cache_available_binaries = detect_available_binaries()
-        available = [b["path"] for b in self._cache_available_binaries]
-        if self.binary_path not in available:
-            logger.debug("binary_path 不在已知列表，已自动添加: {}", self.binary_path)
-            available.append(self.binary_path)
-        policy = ShellCommandPolicy(allowlist=available)
+        policy = ShellCommandPolicy(allowlist=list(_ALLOWED_BINARIES))
 
         kwargs: dict = {"env": env}
         # JSON 内容脚本（临时文件）不设 cwd，文件脚本设 cwd 为脚本所在目录
@@ -225,6 +198,7 @@ class ScriptRunner:
             returncode, stdout_str, stderr_str = policy.run_sync(
                 cmd,
                 timeout=self.timeout,
+                cancel_event=self._cancel_event,
                 **kwargs,
             )
         except PermissionError as e:
@@ -247,7 +221,7 @@ class ScriptRunner:
             logger.debug("脚本 stderr: {}", stderr_str[:500])
 
         if returncode == 0:
-            output = stdout_str[:500] or f"(无输出, exit code 0)"
+            output = stdout_str[:500] or "(无输出, exit code 0)"
             logger.info("脚本执行成功 (耗时 {:.1f}s)", elapsed)
             return True, output
         else:

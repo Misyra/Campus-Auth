@@ -52,6 +52,7 @@ class TestLoginConnection:
             ),
         ):
             import asyncio
+
             loop = asyncio.new_event_loop()
             result = loop.run_until_complete(engine._do_async_login())
             loop.close()
@@ -114,6 +115,7 @@ class TestLoginConnection:
 
         # 通过引擎的 _do_async_login 连续提交登录（走 done callback 路径）
         import asyncio
+
         for i in range(3):
             future = Future()
             handle = MagicMock()

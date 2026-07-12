@@ -11,21 +11,23 @@ from __future__ import annotations
 import datetime
 import os
 import tempfile
-import time
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
+# ── network ──
+from app.network.parsers import parse_host_port
+
+# ── time_utils ──
+from app.schemas import PauseSettings
+
 # ── str_to_bool ──
 from app.utils import str_to_bool
 
 # ── config_helpers ──
-
 # ── crypto ──
 from app.utils.crypto import (
-    decrypt_password,
-    encrypt_password,
     save_password_field,
 )
 
@@ -45,9 +47,6 @@ from app.utils.logging import (
     normalize_level,
 )
 
-# ── network ──
-from app.network.parsers import parse_host_port
-
 # ── platform ──
 from app.utils.platform import (
     get_platform,
@@ -55,9 +54,6 @@ from app.utils.platform import (
     is_macos,
     is_windows,
 )
-
-# ── time_utils ──
-from app.schemas import PauseSettings
 from app.utils.time_utils import (
     _is_in_pause_period,
     _parse_pause_range,
@@ -174,8 +170,8 @@ class TestAtomicWriteCrossFilesystem:
 
         assert captured_dir == str(tmp_path)
 
-    def test_temp_file_created_in_parent_for_relative_path(self):
-        """验证相对路径时临时文件在当前目录创建。"""
+    def test_temp_file_created_in_parent_for_relative_path(self, tmp_path: Path):
+        """验证相对路径时临时文件在当前目录创建（切到隔离目录确保 cwd 确定，避免偶发）。"""
         captured_dir = None
         original_mkstemp = tempfile.mkstemp
 
@@ -184,10 +180,16 @@ class TestAtomicWriteCrossFilesystem:
             captured_dir = kwargs.get("dir")
             return original_mkstemp(**kwargs)
 
-        with patch("app.utils.files.tempfile.mkstemp", side_effect=mock_mkstemp):
-            atomic_write("test_relative_file.txt", "hello")
-            if os.path.exists("test_relative_file.txt"):
-                os.unlink("test_relative_file.txt")
+        # 切到隔离目录，保证相对路径的 cwd 确定，消除组合运行时的偶发失败
+        saved_cwd = os.getcwd()
+        os.chdir(tmp_path)
+        try:
+            with patch("app.utils.files.tempfile.mkstemp", side_effect=mock_mkstemp):
+                atomic_write("test_relative_file.txt", "hello")
+                if os.path.exists("test_relative_file.txt"):
+                    os.unlink("test_relative_file.txt")
+        finally:
+            os.chdir(saved_cwd)
 
         assert captured_dir == "."
 
@@ -766,7 +768,6 @@ class TestDefaultConstants:
 
 def test_save_password_field_no_warning_for_empty(caplog):
     """save_password_field 对空串输入不应产生 warning 日志。"""
-    from app.utils.crypto import save_password_field
 
     caplog.clear()
     with caplog.at_level("WARNING"):

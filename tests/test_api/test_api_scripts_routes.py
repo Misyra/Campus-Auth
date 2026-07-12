@@ -26,8 +26,8 @@ class TestListScripts:
         """有脚本时返回列表。"""
         test_client, mock_services = api_client
         mock_services.task_manager.list_script_tasks.return_value = [
-            {"id": "script1", "name": "脚本1", "type": "script"},
-            {"id": "script2", "name": "脚本2", "type": "script"},
+            {"id": "script1", "name": "脚本1", "type": "py"},
+            {"id": "script2", "name": "脚本2", "type": "py"},
         ]
         resp = test_client.get("/api/scripts")
         assert resp.status_code == 200
@@ -46,7 +46,7 @@ class TestGetScript:
         mock_services.task_manager.get_task_detail.return_value = {
             "id": "script1",
             "name": "测试脚本",
-            "type": "script",
+            "type": "py",
             "content": "echo hello",
         }
         resp = test_client.get("/api/scripts/script1")
@@ -87,7 +87,7 @@ class TestSaveScript:
         )
         resp = test_client.put(
             "/api/scripts/new_script",
-            json={"name": "新脚本", "content": "echo test", "type": "script"},
+            json={"name": "新脚本", "content": "echo test", "type": "py"},
         )
         assert resp.status_code == 200
         assert resp.json()["success"] is True
@@ -151,8 +151,7 @@ class TestRunScript:
         mock_services.task_manager.get_task_detail.return_value = {
             "id": "script1",
             "name": "测试",
-            "type": "script",
-            "binary_path": "",
+            "type": "py",
         }
         mock_services.task_manager.get_script_path.return_value = script_file
 
@@ -179,31 +178,12 @@ class TestRunScript:
         mock_services.task_manager.get_task_detail.return_value = {
             "id": "script1",
             "name": "测试",
-            "type": "script",
+            "type": "py",
         }
         mock_services.task_manager.get_script_path.return_value = None
         resp = test_client.post("/api/scripts/script1/run")
         assert resp.status_code == 200
         assert resp.json()["success"] is False
-
-
-# ── 获取可用二进制列表 ──
-
-
-class TestListBinaries:
-    """GET /api/scripts/binaries"""
-
-    @patch("app.api.scripts.detect_available_binaries")
-    def test_list_binaries(self, mock_detect, api_client):
-        """返回可用二进制列表。"""
-        mock_detect.return_value = [
-            {"name": "Python", "path": "/usr/bin/python3", "description": "Python"},
-            {"name": "bash", "path": "/bin/bash", "description": "Bash"},
-        ]
-        test_client, _ = api_client
-        resp = test_client.get("/api/scripts/binaries")
-        assert resp.status_code == 200
-        assert isinstance(resp.json(), list)
 
 
 # ── 线程池验证 ──
@@ -221,11 +201,9 @@ class TestScriptThreadPool:
             delattr(run_script, "_executor")
 
         captured_executor = {}
-
         mock_task_mgr = MagicMock()
         mock_task_mgr.get_task_detail.return_value = {
-            "type": "script",
-            "binary_path": "",
+            "type": "py",
         }
         mock_task_mgr.get_script_path.return_value = MagicMock(
             exists=MagicMock(return_value=True)

@@ -6,23 +6,21 @@
 
 from __future__ import annotations
 
-import json
-
 import pytest
 from pydantic import ValidationError
 
 from app.schemas import (
     ApiResponse,
-    Profile,
     AutoStartStatusResponse,
     LogEntry,
+    LoginCredentials,
     MonitorStatusResponse,
+    Profile,
     ProfilesData,
+    RuntimeConfig,
 )
-from app.utils.crypto import decrypt_password_field
-from app.schemas import LoginCredentials, RuntimeConfig
 from app.utils.config_utils import validate_env_config
-from app.utils.crypto import encrypt_password
+from app.utils.crypto import decrypt_password_field
 from app.utils.logging import normalize_level as _normalize_level
 
 # =====================================================================
@@ -100,6 +98,41 @@ class TestValidateEnvConfig:
     def test_none_values(self):
         ok, msg = validate_env_config(RuntimeConfig())
         assert ok is False
+
+    def test_decryption_failed_rejects_config(self):
+        """password_decryption_failed 时配置无效。"""
+        ok, msg = validate_env_config(
+            RuntimeConfig(
+                credentials=LoginCredentials(
+                    username="user",
+                    password="",
+                    auth_url="http://10.0.0.1",
+                    password_decryption_failed=True,
+                )
+            )
+        )
+        assert ok is False
+        assert "解密失败" in msg
+
+    def test_global_flag_does_not_reject_valid_config(self):
+        """全局解密错误标志不应影响有效配置的校验。"""
+        from app.utils.crypto import _decryption_failed
+
+        # 模拟其他方案设置的全局标志
+        _decryption_failed.set()
+        try:
+            ok, msg = validate_env_config(
+                RuntimeConfig(
+                    credentials=LoginCredentials(
+                        username="user",
+                        password="validpass",
+                        auth_url="http://10.0.0.1",
+                    )
+                )
+            )
+            assert ok is True
+        finally:
+            _decryption_failed.clear()
 
 
 # =====================================================================
@@ -392,29 +425,33 @@ class TestDecryptPasswordField:
         from unittest.mock import patch
 
         with patch("app.utils.crypto.decrypt_password", return_value="secret"):
-            result, has_error = decrypt_password_field("ENC:encrypted")
+            result, has_error, dec_failed = decrypt_password_field("ENC:encrypted")
             assert result == "secret"
             assert has_error is False
+            assert dec_failed is False
 
     def test_masked_password_with_fallback(self):
         """掩码密码使用回退。"""
         from unittest.mock import patch
 
         with patch("app.utils.crypto.decrypt_password", return_value="fallback"):
-            result, has_error = decrypt_password_field(
+            result, has_error, dec_failed = decrypt_password_field(
                 "••••••••", "ENC:fallback_encrypted"
             )
             assert result == "fallback"
             assert has_error is False
+            assert dec_failed is False
 
     def test_masked_password_no_fallback(self):
         """掩码密码无回退返回空。"""
-        result, has_error = decrypt_password_field("••••••••", "")
+        result, has_error, dec_failed = decrypt_password_field("••••••••", "")
         assert result == ""
         assert has_error is False
+        assert dec_failed is False
 
     def test_plain_password(self):
         """明文密码直接返回。"""
-        result, has_error = decrypt_password_field("mypassword")
+        result, has_error, dec_failed = decrypt_password_field("mypassword")
         assert result == "mypassword"
         assert has_error is False
+        assert dec_failed is False

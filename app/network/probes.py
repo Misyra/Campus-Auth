@@ -147,7 +147,8 @@ async def _check_interface_connectivity(interface_name: str) -> bool:
             try:
                 bind_socket_to_interface(sock, interface_name, fallback_ip)
                 await asyncio.wait_for(
-                    loop.sock_connect(sock, (host, port)), timeout=_INTERFACE_CONNECT_TIMEOUT
+                    loop.sock_connect(sock, (host, port)),
+                    timeout=_INTERFACE_CONNECT_TIMEOUT,
                 )
                 return True
             except (OSError, TimeoutError):
@@ -193,7 +194,9 @@ async def _race_first_success_async(
             try:
                 result = await coro
             except Exception as e:
-                logger.debug("{} 探测异常: {} - {}", label, type(e).__name__, e, exc_info=True)
+                logger.debug(
+                    "{} 探测异常: {} - {}", label, type(e).__name__, e, exc_info=True
+                )
                 continue
 
             if isinstance(result, tuple) and len(result) == 3:
@@ -389,7 +392,7 @@ async def is_network_available_http(
                 if "generate_204" in url or "connectivitycheck" in url:
                     ok = resp.status_code == 204
                 else:
-                    ok = 200 <= resp.status_code < 300
+                    ok = 200 <= resp.status_code < 400
                 if ok:
                     return (url, True, f"HTTP {resp.status_code} ({elapsed:.0f}ms)")
                 return (url, False, f"HTTP {resp.status_code} ({elapsed:.0f}ms)")

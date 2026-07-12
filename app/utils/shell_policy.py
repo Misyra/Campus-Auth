@@ -8,9 +8,13 @@ from __future__ import annotations
 
 import contextlib
 import platform
-import psutil
 import subprocess
 import sys
+import threading
+import time
+
+import psutil
+
 from .logging import get_logger
 from .platform import CREATE_NO_WINDOW_FLAG
 
@@ -106,6 +110,7 @@ class ShellCommandPolicy:
         argv: list[str],
         *,
         timeout: int | None = None,
+        cancel_event: threading.Event | None = None,
         **kwargs,
     ) -> tuple[int, str, str]:
         """同步执行命令（用于 script_runner 的 subprocess.run 场景）。
@@ -113,6 +118,7 @@ class ShellCommandPolicy:
         Args:
             argv: 完整命令参数列表，第一个元素为执行路径
             timeout: 超时时间（秒），会被 clamp 到 [1, 3600]
+            cancel_event: 可选的取消事件，设置后终止子进程
             **kwargs: 传递给 subprocess.run 的额外参数
 
         Returns:
@@ -149,16 +155,36 @@ class ShellCommandPolicy:
 
         try:
             proc = subprocess.Popen(argv, **popen_kwargs)
-            stdout_str, stderr_str = proc.communicate(timeout=effective_timeout)
-        except subprocess.TimeoutExpired:
-            self._kill_process_tree_sync(proc.pid)
-            try:
-                proc.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                self._kill_process_tree_sync(proc.pid)
-                logger.warning("终止进程失败: kill 后仍未退出 (pid={})", proc.pid)
-            return -1, "", f"命令执行超时 ({effective_timeout}s)"
         except FileNotFoundError:
             return -1, "", f"执行文件不存在: {executable}"
+
+        if cancel_event is not None:
+            # 轮询模式：定期检查取消事件
+            deadline = time.monotonic() + effective_timeout
+            while proc.poll() is None:
+                if cancel_event.is_set():
+                    self._kill_process_tree_sync(proc.pid)
+                    with contextlib.suppress(subprocess.TimeoutExpired):
+                        proc.wait(timeout=5)
+                    return -1, "", "任务已被取消"
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    self._kill_process_tree_sync(proc.pid)
+                    with contextlib.suppress(subprocess.TimeoutExpired):
+                        proc.wait(timeout=5)
+                    return -1, "", f"命令执行超时 ({effective_timeout}s)"
+                time.sleep(min(0.3, remaining))
+            stdout_str, stderr_str = proc.communicate()
+        else:
+            try:
+                stdout_str, stderr_str = proc.communicate(timeout=effective_timeout)
+            except subprocess.TimeoutExpired:
+                self._kill_process_tree_sync(proc.pid)
+                try:
+                    proc.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    self._kill_process_tree_sync(proc.pid)
+                    logger.warning("终止进程失败: kill 后仍未退出 (pid={})", proc.pid)
+                return -1, "", f"命令执行超时 ({effective_timeout}s)"
 
         return proc.returncode, stdout_str.strip(), stderr_str.strip()

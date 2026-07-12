@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -18,7 +17,6 @@ from app.schemas import RuntimeConfig
 from app.services.scheduler_service import SchedulerService
 from app.services.task_executor import TaskExecutor
 from app.services.task_registry import TaskHistoryStore, TaskRegistry
-
 
 # =====================================================================
 # P0-1: 浏览器定时任务 task_id 注入

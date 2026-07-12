@@ -11,7 +11,6 @@ if TYPE_CHECKING:
     from app.schemas import ApplicationContext
 
 
-
 def execute_login_with_retries(runtime_config: RuntimeConfig, logger) -> LoginResult:
     """执行登录（重试由 Worker 内的 LoginSession 负责）。
 
@@ -47,6 +46,12 @@ def execute_login_with_retries(runtime_config: RuntimeConfig, logger) -> LoginRe
         profile_service=profile_service,
     )
 
+    # B2 修复：预校验凭据完整性
+    from app.services.login_orchestrator import validate_login_config
+    err = validate_login_config(runtime_config)
+    if err is not None:
+        logger.warning("登录配置无效: {}", err)
+        return LoginResult.CONFIG_ERROR
     try:
         handle = orchestrator.submit(source="login_once", config=runtime_config)
         ok, msg = handle.result()

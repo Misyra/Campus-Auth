@@ -55,10 +55,12 @@ def update_scheduled_task(
     if not existing:
         raise HTTPException(status_code=404, detail="定时任务不存在")
 
-    merged = {**existing, **payload}
-    if "schedule" in payload:
-        merged["schedule"] = {**existing.get("schedule", {}), **payload["schedule"]}
-
+    merged = {**existing}
+    for k, v in payload.items():
+        if isinstance(v, dict) and isinstance(merged.get(k), dict):
+            merged[k] = {**merged[k], **v}
+        else:
+            merged[k] = v
     try:
         config_model = ScheduledTaskConfig.model_validate(merged)
     except ValueError as e:
@@ -114,7 +116,7 @@ def run_scheduled_task(
                 api_logger.info("执行定时任务 {} 成功", task_id)
             else:
                 api_logger.warning("执行定时任务 {} 失败: {}", task_id, message)
-        except Exception as e:
+        except Exception:
             api_logger.error("执行定时任务 {} 异常", task_id, exc_info=True)
 
     bg_tasks.add_task(_execute)

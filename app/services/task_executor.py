@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import sys
 import threading
 import time
 from collections.abc import Callable
@@ -23,8 +22,6 @@ if TYPE_CHECKING:
 
 from app.schemas import RuntimeConfig
 from app.utils.logging import get_logger
-from app.utils.shell_policy import ShellCommandPolicy
-from app.utils.shell_utils import detect_shells, get_default_shell
 
 logger = get_logger("task_executor", source="backend")
 
@@ -131,11 +128,6 @@ class TaskExecutor:
         # 定时任务去重（Future + cancel_event 配对）
         self._running_tasks: dict[str, tuple[Future, threading.Event]] = {}
         self._running_tasks_lock = threading.Lock()
-
-        # Shell 安全策略
-        self._shell_policy = ShellCommandPolicy(
-            allowlist=[shell["path"] for shell in detect_shells()]
-        )
 
     @property
     def registry(self):
@@ -249,7 +241,7 @@ class TaskExecutor:
     ) -> tuple[bool, str]:
         """同步执行定时任务（在线程池工作线程中运行）。
 
-        根据任务类型分发到 _execute_script / _execute_browser / _execute_shell。
+        根据任务类型分发到 _execute_script / _execute_browser。
         执行完成后记录历史和更新 last_run。
 
         Args:
@@ -280,15 +272,10 @@ class TaskExecutor:
                 success, message = self._execute_browser(
                     task.get("target_id", ""), timeout, cancel_event
                 )
-            elif task_type == "shell":
-                success, message = self._execute_shell(
-                    task.get("command", ""), timeout,
-                    task.get("shell_path", ""), cancel_event
-                )
             else:
                 success, message = (
                     False,
-                    f"不支持的任务类型: {task_type}，当前支持: script、browser、shell",
+                    f"不支持的任务类型: {task_type}，当前支持: script、browser",
                 )
         except Exception as exc:
             logger.warning("任务执行异常", exc_info=True)
@@ -315,27 +302,27 @@ class TaskExecutor:
         self, script_id: str, timeout: int, cancel_event: threading.Event | None = None
     ) -> tuple[bool, str]:
         """执行自定义脚本任务。"""
-        task = self._registry.get_task(script_id)
-        if not task or task.get("type") != "script":
+        if self._task_manager is None:
+            return False, "TaskManager 未注入"
+        task = self._task_manager.get_task_detail(script_id)
+        if not task or task.get("type") not in ("py", "bat", "ps1", "sh", "exe"):
             return False, f"脚本任务不存在: {script_id}"
-
-        # 获取脚本路径（通过 registry 的 TaskManager）
-        script_path = self._registry.get_script_path(script_id)
-        if not script_path or not script_path.exists():
-            return False, f"脚本文件不存在: {script_id}"
-
-        # 延迟导入：避免顶层导入 playwright/script_runner 的启动开销
-        from app.workers.script_runner import ScriptRunner
 
         if cancel_event is not None and cancel_event.is_set():
             return False, "任务已被取消"
 
-        runner = ScriptRunner(
-            script_path,
-            timeout=timeout,
-            binary_path=task.get("binary_path", ""),
-        )
+        from app.workers.script_runner import ScriptRunner
 
+        script_path = self._task_manager.get_script_path(script_id)
+        if not script_path or not script_path.exists():
+            return False, f"脚本文件不存在: {script_id}"
+
+        runner = ScriptRunner(
+            script_path=script_path,
+            script_type=task["type"],
+            timeout=timeout,
+            cancel_event=cancel_event,
+        )
         return runner.run()
 
     def _execute_browser(
@@ -373,61 +360,6 @@ class TaskExecutor:
         if ok:
             return True, msg if isinstance(msg, str) else "浏览器任务执行成功"
         return False, msg or "浏览器任务执行失败"
-
-    def _execute_shell(
-        self, command: str, timeout: int, shell_path: str = "",
-        cancel_event: threading.Event | None = None,
-    ) -> tuple[bool, str]:
-        """执行 Shell 命令。"""
-        if not command.strip():
-            return False, "命令为空"
-        if cancel_event is not None and cancel_event.is_set():
-            return False, "任务已被取消"
-
-        # 如果没有指定 shell，使用全局配置或默认值
-        if not shell_path:
-            try:
-                config = (
-                    self._get_runtime_config()
-                    if self._get_runtime_config
-                    else RuntimeConfig()
-                )
-                shell_path = config.app_settings.shell_path
-            except Exception:
-                logger.warning("获取 shell_path 失败，使用默认值", exc_info=True)
-
-        if not shell_path:
-            shell_path = get_default_shell()
-
-        policy = self._shell_policy
-
-        try:
-            # 根据 shell 类型构建命令
-            shell_lower = shell_path.lower()
-            if "powershell" in shell_lower or "pwsh" in shell_lower:
-                cmd_args = [shell_path, "-Command", command]
-            elif sys.platform == "win32" and "cmd" in shell_lower:
-                cmd_args = [shell_path, "/c", command]
-            else:
-                # bash / zsh / fish / git-bash 等 POSIX shell
-                cmd_args = [shell_path, "-c", command]
-
-            returncode, stdout_str, stderr_str = policy.run_sync(
-                cmd_args,
-                timeout=timeout,
-            )
-
-            if returncode == 0:
-                output = stdout_str[:500] or "(无输出)"
-                return True, output
-            else:
-                output = stderr_str[:500] or stdout_str[:500] or f"退出码: {returncode}"
-                return False, output
-
-        except PermissionError as exc:
-            return False, str(exc)
-        except Exception as exc:
-            return False, f"执行异常: {exc}"
 
     # ── 辅助方法 ──
 

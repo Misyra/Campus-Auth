@@ -61,7 +61,6 @@ export const apiService = {
     fetchStatus: () => api.get('/api/autostart/status').then(r => r.data),
     toggle: (enable) => api.post(`/api/autostart/${enable ? 'enable' : 'disable'}`).then(r => r.data),
     setMode: (runtime_mode) => api.post('/api/autostart/mode', { runtime_mode }).then(r => r.data),
-    fetchShells: () => api.get('/api/shells').then(r => r.data),
   },
 
   // ── OCR ──

@@ -186,30 +186,6 @@
           />
         </div>
       </div>
-      <div class="form-group">
-        <div class="field-label-row">
-          <label for="settings-shell">Shell 路径</label>
-          <span class="field-help" tabindex="0" role="note" data-tip="定时任务执行 Shell 命令时使用的 Shell。留空使用系统默认（Windows 优先 PowerShell，Linux/macOS 使用 bash）。">?</span>
-        </div>
-        <custom-select v-model="shellPathMode" :options="shellPathOptions"></custom-select>
-        <div v-if="shellPathMode === '__custom__' || shellCustomMode" class="shell-custom-input">
-          <input
-            v-model.trim="config.app_settings.shell_path"
-            type="text"
-            placeholder="输入 Shell 可执行文件的完整路径"
-          />
-          <button type="button" class="btn btn-sm btn-secondary" @click="$refs.shellFileInput.click()">浏览...</button>
-          <input
-            ref="shellFileInput"
-            type="file"
-            accept=".exe,.bat,.cmd,.ps1,.sh"
-            style="display:none"
-            @change="onShellFileSelected"
-          />
-        </div>
-        <span class="hint" v-if="config.app_settings.shell_path && shellPathMode !== '__custom__'">当前: {{ config.app_settings.shell_path }}</span>
-        <span class="hint" v-else-if="!config.app_settings.shell_path">默认: {{ defaultShell }}</span>
-      </div>
     </div>
   </section>
 </div>

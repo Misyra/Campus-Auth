@@ -25,7 +25,7 @@
   color: rgba(148, 163, 184, 0.5);
 }
 
-.binary-badge {
+.type-badge {
   font-size: 12px;
   padding: 2px 6px;
   border-radius: 4px;
@@ -33,17 +33,6 @@
   background: rgba(99, 102, 241, 0.15);
   color: #818cf8;
   font-family: var(--font-mono);
-}
-
-.binary-default {
-  background: rgba(16, 185, 129, 0.15);
-  color: #34d399;
-}
-
-.binary-input-group {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
 }
 
 .mt-2 {

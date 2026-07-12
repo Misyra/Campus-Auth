@@ -28,6 +28,9 @@ def validate_env_config(config: RuntimeConfig) -> tuple[bool, str]:
     """
     creds = config.credentials
 
+    if creds.password_decryption_failed:
+        return False, "密码解密失败（可能是密钥变更），请在设置页面重新输入密码"
+
     if not creds.username or not creds.password:
         return False, "缺少用户名或密码"
 
@@ -38,10 +41,5 @@ def validate_env_config(config: RuntimeConfig) -> tuple[bool, str]:
 
     if not URL_PATTERN.match(creds.auth_url):
         return False, "认证地址必须以 http:// 或 https:// 开头"
-
-    from app.utils.crypto import has_decryption_error
-
-    if has_decryption_error():
-        return False, "密码解密失败（可能是密钥变更），请在设置页面重新输入密码"
 
     return True, ""

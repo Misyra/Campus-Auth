@@ -2,6 +2,5 @@
 export function scriptData() {
   return {
     scripts: [],
-    availableBinaries: [],
   };
 }

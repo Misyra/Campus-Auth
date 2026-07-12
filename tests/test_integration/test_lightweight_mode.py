@@ -4,9 +4,6 @@ from __future__ import annotations
 
 import threading
 import time
-from unittest.mock import patch
-
-import pytest
 
 from app.schemas import LoginCredentials
 from app.workers.playwright_worker import WorkerResponse

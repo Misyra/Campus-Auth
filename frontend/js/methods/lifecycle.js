@@ -26,7 +26,6 @@ export const lifecycleMethods = {
       this.fetchPureMode(),
       this.fetchLoginHistory(),
       this.loadScheduledTasks(),
-      this.fetchShells(),
       this.fetchOcrStatus(),
       this.fetchLogLevels(),
       this.fetchBrowsers(),

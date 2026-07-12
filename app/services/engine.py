@@ -508,7 +508,7 @@ class ScheduleEngine:
                 # 定时任务
                 if self._scheduler and self._scheduler.should_tick(now):
                     self._scheduler.tick(now)
-            except Exception as e:
+            except Exception:
                 logger.exception("引擎循环异常，继续运行")
                 await asyncio.sleep(1)
 
@@ -573,16 +573,6 @@ class ScheduleEngine:
             result = await core.check_once()
             self._monitor_check_interval = result.interval
 
-            # BUG-026 修复：先检查方案切换，再决定登录（避免使用旧凭据）
-            if core.consume_profile_switch_flag():
-                if self._reload_config_internal():
-                    self._handle_stop()
-                    self._handle_start(EngineCommand(type=EngineCmdType.START))
-                    # BUG-016 修复：方案切换后立即检测，不覆盖 _next_network_check
-                    return
-                else:
-                    logger.warning("配置重载失败，继续使用当前配置")
-
             # 网络检测前清除重试定时（避免重复触发）
             with self._retry_time_lock:
                 self._next_retry_time = 0
@@ -605,7 +595,7 @@ class ScheduleEngine:
 
             self._next_network_check = time.time() + result.interval
             self._update_status_snapshot(force=True)
-        except Exception as e:
+        except Exception:
             logger.exception("网络检测异常")
             self._next_network_check = time.time() + self._monitor_check_interval
 
@@ -627,6 +617,17 @@ class ScheduleEngine:
             if cmd.response_future and not cmd.response_future.done():
                 cmd.response_future.set_result((True, "监控已在运行中"))
             return
+        # 启动时一次性方案自动切换检测
+        if self._profile_service:
+            temp_core = NetworkMonitorCore(
+                get_config=self.get_runtime_config,
+                logger=self._logger,
+                login_history=self._login_history,
+            )
+            temp_core.set_profile_service(self._profile_service)
+            if temp_core.check_and_switch_profile_sync():
+                self._reload_config_internal()
+                self._logger.info("启动时方案已自动切换，使用新配置")
 
         # 统一验证配置（确保所有路径都经过验证）
         valid, error = validate_env_config(self._runtime_config)
@@ -756,8 +757,15 @@ class ScheduleEngine:
         core = self._monitor_core
         if core is not None and core.monitoring and core._needs_bind_proxy_rebuild():
             self._logger.info("网卡绑定配置变化，重建 SOCKS5 Forwarder")
+            # B10 修复：保存/恢复累计计数器
+            saved = {
+                "network_check_count": core.network_check_count,
+                "login_attempt_count": core.login_attempt_count,
+                "start_time": core.start_time,
+            }
             core.stop_monitoring()
-            core.init_monitoring()  # 重新 _start_bind_proxy
+            core.init_monitoring()
+            core._update_state(**saved)
 
         logger.info("配置已重载")
         cmd.response_data = (True, "配置重载成功")
@@ -797,8 +805,16 @@ class ScheduleEngine:
         core = self._monitor_core
         if core is not None and core.monitoring and core._needs_bind_proxy_rebuild():
             self._logger.info("方案切换导致网卡绑定变化，重建 SOCKS5 Forwarder")
+            # B10 修复：保存/恢复累计计数器
+            saved = {
+                "network_check_count": core.network_check_count,
+                "login_attempt_count": core.login_attempt_count,
+                "start_time": core.start_time,
+            }
             core.stop_monitoring()
             core.init_monitoring()
+            core._update_state(**saved)
+
 
         cmd.response_data = (True, "方案切换成功")
         if cmd.response_future and not cmd.response_future.done():
@@ -1005,7 +1021,7 @@ class ScheduleEngine:
         logger.debug("收到启动监控请求")
         with self._start_stop_lock:
             if self.is_monitoring:
-                return False, "监控已在运行中"
+                return True, "监控已在运行中"
 
             return self._dispatch_command(EngineCmdType.START, timeout=5.0)
 

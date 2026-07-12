@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-import re
-
-from app.tasks.models import TASK_ID_PATTERN, TaskConfig, StepConfig
-
+from app.tasks.models import TASK_ID_PATTERN, StepConfig
 
 # ── TASK_ID_PATTERN 长度限制 ──
 

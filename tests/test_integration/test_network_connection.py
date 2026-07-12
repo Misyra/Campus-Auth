@@ -100,38 +100,3 @@ class TestNetworkConnection:
         # 引擎仍在运行（_monitor_core 未被清除）
         assert engine._monitor_core is not None
 
-    async def test_profile_switch_signal(self, integration_stack):
-        """方案切换 → engine reload + restart。"""
-        engine, profile_service, task_executor, _, mock_worker = integration_stack
-
-        # 手动设置 _monitor_core
-        core = _make_monitor_core(engine)
-        engine._monitor_core = core
-
-        # mock 检测到方案切换
-        with patch.object(core, "consume_profile_switch_flag", return_value=True):
-            with patch.object(
-                core,
-                "check_once",
-                new=AsyncMock(
-                    return_value=CheckOnceResult(
-                        paused=False,
-                        net_ok=True,
-                        net_reason="",
-                        need_login=False,
-                        check_num=1,
-                        interval=1,
-                        result=NetworkCheckResult(
-                            available=True, method="tcp", latency_ms=0, detail=""
-                        ),
-                    )
-                ),
-            ):
-                with patch.object(engine, "_reload_config_internal", return_value=True):
-                    with patch.object(engine, "_handle_stop") as mock_stop:
-                        with patch.object(engine, "_handle_start") as mock_start:
-                            await engine._do_network_check_async()
-
-        # 方案切换触发了 stop + start
-        mock_stop.assert_called_once()
-        mock_start.assert_called_once()

@@ -98,5 +98,3 @@ class TestSchedulerServiceSyncState:
         svc.start()
         svc.sync_state()
         assert svc.running is False
-
-

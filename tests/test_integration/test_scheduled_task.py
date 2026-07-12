@@ -10,8 +10,6 @@
 from __future__ import annotations
 
 import threading
-import time
-from concurrent.futures import Future
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -19,7 +17,6 @@ import pytest
 
 from app.services.task_executor import BoundedExecutor, TaskExecutor
 from app.services.task_registry import TaskHistoryStore, TaskRegistry
-
 
 # ── 辅助工厂 ──
 
@@ -62,6 +59,7 @@ def _make_executor(
         worker_getter=kwargs.get("worker_getter", MagicMock()),
         get_runtime_config=kwargs.get("get_runtime_config", lambda: RuntimeConfig()),
         login_orchestrator=kwargs.get("login_orchestrator", MagicMock()),
+        task_manager=kwargs.get("task_manager", MagicMock()),
     )
     return executor
 
@@ -144,17 +142,17 @@ class TestTaskRegistrationAndExecution:
         history_store = TaskHistoryStore(history_dir)
         executor = _make_executor(registry=registry, history_store=history_store)
 
-        # 注册 shell 任务，mock 实际执行
-        config = _make_task_config(task_type="shell", command="echo hello")
-        registry.save_task("shell_task", config)
+        # 注册 script 任务，mock 实际执行
+        config = _make_task_config(task_type="script", target_id="test_task")
+        registry.save_task("test_task", config)
 
-        with patch.object(executor, "_execute_shell", return_value=(True, "hello")):
-            success, message = executor.execute_task("shell_task")
+        with patch.object(executor, "_execute_script", return_value=(True, "hello")):
+            success, message = executor.execute_task("test_task")
 
         assert success is True
         assert message == "hello"
 
-        records = history_store.get_history("shell_task")
+        records = history_store.get_history("test_task")
         assert len(records) == 1
         assert records[0]["status"] == "success"
 
@@ -163,13 +161,13 @@ class TestTaskRegistrationAndExecution:
         registry = TaskRegistry(tmp_path)
         executor = _make_executor(registry=registry)
 
-        config = _make_task_config(task_type="shell", command="echo ok")
-        registry.save_task("shell_task", config)
+        config = _make_task_config(task_type="script", target_id="test_task")
+        registry.save_task("test_task", config)
 
-        with patch.object(executor, "_execute_shell", return_value=(True, "ok")):
-            executor.execute_task("shell_task")
+        with patch.object(executor, "_execute_script", return_value=(True, "ok")):
+            executor.execute_task("test_task")
 
-        task = registry.get_task("shell_task")
+        task = registry.get_task("test_task")
         assert task is not None
         assert "last_run" in task
         assert task["last_status"] == "success"
@@ -376,34 +374,6 @@ class TestTaskExecutionWithVariableResolution:
         assert success is True
         assert "成功" in message
 
-    def test_execute_shell_task(self, tmp_path: Path):
-        """Shell 任务执行（mock shell policy）。"""
-        registry = TaskRegistry(tmp_path)
-        config = _make_task_config(
-            task_type="shell", command="echo hello", shell_path="/bin/bash"
-        )
-        registry.save_task("shell_task", config)
-
-        executor = _make_executor(registry=registry)
-
-        with patch.object(
-            executor._shell_policy,
-            "run_sync",
-            return_value=(0, "hello\n", ""),
-        ):
-            success, message = executor._execute_shell("echo hello", 30, "/bin/bash")
-
-        assert success is True
-        assert "hello" in message
-
-    def test_execute_shell_empty_command(self):
-        """空命令返回失败。"""
-        executor = _make_executor()
-
-        success, message = executor._execute_shell("", 30)
-
-        assert success is False
-        assert "空" in message
 
 
 # =====================================================================
@@ -455,10 +425,9 @@ class TestTaskFailureHandling:
 
     def test_execute_script_nonexistent(self, tmp_path: Path):
         """执行不存在的脚本任务返回失败。"""
-        registry = TaskRegistry(tmp_path)
-        executor = _make_executor(registry=registry)
-
-        registry.get_task = MagicMock(return_value=None)
+        mock_tm = MagicMock()
+        mock_tm.get_task_detail.return_value = None
+        executor = _make_executor(task_manager=mock_tm)
 
         success, message = executor._execute_script("no_script", 30)
 
@@ -520,12 +489,12 @@ class TestTaskFailureHandling:
         history_store = TaskHistoryStore(tmp_path / "history")
         executor = _make_executor(registry=registry, history_store=history_store)
 
-        config = _make_task_config(task_type="shell", command="exit 1")
+        config = _make_task_config(task_type="script", target_id="failing_task")
         registry.save_task("failing_task", config)
 
         for i in range(3):
             with patch.object(
-                executor, "_execute_shell", return_value=(False, f"错误 {i}")
+                executor, "_execute_script", return_value=(False, f"错误 {i}")
             ):
                 success, _ = executor.execute_task("failing_task")
                 assert success is False

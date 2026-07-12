@@ -3,12 +3,8 @@
 from __future__ import annotations
 
 import time
-from unittest.mock import patch
-
-import pytest
 
 from app.schemas import Profile
-from app.workers.playwright_worker import WorkerResponse
 
 
 class TestProfileConnection:

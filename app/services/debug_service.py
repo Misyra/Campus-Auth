@@ -155,7 +155,9 @@ class DebugSessionManager:
         core = getattr(monitor_service, "_monitor_core", None)
         bind_proxy = getattr(core, "bind_proxy_url", None) if core else None
         worker_data = {
-            "config": runtime_config_to_worker_dict(runtime_config, bind_proxy=bind_proxy),
+            "config": runtime_config_to_worker_dict(
+                runtime_config, bind_proxy=bind_proxy
+            ),
             "task_url": url if url else "",
             "task_data": task.to_dict(),
             "template_vars": template_vars,
@@ -275,17 +277,19 @@ class DebugSessionManager:
         async with self._lock:
             self._require_debug_session()
             session = self._session
-            from_idx = session.current_step
-
-            if from_idx >= len(session.steps):
-                return {
-                    **debug_to_response(self._session),
-                    "message": "所有步骤已执行完毕",
-                }
 
         # 一次性获取信号量，持有到整个批量执行完成，防止 next_step 插入
         async with self._exec_sem:
+            async with self._lock:
+                from_idx = session.current_step
+                if from_idx >= len(session.steps):
+                    return {
+                        **debug_to_response(self._session),
+                        "message": "所有步骤已执行完毕",
+                    }
+
             worker = get_worker()
+
             results: list[dict] = []
             all_success = True
 

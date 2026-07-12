@@ -234,4 +234,4 @@ class ScriptTaskInfo:
     name: str = "未命名脚本任务"
     description: str = ""
     script_path: Path = field(default_factory=Path)
-    binary_path: str = ""  # 执行二进制路径，为空则使用 Python 解释器
+    script_type: str = ""  # 脚本类型: py/bat/ps1/sh/exe

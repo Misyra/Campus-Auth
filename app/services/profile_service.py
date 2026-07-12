@@ -257,32 +257,34 @@ class ProfileService:
         from app.services.config_builder import build_runtime_config
 
         data = self.load()
-        profile = self._get_active_profile(data)
-        return build_runtime_config(data.global_config, profile)
+        profile, decryption_failed = self._get_active_profile(data)
+        return build_runtime_config(data.global_config, profile, decryption_failed)
 
     def build_runtime_config(self, data: ProfilesData) -> RuntimeConfig:
         """从已加载的 data 构建运行时配置（避免重复读盘）。"""
         from app.services.config_builder import build_runtime_config
 
-        profile = self._get_active_profile(data)
-        return build_runtime_config(data.global_config, profile)
+        profile, decryption_failed = self._get_active_profile(data)
+        return build_runtime_config(data.global_config, profile, decryption_failed)
 
-    def _get_active_profile(self, data: ProfilesData) -> Profile:
-        """获取活跃方案并解密密码。"""
+    def _get_active_profile(self, data: ProfilesData) -> tuple[Profile, bool]:
+        """获取活跃方案并解密密码。返回 (profile, decryption_failed)。"""
         from app.utils.crypto import decrypt_password_field
 
         profile = data.profiles.get(data.active_profile)
         if profile is None:
             profile = data.profiles.get("default", Profile())
         # 解密密码
+        decryption_failed = False
         if profile.password:
-            decrypted, err = decrypt_password_field(profile.password)
+            decrypted, err, dec_failed = decrypt_password_field(profile.password)
             if err:
                 profile_logger.warning(
                     "密码解密失败: profile_id={}", data.active_profile
                 )
+            decryption_failed = dec_failed
             profile = profile.model_copy(update={"password": decrypted or ""})
-        return profile
+        return profile, decryption_failed
 
     def set_auto_switch(self, enabled: bool) -> None:
         """设置自动切换开关"""
@@ -328,8 +330,6 @@ class SaveResult:
 
     success: bool
     message: str
-
-
 
 
 def save_global_and_profile(
