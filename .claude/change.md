@@ -10,10 +10,11 @@
   - 删除 6 个 CMD_* 常量定义，改为从 `app.services.worker_port` 导入
   - 删除 `WorkerResponse` @dataclass 定义，改为从 `app.services.worker_port` 导入
   - 删除 `_DEFAULT_SUBMIT_TIMEOUT` 别名常量
-  - `submit()` 方法签名 `timeout` 默认值从 `_DEFAULT_SUBMIT_TIMEOUT` 改为 `None`（与 Protocol 一致），方法体内 `if timeout is None: timeout = WORKER_SUBMIT_TIMEOUT` 保持行为
+  - `submit()` 方法签名 `timeout` 默认值从 `_DEFAULT_SUBMIT_TIMEOUT` 改为 `None`（与 Protocol 一致），方法体内 `if timeout is None: timeout = WORKER_SUBMIT_TIMEOUT` 保持行为（原显式 None=无限等待的能力不再支持，但已验证无调用方依赖）
 - `app/services/worker_port.py`：
   - `WorkerResponse` 从普通 class 改为 `@dataclass`（与原 playwright_worker 定义一致，保持字段顺序与默认值）
   - 移除 `__init__` 方法
+  - `submit` Protocol docstring 同步：`timeout: None 表示使用 WORKER_SUBMIT_TIMEOUT 默认值`（与 PlaywrightWorker 实现一致）
 - `tests/test_workers/test_playwright_worker.py`：新增 `TestWorkerPortCompliance` 测试类（8 个用例）验证显式继承、常量单一来源、WorkerResponse 单一来源、dataclass 行为、submit 签名一致性
 - 解决 Task 2.1 追踪的 3 个过渡债：CMD_* 双定义、WorkerResponse 双定义、submit timeout 默认值差异
 

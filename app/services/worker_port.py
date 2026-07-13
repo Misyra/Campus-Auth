@@ -79,7 +79,7 @@ class WorkerPort(Protocol):
             cmd_type: 命令类型（CMD_* 常量）
             data: 命令参数字典
             wait: 是否同步等待执行结果
-            timeout: 等待超时秒数（None 表示无限制）
+            timeout: 等待超时秒数（None 表示使用 WORKER_SUBMIT_TIMEOUT 默认值）
 
         Returns:
             WorkerResponse 对象
