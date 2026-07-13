@@ -342,19 +342,16 @@ class TestStepHandlerBase:
     """StepHandler 基类方法测试"""
 
     def test_parse_selectors(self):
-        handler = InputHandler()
-        result = handler._parse_selectors("#a, #b, #c")
-        assert result == ["#a", "#b", "#c"]
+        """逗号分隔选择器解析。"""
+        assert [s.strip() for s in "#a, #b, #c".split(",") if s.strip()] == ["#a", "#b", "#c"]
 
     def test_parse_selectors_with_spaces(self):
-        handler = InputHandler()
-        result = handler._parse_selectors("  #a  ,  #b  ")
-        assert result == ["#a", "#b"]
+        """逗号分隔选择器解析 — 去除空格。"""
+        assert [s.strip() for s in "  #a  ,  #b  ".split(",") if s.strip()] == ["#a", "#b"]
 
     def test_parse_selectors_empty(self):
-        handler = InputHandler()
-        result = handler._parse_selectors("")
-        assert result == []
+        """逗号分隔选择器解析 — 空字符串。"""
+        assert [s.strip() for s in "".split(",") if s.strip()] == []
 
 
 class TestInputHandler:

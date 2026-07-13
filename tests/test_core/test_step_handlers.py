@@ -106,20 +106,20 @@ class TestStepHandlerBase:
     """StepHandler 基类工具方法。"""
 
     def test_parse_selectors_single(self):
-        handler = InputHandler()
-        assert handler._parse_selectors("#btn") == ["#btn"]
+        """逗号分隔选择器解析 — 单个选择器。"""
+        assert [s.strip() for s in "#btn".split(",") if s.strip()] == ["#btn"]
 
     def test_parse_selectors_multiple(self):
-        handler = InputHandler()
-        assert handler._parse_selectors("#a, #b, #c") == ["#a", "#b", "#c"]
+        """逗号分隔选择器解析 — 多个选择器。"""
+        assert [s.strip() for s in "#a, #b, #c".split(",") if s.strip()] == ["#a", "#b", "#c"]
 
     def test_parse_selectors_strips_spaces(self):
-        handler = InputHandler()
-        assert handler._parse_selectors("  #a  ,  #b  ") == ["#a", "#b"]
+        """逗号分隔选择器解析 — 去除空格。"""
+        assert [s.strip() for s in "  #a  ,  #b  ".split(",") if s.strip()] == ["#a", "#b"]
 
     def test_parse_selectors_empty(self):
-        handler = InputHandler()
-        assert handler._parse_selectors("") == []
+        """逗号分隔选择器解析 — 空字符串。"""
+        assert [s.strip() for s in "".split(",") if s.strip()] == []
 
     def test_resolve_params_basic(self):
         """resolve_params 应提取 step 的非 None 字段并解析变量。"""

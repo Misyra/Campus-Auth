@@ -23,7 +23,7 @@ container_logger = get_logger("container", source="backend")
 class ServiceContainer:
     """服务容器 — 统一管理服务实例的创建和访问。"""
 
-    def __init__(self, project_root: Path, mode: str = "full"):
+    def __init__(self, project_root: Path):
         self.project_root = project_root
         self._temp_dir = project_root / "temp"
 

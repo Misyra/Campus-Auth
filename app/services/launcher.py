@@ -286,7 +286,7 @@ def launch_lightweight(ctx: ApplicationContext, logger):
     from app.container import ServiceContainer
 
     container = ServiceContainer(
-        Path(__file__).parent.parent.parent.resolve(), mode="lightweight"
+        Path(__file__).parent.parent.parent.resolve()
     )
     container.engine.boot()
     container.engine.sync_scheduler_state()

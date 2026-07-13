@@ -204,8 +204,6 @@ export const LIGHT_BG_COLORS = [
   { value: '#ecfdf5', label: '薄荷绿' },
 ];
 
-// 兼容旧引用
-export const BG_COLORS = DARK_BG_COLORS;
 
 // 自定义颜色默认结构（按类型分组，持久化到 localStorage 'appearance.custom_colors'）
 export const DEFAULT_CUSTOM_COLORS = {

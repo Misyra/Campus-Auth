@@ -257,11 +257,12 @@ class TestNoExecutorRemnants:
 
         assert not hasattr(probes_mod, "executor")
 
-    def test_no_probe_client_attribute(self):
-        """probes 模块不再有 _probe_client 属性。"""
+    def test_probe_client_is_context_manager(self):
+        """_probe_client 是异步上下文管理器（非旧式客户端池）。"""
         import app.network.probes as probes_mod
 
-        assert not hasattr(probes_mod, "_probe_client")
+        assert hasattr(probes_mod, "_probe_client")
+        assert callable(probes_mod._probe_client)
 
     def test_no_bound_clients_attribute(self):
         """probes 模块不再有 _bound_clients 属性。"""

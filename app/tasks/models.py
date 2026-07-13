@@ -86,22 +86,6 @@ class StepConfig:
     # 扩展参数
     extra: dict[str, Any] = field(default_factory=dict)
 
-    @classmethod
-    def _field_defaults(cls) -> dict[str, Any]:
-        """动态获取字段默认值，用于 to_dict 时跳过默认值（结果按类缓存）。"""
-        if "_cached_field_defaults" not in cls.__dict__:
-            from dataclasses import MISSING, fields
-
-            defaults = {}
-            for f in fields(cls):
-                if f.name in ("id", "type", "extra"):
-                    continue
-                if f.default is not MISSING:
-                    defaults[f.name] = f.default
-                elif f.default_factory is not MISSING:
-                    defaults[f.name] = f.default_factory()
-            cls._cached_field_defaults = defaults
-        return cls._cached_field_defaults
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> StepConfig:
@@ -144,14 +128,20 @@ class StepConfig:
     def to_dict(self) -> dict[str, Any]:
         """序列化为紧凑字典，跳过默认值和 None，合并 extra 回顶层"""
         result: dict[str, Any] = {"id": self.id, "type": self.type}
-        defaults = self._field_defaults()
-        for field_name in self.__dataclass_fields__:
-            if field_name in ("id", "type", "extra"):
+        from dataclasses import MISSING, fields as dc_fields
+
+        for f in dc_fields(self):
+            if f.name in ("id", "type", "extra"):
                 continue
-            value = getattr(self, field_name)
-            default = defaults.get(field_name)
-            if value is not None and value != default:
-                result[field_name] = value
+            value = getattr(self, f.name)
+            # 跳过 None 和等于默认值的字段
+            if value is None:
+                continue
+            if f.default is not MISSING and value == f.default:
+                continue
+            if f.default_factory is not MISSING and value == f.default_factory():
+                continue
+            result[f.name] = value
         if self.extra:
             result.update(self.extra)
         return result

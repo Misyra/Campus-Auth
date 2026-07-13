@@ -93,10 +93,6 @@ class StepHandler(ABC):
             params[key] = resolver.resolve(value)
         return params
 
-    @staticmethod
-    def _parse_selectors(selector: str) -> list[str]:
-        """解析逗号分隔的候选选择器列表"""
-        return [s.strip() for s in selector.split(",") if s.strip()]
 
     async def _try_candidates_with_fallback(
         self,
@@ -123,7 +119,7 @@ class StepHandler(ABC):
         Returns:
             (success, message)
         """
-        candidates = self._parse_selectors(selector)
+        candidates = [s.strip() for s in selector.split(",") if s.strip()]
         deadline = time.perf_counter() + timeout / 1000
 
         # 策略1: 快速尝试可见元素
@@ -227,7 +223,7 @@ class StepHandler(ABC):
 
     async def _find_element(self, ctx, selector: str, timeout: int):
         """查找元素（支持多个候选选择器，deadline 模式分摊超时）。"""
-        candidates = self._parse_selectors(selector)
+        candidates = [s.strip() for s in selector.split(",") if s.strip()]
         deadline = time.perf_counter() + timeout / 1000
         for sel in candidates:
             remaining = deadline - time.perf_counter()

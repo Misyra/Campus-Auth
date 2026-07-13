@@ -102,25 +102,20 @@ class ScriptRunner:
             raise ValueError("JSON 中缺少 'path' 字段")
         return exe_path
 
+    # 脚本类型 → 命令模板（{file} 为脚本路径占位符）
+    _CMD_TEMPLATES: dict[str, list[str]] = {
+        "py": [sys.executable, "{file}"],
+        "bat": ["cmd.exe", "/c", "{file}"],
+        "ps1": ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "{file}"],
+        "sh": ["sh", "{file}"],
+    }
+
     def _build_cmd(self, script_file: str) -> list[str]:
         """根据 script_type 构建固定命令模板。"""
-        if self.script_type == "py":
-            return [sys.executable, script_file]
-        elif self.script_type == "bat":
-            return ["cmd.exe", "/c", script_file]
-        elif self.script_type == "ps1":
-            return [
-                "powershell.exe",
-                "-NoProfile",
-                "-ExecutionPolicy",
-                "Bypass",
-                "-File",
-                script_file,
-            ]
-        elif self.script_type == "sh":
-            return ["sh", script_file]
-        else:
+        tpl = self._CMD_TEMPLATES.get(self.script_type)
+        if tpl is None:
             raise ValueError(f"不支持的 script_type: {self.script_type}")
+        return [s.replace("{file}", script_file) for s in tpl]
 
     def _content_temp_file(self, content: str) -> str:
         """将脚本内容写入临时文件，返回文件路径。"""

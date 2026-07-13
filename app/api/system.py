@@ -38,20 +38,22 @@ _update_lock = asyncio.Lock()
 # ── 健康检查 / 更新检测 ──
 
 
-def _safe_psutil_call(fn, default=None):
-    """安全调用 psutil 方法，受限环境返回默认值。"""
-    if default is None:
-        default = []
-    try:
-        return fn()
-    except (psutil.AccessDenied, psutil.ZombieProcess, psutil.NoSuchProcess):
-        return default
 
 
 @router.get("/api/health", response_model=HealthResponse)
 def health() -> HealthResponse:
     proc = psutil.Process(os.getpid())
     mem = proc.memory_info()
+
+    try:
+        threads = proc.threads()
+    except (psutil.AccessDenied, psutil.ZombieProcess, psutil.NoSuchProcess):
+        threads = []
+    try:
+        open_files = proc.open_files()
+    except (psutil.AccessDenied, psutil.ZombieProcess, psutil.NoSuchProcess):
+        open_files = []
+
     return HealthResponse(
         status="ok",
         version=get_project_version(PROJECT_ROOT),
@@ -61,8 +63,8 @@ def health() -> HealthResponse:
             "vms_mb": round(mem.vms / 1024 / 1024, 1),
         },
         process={
-            "threads": _safe_psutil_call(proc.threads),
-            "open_files": _safe_psutil_call(proc.open_files),
+            "threads": threads,
+            "open_files": open_files,
             "pid": proc.pid,
         },
     )
