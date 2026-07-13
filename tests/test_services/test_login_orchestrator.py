@@ -84,7 +84,6 @@ class TestResolveWorkerTimeout:
         cfg = RuntimeConfig()
         assert resolve_worker_timeout(cfg) == 90
 
-
     def test_floor_60(self):
         cfg = _make_runtime_config(login_timeout=10)
         assert resolve_worker_timeout(cfg) == 60
@@ -293,7 +292,6 @@ class TestOrchestratorCancel:
 
     def test_cancel_running_no_op_when_idle(self, orchestrator):
         orchestrator.cancel_running()
-
 
 
 # ── shutdown ──
@@ -557,3 +555,55 @@ class TestExecutorRequired:
         orch = LoginOrchestrator(worker_getter=lambda: None, executor=mock_exec)
         orch.shutdown(wait=False)
         mock_exec.shutdown.assert_not_called()
+
+
+# ── Task 1.5: source="browser" 死代码移除 ──
+
+
+class TestSourceBrowserRemoved:
+    """Task 1.5: source='browser' 分支已移除（死代码清理）。"""
+
+    def test_login_source_literal_no_longer_includes_browser(self):
+        """LoginSource 类型不再包含 'browser'。"""
+        from typing import get_args
+
+        from app.services.login_orchestrator import LoginSource
+
+        args = get_args(LoginSource)
+        assert "browser" not in args
+        assert "auto" in args
+        assert "manual" in args
+        assert "login_once" in args
+
+    def test_history_recorded_regardless_of_source(self):
+        """_record_history 应对所有 source 一视同仁（不再跳过 browser）。
+
+        用 source='browser' 字符串调用 submit（运行时仍合法，但应走标准路径），
+        断言 history service 被调用。
+        """
+        from app.services.login_history_service import LoginHistoryService
+
+        history = MagicMock(spec=LoginHistoryService)
+        orch = LoginOrchestrator(
+            worker_getter=lambda: _make_slow_worker(),
+            login_history=history,
+            get_runtime_config=lambda: VALID_CONFIG,
+            executor=_make_mock_executor(),
+        )
+
+        # 提交 source='browser'（运行时仍可传字符串，无类型检查拦截）
+        handle = orch.submit(source="browser", config=VALID_CONFIG)
+        handle.result(timeout=5)
+
+        # 验证历史被记录（移除 if source != "browser" 后应总是调用）
+        assert history.add.called, "source='browser' 时也应记录登录历史"
+
+    def test_validation_runs_for_browser_source(self, orchestrator):
+        """validate_login_config 应对所有 source 执行（不再跳过 browser）。
+
+        用空配置 + source='browser' 调用 submit，应被拒绝。
+        """
+        handle = orchestrator.submit(source="browser", config=RuntimeConfig())
+        assert handle.future is None
+        assert handle.rejected_reason is not None
+        assert "登录配置不完整" in handle.rejected_reason

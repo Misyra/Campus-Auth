@@ -3,6 +3,17 @@
 
 ## 2026-07-13
 
+### refactor: LoginOrchestrator 移除 source=browser 死代码分支
+
+- `app/services/login_orchestrator.py`：
+  - `LoginSource` Literal 移除 `"browser"`，仅保留 `"auto" | "manual" | "login_once"`
+  - `submit()` 移除 `if source != "browser":` 校验跳过分支，所有 source 均执行 `validate_login_config`
+  - `submit()` 移除 `elif source == "browser":` 抢占分支
+  - `_dispatch._run()` 移除 4 处 `if source != "browser":` 历史记录跳过分支，所有 source 均记录登录历史
+  - docstring 同步更新
+- `tests/test_services/test_login_orchestrator.py`：新增 `TestSourceBrowserRemoved` 测试类（3 个用例）验证类型移除、历史记录无差别、校验对所有 source 生效
+- 背景：Task 1.3 已将 `_execute_browser` 改走 `BrowserTaskService`，LoginOrchestrator 不再接收 `source="browser"` 提交，相关分支为死代码
+
 ### feat: Container 注入 BrowserTaskService 并接入 bind_proxy
 
 - `app/container.py`：在 `TaskExecutor` 创建之前新增 `BrowserTaskService` 实例与独立 `BoundedExecutor(max_workers=1, queue_size=5, thread_name_prefix="browser-task")`，并将 `browser_task_service` 传入 `TaskExecutor` 与 `ScheduleEngine`
