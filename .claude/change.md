@@ -3,6 +3,13 @@
 
 ## 2026-07-13
 
+### fix: 修复 bind_proxy 回归与类型注解
+
+- **Important #1 bind_proxy 行为回归**：`app/services/browser_task_service.py` 的 `BrowserTaskService` 新增 `_bind_proxy_url` 字段与 `set_bind_proxy()` 方法（与 `LoginOrchestrator.set_bind_proxy` 对齐），`submit_task` 在派发前若 `_bind_proxy_url` 非空且 `task_config.browser_settings` 未显式设置 `bind_proxy`，则不可变地注入到新 dict 中（不修改调用方原 dict）。修复启用网卡绑定代理的用户其定时浏览器任务走默认路由的回归
+- **Minor #1 类型注解**：`app/services/task_executor.py` 的 `browser_task_service=None` 改为 `browser_task_service: BrowserTaskService | None = None`，并在 `TYPE_CHECKING` 块中导入 `BrowserTaskService`
+- **Minor #2 None 防御**：`TaskExecutor._execute_browser` 在调用 `submit_task` 前添加 None 检查，返回 `(False, "BrowserTaskService 未注入")`，避免 NoneType 异常掩盖真实配置问题
+- **测试**：`tests/test_services/test_browser_task_service.py` 新增 `test_bind_proxy_injected_into_task_config` 验证注入行为、原字段保留、不修改调用方 dict
+
 ### refactor: TaskExecutor._execute_browser 改走 BrowserTaskService
 
 - `app/services/task_executor.py`：`__init__` 新增 `browser_task_service=None` 参数（位于 `task_manager` 与 `get_runtime_config` 之间），存储为 `self._browser_task_service`

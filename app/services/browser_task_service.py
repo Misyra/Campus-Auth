@@ -84,10 +84,22 @@ class BrowserTaskService:
         self._slot_lock = threading.Condition(threading.Lock())
         self._slot: BrowserTaskHandle | None = None
 
+        # 网卡绑定代理 URL（由引擎在监控启动时通过 set_bind_proxy 设置）
+        # 与 LoginOrchestrator._bind_proxy_url 对齐，确保定时浏览器任务走绑定 NIC
+        self._bind_proxy_url: str | None = None
+
     def is_running(self) -> bool:
         """是否有浏览器任务正在执行。"""
         with self._slot_lock:
             return self._slot is not None and not self._slot.done()
+
+    def set_bind_proxy(self, bind_proxy_url: str | None) -> None:
+        """设置网卡绑定代理 URL（由引擎在监控启动时调用）。
+
+        与 LoginOrchestrator.set_bind_proxy 对齐，确保定时浏览器任务
+        也走绑定网卡，而非默认路由。
+        """
+        self._bind_proxy_url = bind_proxy_url
 
     def submit_task(
         self,
@@ -106,6 +118,17 @@ class BrowserTaskService:
         Returns:
             BrowserTaskHandle
         """
+        # 应用网卡绑定代理（与 LoginOrchestrator._dispatch 对齐）
+        # 仅当 task_config 未显式设置 bind_proxy 时注入，避免覆盖调用方意图
+        if self._bind_proxy_url:
+            browser_settings = task_config.get("browser_settings", {})
+            if "bind_proxy" not in browser_settings:
+                browser_settings = {
+                    **browser_settings,
+                    "bind_proxy": self._bind_proxy_url,
+                }
+                task_config = {**task_config, "browser_settings": browser_settings}
+
         if cancel_event is None:
             cancel_event = CompositeCancelEvent()
         elif not isinstance(cancel_event, CompositeCancelEvent):

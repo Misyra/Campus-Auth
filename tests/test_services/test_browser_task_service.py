@@ -193,3 +193,41 @@ class TestDispatchException:
 
         # slot 应为 None（不再是 dispatching 占位状态）
         assert svc._slot is None
+
+
+# ── bind_proxy 注入 ──
+
+
+def test_bind_proxy_injected_into_task_config():
+    """set_bind_proxy 设置后，submit_task 应将 bind_proxy 注入 task_config。
+
+    场景：启用网卡绑定代理的用户，定时浏览器任务需走绑定 NIC，而非默认路由。
+    与 LoginOrchestrator._dispatch 调用 runtime_config_to_worker_dict(config, bind_proxy=...) 对齐。
+    """
+    captured: dict = {}
+
+    def fake_dispatch(task_config, cancel_event, timeout=None):
+        captured["task_config"] = task_config
+        return BrowserTaskHandle(
+            future=None,
+            cancel_event=cancel_event,
+            rejected_reason="__test__",
+        )
+
+    svc = BrowserTaskService(
+        worker_getter=lambda: _make_mock_worker(),
+        executor=_make_mock_executor(),
+    )
+    svc._dispatch = fake_dispatch
+    svc.set_bind_proxy("http://192.168.1.10:8080")
+
+    original_config = {"active_task": "checkin", "browser_settings": {"headless": True}}
+    svc.submit_task(task_config=original_config)
+
+    # 验证 bind_proxy 已注入 browser_settings
+    bs = captured["task_config"]["browser_settings"]
+    assert bs["bind_proxy"] == "http://192.168.1.10:8080"
+    # 原有字段保留
+    assert bs["headless"] is True
+    # 调用方原 dict 不应被修改（不可变注入）
+    assert "bind_proxy" not in original_config["browser_settings"]

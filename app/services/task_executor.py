@@ -16,6 +16,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from app.services.browser_task_service import BrowserTaskService
     from app.services.login_orchestrator import LoginOrchestrator
     from app.services.task_registry import TaskHistoryStore, TaskRegistry
     from app.tasks.manager import TaskManager
@@ -107,7 +108,7 @@ class TaskExecutor:
         worker_getter: Callable,
         login_orchestrator: LoginOrchestrator | None = None,
         task_manager: TaskManager | None = None,
-        browser_task_service=None,
+        browser_task_service: BrowserTaskService | None = None,
         get_runtime_config: Callable[[], RuntimeConfig] | None = None,
     ) -> None:
         self._registry = registry
@@ -354,6 +355,9 @@ class TaskExecutor:
         from app.services.login_orchestrator import runtime_config_to_worker_dict
 
         worker_config = runtime_config_to_worker_dict(config)
+
+        if self._browser_task_service is None:
+            return False, "BrowserTaskService 未注入"
 
         handle = self._browser_task_service.submit_task(
             task_config=worker_config,
