@@ -3,6 +3,16 @@
 
 ## 2026-07-13
 
+### feat: 新建 WorkerPort Protocol 抽象 Worker 接口
+
+- 新建 `app/services/worker_port.py`：
+  - 定义 `WorkerPort` Protocol（@runtime_checkable）含 start/stop/is_alive/submit 四个方法
+  - 定义 `WorkerResponse` 数据类作为 services ↔ workers 契约
+  - 定义 `CMD_LOGIN/CMD_BROWSER/CMD_DEBUG_*/CMD_SHUTDOWN` 命令常量作为契约单一来源
+  - 提供 `get_worker()` / `cleanup_orphan_browsers()` 延迟导入委托函数
+- 新建 `tests/test_services/test_worker_port.py`：10 个测试验证 Protocol 可导入、runtime_checkable、方法签名、常量值、WorkerResponse 字段
+- 背景：阶段 2 第一步，为消除 services ↔ workers 双向依赖建立协议层。后续 Task 2.3 让 PlaywrightWorker 实现此协议，Task 2.4 让 services 改从此模块导入
+
 ### test: 阶段 1 集成验证
 
 - 完整测试套件通过：2389 passed, 0 failed
