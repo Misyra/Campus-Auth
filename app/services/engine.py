@@ -310,6 +310,7 @@ class ScheduleEngine:
         task_executor=None,
         orchestrator=None,
         scheduler=None,
+        browser_task_service=None,
     ):
         self.project_root = project_root
         if profile_service is None:
@@ -325,6 +326,9 @@ class ScheduleEngine:
 
         # 调度器（从 ScheduleEngine 提取为独立组件）
         self._scheduler = scheduler
+
+        # 浏览器任务服务（通用浏览器自动化，由容器注入）
+        self._browser_task_service = browser_task_service
 
         # 锁（必须在 _reload_config_internal 之前初始化）
         self._manual_login_in_progress = False
@@ -555,9 +559,11 @@ class ScheduleEngine:
             core.init_monitoring()  # 只初始化，不启动循环
             self._monitor_core = core
 
-            # 传递网卡绑定代理 URL 到登录编排器
+            # 传递网卡绑定代理 URL 到登录编排器和浏览器任务服务
             if self._orchestrator is not None:
                 self._orchestrator.set_bind_proxy(core.bind_proxy_url)
+            if self._browser_task_service is not None:
+                self._browser_task_service.set_bind_proxy(core.bind_proxy_url)
             self._next_network_check = time.time()  # 立即执行第一次检测
             self._update_status_snapshot(force=True)
             self._logger.info("监控已启动")

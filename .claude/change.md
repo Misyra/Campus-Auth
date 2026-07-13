@@ -3,6 +3,14 @@
 
 ## 2026-07-13
 
+### feat: Container 注入 BrowserTaskService 并接入 bind_proxy
+
+- `app/container.py`：在 `TaskExecutor` 创建之前新增 `BrowserTaskService` 实例与独立 `BoundedExecutor(max_workers=1, queue_size=5, thread_name_prefix="browser-task")`，并将 `browser_task_service` 传入 `TaskExecutor` 与 `ScheduleEngine`
+- `app/container.py`：导入语句追加 `BoundedExecutor`（与 `TaskExecutor` 同行）
+- `app/container.py`：`shutdown()` 在 `task_executor.shutdown` 之前关闭 `_browser_task_executor`，遵循"先停引擎→再关线程池"的顺序
+- `app/services/engine.py`：`ScheduleEngine.__init__` 新增 `browser_task_service=None` 参数（位于 `scheduler` 之后），存储为 `self._browser_task_service`
+- `app/services/engine.py`：监控启动处 `set_bind_proxy` 同时调用 `self._browser_task_service.set_bind_proxy(core.bind_proxy_url)`，确保定时浏览器任务走绑定网卡
+
 ### fix: 修复 bind_proxy 回归与类型注解
 
 - **Important #1 bind_proxy 行为回归**：`app/services/browser_task_service.py` 的 `BrowserTaskService` 新增 `_bind_proxy_url` 字段与 `set_bind_proxy()` 方法（与 `LoginOrchestrator.set_bind_proxy` 对齐），`submit_task` 在派发前若 `_bind_proxy_url` 非空且 `task_config.browser_settings` 未显式设置 `bind_proxy`，则不可变地注入到新 dict 中（不修改调用方原 dict）。修复启用网卡绑定代理的用户其定时浏览器任务走默认路由的回归

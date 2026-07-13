@@ -11,7 +11,7 @@ from app.services.autostart import AutoStartService
 from app.services.engine import ScheduleEngine
 from app.services.login_history_service import LoginHistoryService
 from app.services.profile_service import get_profile_service
-from app.services.task_executor import TaskExecutor
+from app.services.task_executor import BoundedExecutor, TaskExecutor
 from app.services.task_registry import TaskHistoryStore, TaskRegistry
 from app.services.websocket_manager import WebSocketManager
 from app.tasks import TaskManager
@@ -50,12 +50,24 @@ class ServiceContainer:
 
             return get_worker()
 
+        # --- 创建 BrowserTaskService（独立线程池，不与登录共享） ---
+        from app.services.browser_task_service import BrowserTaskService
+
+        self._browser_task_executor = BoundedExecutor(
+            max_workers=1, queue_size=5, thread_name_prefix="browser-task"
+        )
+        self.browser_task_service = BrowserTaskService(
+            worker_getter=_get_worker,
+            executor=self._browser_task_executor,
+        )
+
         # --- 创建 TaskExecutor（login_orchestrator 延迟绑定，打破循环依赖） ---
         self.task_executor = TaskExecutor(
             registry=self.task_registry,
             history_store=self.task_history_store,
             worker_getter=_get_worker,
             task_manager=self.task_manager,
+            browser_task_service=self.browser_task_service,
         )
 
         # --- 创建 LoginOrchestrator（executor 复用 TaskExecutor 的 login_executor） ---
@@ -88,6 +100,7 @@ class ServiceContainer:
             task_executor=self.task_executor,
             orchestrator=self.login_orchestrator,
             scheduler=self.scheduler_service,
+            browser_task_service=self.browser_task_service,
         )
 
         # --- 延迟绑定 get_runtime_config（engine 现在存在） ---
@@ -195,6 +208,9 @@ class ServiceContainer:
         from app.api.scripts import shutdown_script_executor
 
         shutdown_script_executor()
+
+        # 关闭浏览器任务执行器
+        self._browser_task_executor.shutdown(wait=True, timeout=10)
 
         self.task_executor.shutdown(wait=True, timeout=10)
 
