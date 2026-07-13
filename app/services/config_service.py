@@ -70,20 +70,21 @@ class ConfigService:
 
         校验级别合法性后，通过 model_copy 原子替换 _runtime_config。
         不负责持久化到磁盘（由调用方通过 profile_service.update 完成）。
+
+        model_copy 在锁外执行（基于当前引用快照），仅 _swap 持锁——
+        与 Engine.update_log_level 行为对齐，避免 Lock 不可重入导致的死锁。
         """
         from app.constants import VALID_LOG_LEVELS
 
         if level not in VALID_LOG_LEVELS:
             raise ValueError(f"无效的日志级别: {level}")
-        with self._reload_lock:
-            new_config = self._runtime_config.model_copy(
-                update={
-                    "logging": self._runtime_config.logging.model_copy(
-                        update={"level": level}
-                    )
-                }
-            )
-            self._runtime_config = new_config
+        base = self._runtime_config
+        new_config = base.model_copy(
+            update={
+                "logging": base.logging.model_copy(update={"level": level})
+            }
+        )
+        self._swap(new_config)
 
     def toggle_pure_mode(self) -> bool:
         """切换纯净模式，返回新值。
@@ -113,17 +114,15 @@ class ConfigService:
             )
         )
 
-        # 原子替换运行时配置
-        with self._reload_lock:
-            new_config = base_config.model_copy(
-                update={
-                    "browser": base_config.browser.model_copy(
-                        update={"pure_mode": new_value}
-                    )
-                }
-            )
-            self._runtime_config = new_config
-            self._pure_mode = new_value
+        # 原子替换运行时配置（model_copy 在锁外，仅 _swap 持锁）
+        new_config = base_config.model_copy(
+            update={
+                "browser": base_config.browser.model_copy(
+                    update={"pure_mode": new_value}
+                )
+            }
+        )
+        self._swap(new_config, pure_mode=new_value)
         return new_value
 
     def reload(self) -> bool:

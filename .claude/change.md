@@ -4933,3 +4933,8 @@
 - Engine 的配置管理职责将在 Task 3.2 移除
 - Container 注入将在 Task 3.3 完成
 - API 改用 ConfigServiceDep 在 Task 3.4 完成
+
+### Spec Review 修复 (MAJOR 1)
+- `update_log_level` 和 `toggle_pure_mode` 原在锁内直接赋值 `self._runtime_config = new_config`，违反 `_swap` docstring 契约"禁止直接赋值"
+- 修复：将 `model_copy` 移到锁外（基于当前引用快照），改为调用 `_swap(new_config)` / `_swap(new_config, pure_mode=new_value)`，与 Engine 原始行为对齐
+- 避免后续 `_swap` 扩展（如通知监听器）时绕过扩展点
