@@ -11,7 +11,7 @@ from __future__ import annotations
 import threading
 import time
 from concurrent.futures import Future
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -820,3 +820,165 @@ class TestTaskExecutorTaskAsync:
 
         executor.shutdown(wait=False)
         assert len(executor._running_tasks) == 0
+
+
+# =====================================================================
+# TaskExecutor — run_script_on_demand
+# =====================================================================
+
+
+class TestRunScriptOnDemand:
+    """TaskExecutor.run_script_on_demand() 测试。
+
+    按需执行脚本任务，不记录历史、不更新 last_run。
+    """
+
+    def _make_executor(self, **kwargs):
+        from app.services.task_executor import TaskExecutor
+
+        mock_tm = MagicMock()
+        defaults = dict(
+            registry=MagicMock(),
+            history_store=MagicMock(),
+            worker_getter=MagicMock(),
+            get_runtime_config=MagicMock(),
+            login_orchestrator=MagicMock(),
+            task_manager=mock_tm,
+        )
+        defaults.update(kwargs)
+        return TaskExecutor(**defaults)
+
+    def test_run_script_on_demand_success(self, tmp_path):
+        """成功执行脚本时应返回 runner.run() 的结果。"""
+        executor = self._make_executor()
+        script_path = tmp_path / "test.py"
+        script_path.write_text("print('hello')")
+
+        executor._task_manager.get_task_detail.return_value = {"type": "py"}
+        executor._task_manager.get_script_path.return_value = script_path
+
+        mock_runner = MagicMock()
+        mock_runner.run.return_value = (True, "成功")
+        with patch(
+            "app.services.worker_port.get_script_runner",
+            return_value=MagicMock(return_value=mock_runner),
+        ):
+            success, msg = executor.run_script_on_demand("test_task")
+
+        assert success is True
+        assert msg == "成功"
+        mock_runner.run.assert_called_once()
+
+    def test_run_script_on_demand_task_not_found(self):
+        """任务不存在时应返回失败。"""
+        executor = self._make_executor()
+        executor._task_manager.get_task_detail.return_value = None
+
+        success, msg = executor.run_script_on_demand("test_task")
+        assert success is False
+        assert msg == "脚本任务不存在: test_task"
+
+    def test_run_script_on_demand_wrong_type(self):
+        """任务类型不匹配时应返回失败。"""
+        executor = self._make_executor()
+        executor._task_manager.get_task_detail.return_value = {"type": "browser"}
+
+        success, msg = executor.run_script_on_demand("test_task")
+        assert success is False
+        assert msg == "脚本任务不存在: test_task"
+
+    def test_run_script_on_demand_file_missing(self, tmp_path):
+        """脚本文件不存在时应返回失败。"""
+        executor = self._make_executor()
+        executor._task_manager.get_task_detail.return_value = {"type": "py"}
+        executor._task_manager.get_script_path.return_value = (
+            tmp_path / "nonexistent.py"
+        )
+
+        success, msg = executor.run_script_on_demand("test_task")
+        assert success is False
+        assert msg == "脚本文件不存在: test_task"
+
+    def test_run_script_on_demand_task_manager_not_injected(self):
+        """TaskManager 未注入时应返回失败。"""
+        executor = self._make_executor(task_manager=None)
+
+        success, msg = executor.run_script_on_demand("test_task")
+        assert success is False
+        assert msg == "TaskManager 未注入"
+
+    def test_run_script_on_demand_default_timeout_from_config(self, tmp_path):
+        """timeout 为 None 时应从 runtime_config.monitor.script_timeout 读取。"""
+        executor = self._make_executor()
+        script_path = tmp_path / "test.py"
+        script_path.write_text("print('hello')")
+
+        executor._task_manager.get_task_detail.return_value = {"type": "py"}
+        executor._task_manager.get_script_path.return_value = script_path
+
+        config = MagicMock()
+        config.monitor.script_timeout = 120
+        executor._get_runtime_config = MagicMock(return_value=config)
+
+        mock_runner = MagicMock()
+        mock_runner.run.return_value = (True, "ok")
+        mock_runner_cls = MagicMock(return_value=mock_runner)
+        with patch(
+            "app.services.worker_port.get_script_runner",
+            return_value=mock_runner_cls,
+        ):
+            executor.run_script_on_demand("test_task")
+
+        # 验证 runner 收到 timeout=120
+        assert mock_runner_cls.call_args.kwargs["timeout"] == 120
+
+    def test_run_script_on_demand_explicit_timeout(self, tmp_path):
+        """显式传入 timeout 时不应读取 config，且 runner 收到该 timeout。"""
+        executor = self._make_executor()
+        script_path = tmp_path / "test.py"
+        script_path.write_text("print('hello')")
+
+        executor._task_manager.get_task_detail.return_value = {"type": "py"}
+        executor._task_manager.get_script_path.return_value = script_path
+
+        mock_get_config = MagicMock()
+        executor._get_runtime_config = mock_get_config
+
+        mock_runner = MagicMock()
+        mock_runner.run.return_value = (True, "ok")
+        mock_runner_cls = MagicMock(return_value=mock_runner)
+        with patch(
+            "app.services.worker_port.get_script_runner",
+            return_value=mock_runner_cls,
+        ):
+            executor.run_script_on_demand("test_task", timeout=30)
+
+        # 验证未读取 config
+        mock_get_config.assert_not_called()
+        # 验证 runner 收到 timeout=30
+        assert mock_runner_cls.call_args.kwargs["timeout"] == 30
+
+    def test_run_script_on_demand_timeout_fallback_on_config_error(self, tmp_path):
+        """config 读取异常时应回退到 60 秒。"""
+        executor = self._make_executor()
+        script_path = tmp_path / "test.py"
+        script_path.write_text("print('hello')")
+
+        executor._task_manager.get_task_detail.return_value = {"type": "py"}
+        executor._task_manager.get_script_path.return_value = script_path
+
+        executor._get_runtime_config = MagicMock(
+            side_effect=RuntimeError("config error")
+        )
+
+        mock_runner = MagicMock()
+        mock_runner.run.return_value = (True, "ok")
+        mock_runner_cls = MagicMock(return_value=mock_runner)
+        with patch(
+            "app.services.worker_port.get_script_runner",
+            return_value=mock_runner_cls,
+        ):
+            executor.run_script_on_demand("test_task")
+
+        # 验证 runner 收到 timeout=60（回退值）
+        assert mock_runner_cls.call_args.kwargs["timeout"] == 60

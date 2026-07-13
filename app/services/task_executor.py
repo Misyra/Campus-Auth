@@ -324,6 +324,33 @@ class TaskExecutor:
         )
         return runner.run()
 
+    def run_script_on_demand(
+        self,
+        task_id: str,
+        timeout: int | None = None,
+    ) -> tuple[bool, str]:
+        """按需执行脚本任务（不记录历史、不更新 last_run）。
+
+        供 API 层手动触发脚本执行使用。与定时任务路径（execute_task）的区别：
+        - 不记录执行历史
+        - 不更新 last_run 时间戳
+        - 无 cancel_event（同步阻塞执行）
+        - timeout 可选，None 时从 runtime_config 读取
+
+        Args:
+            task_id: 脚本任务 ID
+            timeout: 超时秒数，None 时使用 monitor.script_timeout（默认 60）
+
+        Returns:
+            (success, message) — 与 _execute_script 返回格式一致
+        """
+        if timeout is None:
+            try:
+                timeout = self._get_runtime_config().monitor.script_timeout
+            except Exception:
+                timeout = 60
+        return self._execute_script(task_id, timeout, cancel_event=None)
+
     def _execute_browser(
         self,
         task_id: str,

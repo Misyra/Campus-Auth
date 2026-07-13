@@ -5041,3 +5041,22 @@
 - 阶段 3 配置管理抽离完成
 - 全量测试 2433 passed（2434 既有 - 1 删除），0 failed
 - Ruff 检查全部通过
+
+## Task 4.1: TaskExecutor 新增 run_script_on_demand (2026-07-13)
+
+### 变更
+- `app/services/task_executor.py`：新增 `run_script_on_demand(task_id, timeout=None)` 公共方法
+  - 封装"按需执行脚本任务"逻辑，复用 `_execute_script`
+  - timeout 为 None 时从 runtime_config 读取，异常回退 60 秒
+  - 同步方法，供 API 层通过 asyncio.to_thread 调用
+  - 不记录历史、不更新 last_run（区别于定时任务路径）
+
+### 测试
+- `tests/test_services/test_task_executor_lifecycle.py`：新增 `TestRunScriptOnDemand` 类，8 个测试
+  - 成功执行、任务不存在、类型不匹配、文件缺失、TaskManager 未注入
+  - 默认超时从 config 读取、显式 timeout、config 异常回退 60
+- 全量测试：2441 passed
+
+### 范围
+- 仅新增方法，不修改现有 _execute_script 或其他方法
+- 为 Task 4.2（删除 api/scripts.py 模块级线程池）做准备
