@@ -817,11 +817,6 @@ class ScheduleEngine:
         core = self._monitor_core
         return core is not None and core.monitoring
 
-    @property
-    def tasks(self):
-        """定时任务接口（供 API 路由使用）。"""
-        return self._task_executor
-
     def update_log_level(self, level: str) -> None:
         """更新日志级别（委托给 ConfigService）。"""
         self._config_service.update_log_level(level)

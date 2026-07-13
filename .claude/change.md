@@ -5023,3 +5023,21 @@
 - `get_init_status` 同时注入两个依赖（`project_root` 仍从 Engine 获取，非配置职责）
 - 全量测试 2434 passed（2431 既有 + 3 新增），0 failed
 - Ruff 检查全部通过
+
+## Task 3.5: 删除 engine.tasks property (2026-07-13)
+
+### 变更
+- `app/deps.py`：新增 `TaskExecutorDep = Annotated[TaskExecutor, Depends(_get("task_executor"))]` 类型别名
+- `app/api/scheduled_tasks.py`：改用 `TaskExecutorDep` 直接访问 `task_executor`，保留 `MonitorServiceDep` 用于 `sync_scheduler_state`；所有 `engine.tasks.registry/history_store/execute_task/delete_task` 改为 `task_executor.X`
+- `app/services/engine.py`：删除 `tasks` property（不再需要，API 直接注入 TaskExecutor）
+
+### 测试
+- `tests/test_api/test_api_scheduled_tasks_routes.py`：所有测试将 `mock_engine.tasks = mock_tasks` 改为 `mock_services.task_executor = mock_tasks`（保留 `mock_services.engine` 用于 sync_scheduler_state）
+- `tests/test_api/test_api_scheduled_tasks_side_effect.py`：同上适配
+- `tests/test_services/test_engine.py`：删除 `test_tasks_property` 测试（property 已移除）
+
+### 范围
+- Engine 不再暴露 `tasks` property，API 层直接使用 `TaskExecutorDep`
+- 阶段 3 配置管理抽离完成
+- 全量测试 2433 passed（2434 既有 - 1 删除），0 failed
+- Ruff 检查全部通过

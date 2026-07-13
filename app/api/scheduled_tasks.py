@@ -8,7 +8,7 @@ from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 
-from app.deps import MonitorServiceDep
+from app.deps import MonitorServiceDep, TaskExecutorDep
 from app.schemas import ApiResponse, ScheduledTaskConfig
 from app.utils.logging import get_logger
 
@@ -18,22 +18,23 @@ api_logger = get_logger("api", source="backend")
 
 @router.get("/api/scheduled-tasks", response_model=list[dict[str, Any]])
 def list_scheduled_tasks(
-    engine: MonitorServiceDep,
+    task_executor: TaskExecutorDep,
 ) -> list[dict[str, Any]]:
     """列出所有定时任务。"""
-    return engine.tasks.registry.list_tasks()
+    return task_executor.registry.list_tasks()
 
 
 @router.post("/api/scheduled-tasks", response_model=ApiResponse)
 def create_scheduled_task(
     payload: ScheduledTaskConfig,
     engine: MonitorServiceDep,
+    task_executor: TaskExecutorDep,
 ) -> ApiResponse:
     """创建定时任务。"""
 
     task_id = f"task_{uuid.uuid4().hex[:12]}"
     config = payload.model_dump()
-    ok, message = engine.tasks.registry.save_task(task_id, config)
+    ok, message = task_executor.registry.save_task(task_id, config)
     if ok:
         api_logger.info("创建定时任务 {} 成功", task_id)
     else:
@@ -48,10 +49,11 @@ def update_scheduled_task(
     task_id: str,
     payload: dict,
     engine: MonitorServiceDep,
+    task_executor: TaskExecutorDep,
 ) -> ApiResponse:
     """更新定时任务。"""
 
-    existing = engine.tasks.registry.get_task(task_id)
+    existing = task_executor.registry.get_task(task_id)
     if not existing:
         raise HTTPException(status_code=404, detail="定时任务不存在")
 
@@ -70,7 +72,7 @@ def update_scheduled_task(
     config["last_run"] = existing.get("last_run")
     config["last_status"] = existing.get("last_status")
 
-    ok, message = engine.tasks.registry.save_task(task_id, config)
+    ok, message = task_executor.registry.save_task(task_id, config)
     if ok:
         api_logger.info("更新定时任务 {} 成功", task_id)
     else:
@@ -84,9 +86,10 @@ def update_scheduled_task(
 def delete_scheduled_task(
     task_id: str,
     engine: MonitorServiceDep,
+    task_executor: TaskExecutorDep,
 ) -> ApiResponse:
     """删除定时任务。"""
-    ok, message = engine.tasks.delete_task(task_id)
+    ok, message = task_executor.delete_task(task_id)
     if ok:
         api_logger.info("删除定时任务 {} 成功", task_id)
     else:
@@ -100,17 +103,17 @@ def delete_scheduled_task(
 def run_scheduled_task(
     task_id: str,
     bg_tasks: BackgroundTasks,
-    engine: MonitorServiceDep,
+    task_executor: TaskExecutorDep,
 ) -> ApiResponse:
     """手动执行定时任务（异步后台执行，避免 HTTP 连接长时间阻塞）。"""
-    if not engine.tasks.registry.get_task(task_id):
+    if not task_executor.registry.get_task(task_id):
         raise HTTPException(status_code=404, detail="定时任务不存在")
 
     # 后台执行，不阻塞 HTTP 响应
     async def _execute():
         try:
             success, message = await asyncio.to_thread(
-                engine.tasks.execute_task, task_id
+                task_executor.execute_task, task_id
             )
             if success:
                 api_logger.info("执行定时任务 {} 成功", task_id)
@@ -130,14 +133,15 @@ def run_scheduled_task(
 def toggle_scheduled_task(
     task_id: str,
     engine: MonitorServiceDep,
+    task_executor: TaskExecutorDep,
 ) -> ApiResponse:
     """启用/禁用定时任务。"""
-    task = engine.tasks.registry.get_task(task_id)
+    task = task_executor.registry.get_task(task_id)
     if not task:
         raise HTTPException(status_code=404, detail="定时任务不存在")
 
     task = {**task, "enabled": not task.get("enabled", True)}
-    ok, message = engine.tasks.registry.save_task(task_id, task)
+    ok, message = task_executor.registry.save_task(task_id, task)
     status = "启用" if task["enabled"] else "禁用"
     if ok:
         api_logger.info("{}定时任务 {} 成功", status, task_id)
@@ -152,9 +156,9 @@ def toggle_scheduled_task(
 )
 def get_scheduled_task_history(
     task_id: str,
-    engine: MonitorServiceDep,
+    task_executor: TaskExecutorDep,
 ) -> list[dict[str, Any]]:
     """获取定时任务执行历史。"""
-    if not engine.tasks.registry.get_task(task_id):
+    if not task_executor.registry.get_task(task_id):
         raise HTTPException(status_code=404, detail="定时任务不存在")
-    return engine.tasks.history_store.get_history(task_id)
+    return task_executor.history_store.get_history(task_id)

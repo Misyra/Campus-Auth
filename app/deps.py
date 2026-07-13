@@ -12,6 +12,7 @@ from app.services.debug_service import DebugSessionManager
 from app.services.engine import ScheduleEngine
 from app.services.login_history_service import LoginHistoryService
 from app.services.profile_service import ProfileService
+from app.services.task_executor import TaskExecutor
 from app.tasks import TaskManager
 
 
@@ -27,6 +28,7 @@ def _get(attr: str):
 MonitorServiceDep = Annotated[ScheduleEngine, Depends(_get("engine"))]
 ProfileServiceDep = Annotated[ProfileService, Depends(_get("profile_service"))]
 TaskManagerDep = Annotated[TaskManager, Depends(_get("task_manager"))]
+TaskExecutorDep = Annotated[TaskExecutor, Depends(_get("task_executor"))]
 AutoStartServiceDep = Annotated[AutoStartService, Depends(_get("autostart_service"))]
 DebugManagerDep = Annotated[DebugSessionManager, Depends(_get("debug_manager"))]
 LoginHistoryDep = Annotated[LoginHistoryService, Depends(_get("login_history_service"))]

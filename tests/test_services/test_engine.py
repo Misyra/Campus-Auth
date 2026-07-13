@@ -1492,10 +1492,6 @@ class TestProperties:
         svc._monitor_core = mock_core
         assert svc.is_monitoring is False
 
-    def test_tasks_property(self, engine_factory):
-        svc = engine_factory(raw=True)
-        assert svc.tasks is svc._task_executor
-
 
 # =====================================================================
 # 调度器控制
