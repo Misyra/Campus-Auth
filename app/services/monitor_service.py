@@ -251,7 +251,6 @@ class NetworkMonitorCore:
                 ),
             )
 
-
         # 3. 网络状态检测
         net_ok, net_reason, net_method = await check_network_status(
             self._get_config().monitor
@@ -362,7 +361,6 @@ class NetworkMonitorCore:
         current = self._get_config().monitor.bind_interface_name
         return current != self._last_bind_interface
 
-
     def _get_test_sites(self) -> list[tuple[str, int]]:
         """获取测试站点列表（每次重算，targets 量小无需缓存）。"""
         targets = self._get_config().monitor.ping_targets
@@ -388,7 +386,9 @@ class NetworkMonitorCore:
                 profile = data.profiles.get(matched_id)
                 profile_name = profile.name if profile else matched_id
                 old_profile = data.profiles.get(self._last_profile_id)
-                old_name = old_profile.name if old_profile else (self._last_profile_id or "无")
+                old_name = (
+                    old_profile.name if old_profile else (self._last_profile_id or "无")
+                )
                 self.log_message(f"启动时方案切换: {old_name} → {profile_name}", "INFO")
                 self._last_profile_id = matched_id
                 ok, msg = self._profile_service.set_active_profile(matched_id)

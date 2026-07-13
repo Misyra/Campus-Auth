@@ -31,7 +31,7 @@ def execute_login_with_retries(runtime_config: RuntimeConfig, logger) -> LoginRe
     from app.services.login_history_service import LoginHistoryService
     from app.services.login_orchestrator import LoginOrchestrator
     from app.services.profile_service import get_profile_service
-    from app.workers.playwright_worker import cleanup_orphan_browsers, get_worker
+    from app.services.worker_port import cleanup_orphan_browsers, get_worker
 
     profile_service = get_profile_service()
     history = LoginHistoryService(AUTH_DATA_DIR)
@@ -48,6 +48,7 @@ def execute_login_with_retries(runtime_config: RuntimeConfig, logger) -> LoginRe
 
     # B2 修复：预校验凭据完整性
     from app.services.login_orchestrator import validate_login_config
+
     err = validate_login_config(runtime_config)
     if err is not None:
         logger.warning("登录配置无效: {}", err)

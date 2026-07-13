@@ -3,6 +3,23 @@
 
 ## 2026-07-13
 
+### refactor: services 层删除直接 import workers，统一通过 worker_port 访问
+
+- `app/services/worker_port.py`：
+  - 新增 `ensure_playwright_ready(log)` 延迟导入委托函数
+  - 新增 `get_script_runner()` 工厂函数（延迟导入 ScriptRunner 类）
+  - 添加 `Callable` 到 typing import（Ruff 自动迁移至 `collections.abc.Callable`）
+- services 层 10 处 import 全部迁移到 `app.services.worker_port`：
+  - `browser_task_service.py`：CMD_BROWSER
+  - `debug_service.py`（4 处）：CMD_DEBUG_*/get_worker
+  - `login_runner.py`：cleanup_orphan_browsers/get_worker
+  - `launcher.py`：ensure_playwright_ready
+  - `login_orchestrator.py`：CMD_LOGIN
+  - `engine.py`：cleanup_orphan_browsers
+  - `task_executor.py`：ScriptRunner → get_script_runner()
+- `tests/test_services/test_worker_port.py`：新增 4 个测试（ensure_playwright_ready 重导出、get_script_runner 工厂、ScriptRunner 类身份、services 层无直接 import workers 回归守卫）
+- 彻底消除 services → workers 直接依赖，所有跨层访问通过 worker_port 端口模块
+
 ### refactor: PlaywrightWorker 显式实现 WorkerPort 并统一 CMD_*/WorkerResponse 单一来源
 
 - `app/workers/playwright_worker.py`：

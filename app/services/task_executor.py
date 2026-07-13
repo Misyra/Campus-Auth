@@ -314,13 +314,13 @@ class TaskExecutor:
         if cancel_event is not None and cancel_event.is_set():
             return False, "任务已被取消"
 
-        from app.workers.script_runner import ScriptRunner
+        from app.services.worker_port import get_script_runner
 
         script_path = self._task_manager.get_script_path(script_id)
         if not script_path or not script_path.exists():
             return False, f"脚本文件不存在: {script_id}"
 
-        runner = ScriptRunner(
+        runner = get_script_runner()(
             script_path=script_path,
             script_type=task["type"],
             timeout=timeout,

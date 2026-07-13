@@ -74,7 +74,7 @@ class DebugSessionManager:
 
     async def _close_debug_browser(self) -> None:
         """关闭调试浏览器 — 委托 Worker 处理。"""
-        from app.workers.playwright_worker import CMD_DEBUG_STOP, get_worker
+        from app.services.worker_port import CMD_DEBUG_STOP, get_worker
 
         try:
             await asyncio.to_thread(lambda: get_worker().submit(CMD_DEBUG_STOP))
@@ -115,7 +115,7 @@ class DebugSessionManager:
         """启动调试会话。"""
         from fastapi import HTTPException
 
-        from app.workers.playwright_worker import CMD_DEBUG_START, get_worker
+        from app.services.worker_port import CMD_DEBUG_START, get_worker
 
         body = await request.json()
         task_id = body.get("task_id", "")
@@ -224,7 +224,7 @@ class DebugSessionManager:
 
     async def next_step(self) -> dict:
         """执行下一步。"""
-        from app.workers.playwright_worker import CMD_DEBUG_STEP, get_worker
+        from app.services.worker_port import CMD_DEBUG_STEP, get_worker
 
         async with self._exec_sem:
             async with self._lock:
@@ -270,7 +270,7 @@ class DebugSessionManager:
 
     async def run_all(self) -> dict:
         """执行所有步骤。"""
-        from app.workers.playwright_worker import CMD_DEBUG_STEP, get_worker
+        from app.services.worker_port import CMD_DEBUG_STEP, get_worker
 
         debug_logger.debug("调试运行所有步骤: task={}", self._session.task_id)
 

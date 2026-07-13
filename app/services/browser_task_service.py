@@ -184,7 +184,7 @@ class BrowserTaskService:
     ) -> BrowserTaskHandle:
         """提交到 Worker。"""
         # 延迟导入：避免模块级导入导致循环依赖
-        from app.workers.playwright_worker import CMD_BROWSER
+        from app.services.worker_port import CMD_BROWSER
 
         def _run() -> tuple[bool, str]:
             try:

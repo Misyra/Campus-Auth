@@ -281,6 +281,7 @@ class LoginBridge:
                 logger.exception("登录任务异常")
                 if on_complete is not None:
                     on_complete(False, f"登录内部错误: {e}")
+
         with self._futures_lock:
             self._registered_futures.add(handle.future)
         handle.future.add_done_callback(_on_done)
@@ -708,7 +709,6 @@ class ScheduleEngine:
             core.init_monitoring()
             core._update_state(**saved)
 
-
         cmd.response_data = (True, "方案切换成功")
         if cmd.response_future and not cmd.response_future.done():
             cmd.response_future.set_result(cmd.response_data)
@@ -787,7 +787,7 @@ class ScheduleEngine:
     def _start_engine_thread(self) -> None:
         """启动引擎 loop 线程（内部方法）。"""
         # 清理孤儿浏览器：冷却期内（30s）自动跳过，避免与 application.py 重复扫描
-        from app.workers.playwright_worker import cleanup_orphan_browsers
+        from app.services.worker_port import cleanup_orphan_browsers
 
         try:
             cleanup_orphan_browsers()

@@ -8,12 +8,15 @@ services 层应从本模块导入：
 - WorkerResponse：Worker 命令响应数据类
 - CMD_* 命令常量：替代从 app.workers.playwright_worker 直接导入
 - get_worker / cleanup_orphan_browsers：工厂与清理函数
+- ensure_playwright_ready：环境就绪检查（委托 playwright_bootstrap）
+- get_script_runner：ScriptRunner 类工厂（委托 script_runner）
 
 workers 层（PlaywrightWorker）通过实现此协议对外提供服务。
 """
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Protocol, runtime_checkable
 
@@ -109,3 +112,24 @@ def cleanup_orphan_browsers(*, force: bool = False) -> None:
     from app.workers.playwright_worker import cleanup_orphan_browsers as _cleanup
 
     _cleanup(force=force)
+
+
+def ensure_playwright_ready(log: Callable[[str], None] | None = None) -> bool:
+    """检查 Playwright 环境就绪（浏览器已安装）。
+
+    实际实现委托给 app.workers.playwright_bootstrap.ensure_playwright_ready。
+    """
+    from app.workers.playwright_bootstrap import ensure_playwright_ready as _ensure
+
+    return _ensure(log=log)
+
+
+def get_script_runner() -> type:
+    """获取 ScriptRunner 类（延迟导入）。
+
+    实际实现委托给 app.workers.script_runner.ScriptRunner。
+    services 层通过此函数获取 ScriptRunner 类，避免直接依赖 app.workers.script_runner。
+    """
+    from app.workers.script_runner import ScriptRunner
+
+    return ScriptRunner

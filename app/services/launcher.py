@@ -285,9 +285,7 @@ def launch_lightweight(ctx: ApplicationContext, logger):
     """轻量模式：始终启动监控 + 定时任务，可选托盘，支持按需唤醒 WebUI。"""
     from app.container import ServiceContainer
 
-    container = ServiceContainer(
-        Path(__file__).parent.parent.parent.resolve()
-    )
+    container = ServiceContainer(Path(__file__).parent.parent.parent.resolve())
     container.engine.boot()
     container.engine.sync_scheduler_state()
     logger.info("轻量模式启动: 仅监控 + 定时任务，按 Ctrl+C 停止")
@@ -463,8 +461,8 @@ def launch_full(
 
 def launch_server(ctx: ApplicationContext, force: bool = False) -> None:
     """主启动流程：两层正交状态机（StartupAction → RuntimeMode）"""
+    from app.services.worker_port import ensure_playwright_ready
     from app.utils.logging import get_logger
-    from app.workers.playwright_bootstrap import ensure_playwright_ready
 
     startup_logger = get_logger("startup", source="backend")
     startup_begin = time.perf_counter()

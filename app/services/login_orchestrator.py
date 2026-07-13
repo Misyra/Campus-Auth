@@ -285,7 +285,7 @@ class LoginOrchestrator:
     ) -> LoginHandle:
         """提交到 Worker，注册历史/状态回调。"""
         # 延迟导入：避免模块级导入导致循环依赖
-        from app.workers.playwright_worker import CMD_LOGIN
+        from app.services.worker_port import CMD_LOGIN
 
         # Build compatible dict for Worker process (Worker is separate process, communicates via dict)
         bind_proxy = self._bind_proxy_url

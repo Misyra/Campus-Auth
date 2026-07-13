@@ -114,3 +114,54 @@ def test_worker_port_reexports_worker_response_fields():
     assert resp2.success is False
     assert resp2.data is None
     assert resp2.error == "失败"
+
+
+def test_worker_port_reexports_script_runner_factory():
+    """worker_port 提供 get_script_runner 工厂函数。"""
+    from app.services.worker_port import get_script_runner
+
+    assert callable(get_script_runner)
+
+
+def test_worker_port_reexports_ensure_playwright_ready():
+    """worker_port 提供 ensure_playwright_ready 函数。"""
+    from app.services.worker_port import ensure_playwright_ready
+
+    assert callable(ensure_playwright_ready)
+
+
+def test_get_script_runner_returns_script_runner_class():
+    """get_script_runner 返回 app.workers.script_runner.ScriptRunner 类。"""
+    from app.services.worker_port import get_script_runner
+    from app.workers.script_runner import ScriptRunner
+
+    assert get_script_runner() is ScriptRunner
+
+
+def test_services_layer_does_not_import_workers_directly():
+    """services 层不应直接 import app.workers（应通过 worker_port 间接访问）。
+
+    例外：app/services/worker_port.py 是端口模块，允许延迟导入 workers。
+    """
+    from pathlib import Path
+
+    services_dir = Path(__file__).parent.parent.parent / "app" / "services"
+    violations = []
+
+    for py_file in services_dir.glob("*.py"):
+        if py_file.name == "worker_port.py":
+            continue  # 端口模块允许延迟导入 workers
+        content = py_file.read_text(encoding="utf-8")
+        for line_no, line in enumerate(content.splitlines(), 1):
+            stripped = line.strip()
+            # 跳过注释
+            if stripped.startswith("#"):
+                continue
+            # 检测 from app.workers 导入
+            if "from app.workers" in stripped:
+                violations.append(f"{py_file.name}:{line_no}: {stripped}")
+
+    assert not violations, (
+        f"services 层不应直接 import app.workers，发现 {len(violations)} 处违规：\n"
+        + "\n".join(violations)
+    )
