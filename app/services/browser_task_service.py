@@ -1,0 +1,191 @@
+"""BrowserTaskService — 通用浏览器自动化服务。
+
+职责：
+- 通用浏览器任务执行（签到、打卡、信息采集等）
+- 独立线程池与去重（不与登录共享）
+- Worker 提交与超时
+
+不负责（交给调用方）：
+- 登录特有逻辑（重试策略、网络验证、断网触发、登录历史）
+- 定时调度（由 SchedulerService 触发）
+"""
+
+from __future__ import annotations
+
+import threading
+from collections.abc import Callable
+from concurrent.futures import CancelledError, Future
+from dataclasses import dataclass
+from typing import Any
+
+from app.utils.cancel_token import CompositeCancelEvent
+from app.utils.logging import get_logger
+
+logger = get_logger("browser_task_service", source="backend")
+
+
+@dataclass
+class BrowserTaskHandle:
+    """一次浏览器任务提交的句柄。"""
+
+    future: Future | None
+    cancel_event: CompositeCancelEvent
+    rejected_reason: str | None = None
+
+    def done(self) -> bool:
+        """是否已完成（含被拒绝）。"""
+        return self.future is None or self.future.done()
+
+    def result(self, timeout: float | None = None) -> tuple[bool, str]:
+        """同步等待结果。"""
+        if self.rejected_reason is not None:
+            return False, self.rejected_reason
+        if self.future is None:
+            return False, "任务未提交"
+        try:
+            return self.future.result(timeout=timeout)
+        except CancelledError:
+            return False, "任务已取消"
+
+    def cancel(self) -> None:
+        """取消此次任务。"""
+        self.cancel_event.set()
+
+
+class BrowserTaskService:
+    """通用浏览器自动化服务 — 签到/打卡等非登录浏览器任务。
+
+    与 LoginOrchestrator 平级，共享 Worker（Playwright Actor）但
+    拥有独立线程池与去重槽。
+    """
+
+    def __init__(
+        self,
+        worker_getter: Callable,
+        executor: Any,
+    ) -> None:
+        self._worker_getter = worker_getter
+        self._executor = executor
+
+        # 去重槽：同一 active_task 不重复提交
+        self._slot_lock = threading.Condition(threading.Lock())
+        self._slot: BrowserTaskHandle | None = None
+
+    def is_running(self) -> bool:
+        """是否有浏览器任务正在执行。"""
+        with self._slot_lock:
+            return self._slot is not None and not self._slot.done()
+
+    def submit_task(
+        self,
+        *,
+        task_config: dict[str, Any],
+        cancel_event: threading.Event | None = None,
+        timeout: int = 300,
+    ) -> BrowserTaskHandle:
+        """提交一次浏览器任务。
+
+        Args:
+            task_config: Worker 配置 dict（含 active_task、browser_settings 等）
+            cancel_event: 取消事件；None 则内部新建
+            timeout: Worker 超时（秒）
+
+        Returns:
+            BrowserTaskHandle
+        """
+        if cancel_event is None:
+            cancel_event = CompositeCancelEvent()
+        elif not isinstance(cancel_event, CompositeCancelEvent):
+            wrapper = CompositeCancelEvent()
+            wrapper.add_source(cancel_event)
+            cancel_event = wrapper
+
+        with self._slot_lock:
+            existing = self._slot
+            if existing is not None and not existing.done():
+                # 复用进行中的任务
+                existing.cancel_event.add_source(cancel_event)
+                return existing
+            self._slot = BrowserTaskHandle(
+                future=None, cancel_event=cancel_event, rejected_reason=None
+            )
+            # 临时占位，锁外提交
+
+        try:
+            handle = self._dispatch(task_config, cancel_event, timeout=timeout)
+        except Exception:
+            with self._slot_lock:
+                self._slot = None
+                self._slot_lock.notify_all()
+            raise
+
+        with self._slot_lock:
+            self._slot = handle
+            self._slot_lock.notify_all()
+
+        return handle
+
+    def cancel_running(self) -> None:
+        """取消当前正在运行的浏览器任务。"""
+        with self._slot_lock:
+            if self._slot is not None and not self._slot.done():
+                self._slot.cancel()
+
+    def shutdown(self, wait: bool = True) -> None:
+        """关闭服务。executor 由调用方管理。"""
+        logger.info("浏览器任务服务已关闭")
+
+    def _dispatch(
+        self,
+        task_config: dict[str, Any],
+        cancel_event: threading.Event,
+        timeout: int = 300,
+    ) -> BrowserTaskHandle:
+        """提交到 Worker。"""
+        # 延迟导入：避免模块级导入导致循环依赖
+        from app.workers.playwright_worker import CMD_BROWSER
+
+        def _run() -> tuple[bool, str]:
+            try:
+                if cancel_event.is_set():
+                    return False, "任务已取消"
+                worker = self._worker_getter()
+                result = worker.submit(
+                    CMD_BROWSER,
+                    data={"config": task_config, "cancel_event": cancel_event},
+                    wait=True,
+                    timeout=timeout,
+                )
+                if result.success:
+                    msg = (
+                        result.data
+                        if isinstance(result.data, str)
+                        else "浏览器任务执行成功"
+                    )
+                    return True, msg
+                return False, result.error or "浏览器任务执行失败"
+            except Exception as exc:
+                logger.exception("浏览器任务执行异常: {}", exc)
+                return False, f"浏览器任务执行异常: {exc}"
+
+        try:
+            future = self._executor.submit(_run)
+        except RuntimeError as exc:
+            logger.warning("浏览器任务提交被拒绝: {}", exc)
+            return BrowserTaskHandle(
+                future=None,
+                cancel_event=cancel_event,
+                rejected_reason="任务队列已满，请稍后重试",
+            )
+        handle = BrowserTaskHandle(future=future, cancel_event=cancel_event)
+
+        def _on_done(_: Future) -> None:
+            with self._slot_lock:
+                if self._slot is handle:
+                    self._slot = None
+                self._slot_lock.notify_all()
+            if isinstance(handle.cancel_event, CompositeCancelEvent):
+                handle.cancel_event.clear_sources()
+
+        future.add_done_callback(_on_done)
+        return handle

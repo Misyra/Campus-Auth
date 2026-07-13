@@ -1,6 +1,15 @@
 # 修改日志
 
 
+## 2026-07-13
+
+### feat: 新增 BrowserTaskService 通用浏览器自动化服务
+
+- 新建 `app/services/browser_task_service.py`：BrowserTaskService 骨架，与 LoginOrchestrator 平级，独立去重槽，共享 Playwright Worker
+- 新增 `BrowserTaskHandle` 句柄数据类（future/cancel_event/rejected_reason），支持 done/result/cancel
+- `app/workers/playwright_worker.py`：新增 `CMD_BROWSER = "browser"` 命令常量（handler 待 Task 1.2 实现）
+- 新增测试 `tests/test_services/test_browser_task_service.py`：实例化与 submit_task 返回 handle 两个用例
+
 ### chore: 版本升级至 v4.2.1
 
 - `pyproject.toml`：version 4.2.0 → 4.2.1
