@@ -446,3 +446,99 @@ class TestHandleBrowserTask:
 
         assert resp.success is False
         assert resp.error == "浏览器任务不存在: script_task"
+
+
+# ── Task 2.3: PlaywrightWorker 显式实现 WorkerPort 协议 ──
+
+
+class TestWorkerPortCompliance:
+    """Task 2.3: PlaywrightWorker 显式实现 WorkerPort 协议。"""
+
+    def test_playwright_worker_is_worker_port_instance(self):
+        """PlaywrightWorker 实例是 WorkerPort 的 runtime_checkable 实例。"""
+        from app.services.worker_port import WorkerPort
+        from app.workers.playwright_worker import PlaywrightWorker
+
+        worker = PlaywrightWorker()
+        assert isinstance(worker, WorkerPort)
+
+    def test_playwright_worker_inherits_worker_port(self):
+        """PlaywrightWorker 显式继承 WorkerPort。"""
+        from app.services.worker_port import WorkerPort
+        from app.workers.playwright_worker import PlaywrightWorker
+
+        # 显式继承（不仅是结构化子类型）
+        assert issubclass(PlaywrightWorker, WorkerPort)
+
+    def test_cmd_constants_single_source(self):
+        """CMD_* 常量单一来源：playwright_worker 从 worker_port 导入。"""
+        from app.services import worker_port as wp
+        from app.workers import playwright_worker as pw
+
+        # 所有 CMD_* 应是同一个对象（同一内存地址）
+        for name in (
+            "CMD_LOGIN",
+            "CMD_BROWSER",
+            "CMD_DEBUG_START",
+            "CMD_DEBUG_STEP",
+            "CMD_DEBUG_STOP",
+            "CMD_SHUTDOWN",
+        ):
+            wp_const = getattr(wp, name)
+            pw_const = getattr(pw, name)
+            assert wp_const is pw_const, (
+                f"{name} 应从 worker_port 导入（同一对象），实际是独立定义"
+            )
+
+    def test_worker_response_single_source(self):
+        """WorkerResponse 单一来源：playwright_worker 从 worker_port 导入。"""
+        from app.services.worker_port import WorkerResponse as WP_Response
+        from app.workers.playwright_worker import WorkerResponse as PW_Response
+
+        assert WP_Response is PW_Response, "WorkerResponse 应是同一个类对象"
+
+    def test_worker_response_is_dataclass(self):
+        """统一后的 WorkerResponse 应是 @dataclass（保持原 playwright_worker 行为）。"""
+        import dataclasses
+
+        from app.services.worker_port import WorkerResponse
+
+        assert dataclasses.is_dataclass(WorkerResponse), (
+            "WorkerResponse 应是 @dataclass 以保持 PlaywrightWorker 原有行为"
+        )
+
+    def test_worker_response_fields_preserved(self):
+        """统一后的 WorkerResponse 保持原有字段：success/data/error。"""
+        from app.services.worker_port import WorkerResponse
+
+        resp = WorkerResponse(success=True, data="ok", error=None)
+        assert resp.success is True
+        assert resp.data == "ok"
+        assert resp.error is None
+
+        resp2 = WorkerResponse(success=False, error="失败")
+        assert resp2.success is False
+        assert resp2.data is None
+        assert resp2.error == "失败"
+
+    def test_submit_signature_matches_protocol(self):
+        """submit 方法签名与 WorkerPort 协议一致：timeout 默认值为 None。"""
+        import inspect
+
+        from app.workers.playwright_worker import PlaywrightWorker
+
+        sig = inspect.signature(PlaywrightWorker.submit)
+        timeout_param = sig.parameters.get("timeout")
+        assert timeout_param is not None
+        assert timeout_param.default is None, (
+            f"submit timeout 默认值应为 None（与 Protocol 一致），实际为 {timeout_param.default}"
+        )
+
+    def test_submit_default_timeout_uses_worker_submit_timeout(self):
+        """submit 不传 timeout 时，内部使用 WORKER_SUBMIT_TIMEOUT（行为保持）。"""
+        import app.workers.playwright_worker as pw
+
+        # _DEFAULT_SUBMIT_TIMEOUT 别名常量应已移除，submit 内部直接使用 WORKER_SUBMIT_TIMEOUT
+        assert not hasattr(pw, "_DEFAULT_SUBMIT_TIMEOUT"), (
+            "_DEFAULT_SUBMIT_TIMEOUT 常量应已移除，submit 内部直接使用 WORKER_SUBMIT_TIMEOUT"
+        )

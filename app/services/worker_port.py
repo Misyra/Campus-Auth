@@ -14,10 +14,11 @@ workers 层（PlaywrightWorker）通过实现此协议对外提供服务。
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any, Protocol, runtime_checkable
 
 # ── 命令类型常量（services ↔ workers 契约单一来源）──
-# 此处定义而非导入，Task 2.3 将让 playwright_worker.py 从本模块导入这些常量
+# PlaywrightWorker 从本模块导入这些常量，避免双定义
 
 CMD_LOGIN = "login"  # 执行完整登录流程
 CMD_BROWSER = "browser"  # 通用浏览器任务（签到/打卡等，非登录）
@@ -27,26 +28,19 @@ CMD_DEBUG_STOP = "debug_stop"  # 停止调试会话
 CMD_SHUTDOWN = "shutdown"  # 关闭 Worker
 
 
-# ── WorkerResponse（services ↔ workers 契约数据类）──
+# ── WorkerResponse（services ↔ workers 契约数据类单一来源）──
 
 
+@dataclass
 class WorkerResponse:
     """Worker 命令执行结果。
 
-    注意：此处为契约定义，PlaywrightWorker 内部使用 @dataclass 定义同名类，
-    字段结构兼容（success/data/error）。Task 2.3 将统一为引用此处定义。
+    单一来源定义，PlaywrightWorker 和 services 层均从此导入。
     """
 
     success: bool
-    data: Any
-    error: str | None
-
-    def __init__(
-        self, success: bool, data: Any = None, error: str | None = None
-    ) -> None:
-        self.success = success
-        self.data = data
-        self.error = error
+    data: Any = None
+    error: str | None = None
 
 
 # ── WorkerPort 协议 ──

@@ -3,6 +3,20 @@
 
 ## 2026-07-13
 
+### refactor: PlaywrightWorker 显式实现 WorkerPort 并统一 CMD_*/WorkerResponse 单一来源
+
+- `app/workers/playwright_worker.py`：
+  - `PlaywrightWorker` 显式继承 `WorkerPort`（`class PlaywrightWorker(WorkerPort):`）
+  - 删除 6 个 CMD_* 常量定义，改为从 `app.services.worker_port` 导入
+  - 删除 `WorkerResponse` @dataclass 定义，改为从 `app.services.worker_port` 导入
+  - 删除 `_DEFAULT_SUBMIT_TIMEOUT` 别名常量
+  - `submit()` 方法签名 `timeout` 默认值从 `_DEFAULT_SUBMIT_TIMEOUT` 改为 `None`（与 Protocol 一致），方法体内 `if timeout is None: timeout = WORKER_SUBMIT_TIMEOUT` 保持行为
+- `app/services/worker_port.py`：
+  - `WorkerResponse` 从普通 class 改为 `@dataclass`（与原 playwright_worker 定义一致，保持字段顺序与默认值）
+  - 移除 `__init__` 方法
+- `tests/test_workers/test_playwright_worker.py`：新增 `TestWorkerPortCompliance` 测试类（8 个用例）验证显式继承、常量单一来源、WorkerResponse 单一来源、dataclass 行为、submit 签名一致性
+- 解决 Task 2.1 追踪的 3 个过渡债：CMD_* 双定义、WorkerResponse 双定义、submit timeout 默认值差异
+
 ### refactor: 移动 login_session/login_attempt/login_models 到 workers 层
 
 - `app/services/login_models.py` → `app/workers/login_models.py`

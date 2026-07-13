@@ -34,24 +34,19 @@ from app.constants import (
     WORKER_READY_TIMEOUT,
     WORKER_SUBMIT_TIMEOUT,
 )
+from app.services.worker_port import (
+    CMD_BROWSER,
+    CMD_DEBUG_START,
+    CMD_DEBUG_STEP,
+    CMD_DEBUG_STOP,
+    CMD_LOGIN,
+    CMD_SHUTDOWN,
+    WorkerPort,
+    WorkerResponse,
+)
 from app.utils.logging import get_logger
 
 logger = get_logger("playwright_worker", source="backend")
-
-
-# ── 命令类型常量 ──
-
-CMD_LOGIN = "login"  # 执行完整登录流程（登录和浏览器定时任务共用此命令）
-CMD_BROWSER = "browser"  # 通用浏览器任务（签到/打卡等，非登录）
-CMD_DEBUG_START = "debug_start"  # 启动调试会话
-CMD_DEBUG_STEP = "debug_step"  # 调试下一步
-CMD_DEBUG_STOP = "debug_stop"  # 停止调试会话
-CMD_SHUTDOWN = "shutdown"  # 关闭 Worker
-
-
-# ── 常量 ──
-
-_DEFAULT_SUBMIT_TIMEOUT = WORKER_SUBMIT_TIMEOUT  # submit() 默认超时
 
 
 # ── 数据结构 ──
@@ -68,19 +63,10 @@ class WorkerCommand:
     cancelled: bool = False  # 超时后标记为已取消，跳过执行
 
 
-@dataclass
-class WorkerResponse:
-    """Worker 命令执行结果。"""
-
-    success: bool
-    data: Any = None
-    error: str | None = None
-
-
 # ── Worker 类 ──
 
 
-class PlaywrightWorker:
+class PlaywrightWorker(WorkerPort):
     """浏览器自动化工作线程。
 
     通过 Actor 模型的消息队列，将 Playwright 操作隔离在独立线程中执行。
@@ -235,7 +221,7 @@ class PlaywrightWorker:
         cmd_type: str,
         data: dict | None = None,
         wait: bool = True,
-        timeout: float | None = _DEFAULT_SUBMIT_TIMEOUT,
+        timeout: float | None = None,
     ) -> WorkerResponse:
         """提交命令到 Worker 队列。
 
@@ -246,11 +232,15 @@ class PlaywrightWorker:
             cmd_type: 命令类型（CMD_* 常量）
             data: 命令参数字典
             wait: 是否同步等待执行结果
-            timeout: 等待超时秒数（None 表示无限制）
+            timeout: 等待超时秒数（None 表示使用 WORKER_SUBMIT_TIMEOUT 默认值）
 
         返回:
             WorkerResponse 对象
         """
+        # timeout=None 时回退到默认超时（与 WorkerPort 协议签名一致）
+        if timeout is None:
+            timeout = WORKER_SUBMIT_TIMEOUT
+
         # Worker 已关闭时拒绝新命令（SHUTDOWN 命令走 stop() 路径不经过此检查）
         if self._stop_event.is_set() or self._shutdown_permanent.is_set():
             return WorkerResponse(success=False, error="Worker 已关闭，不接受新命令")
