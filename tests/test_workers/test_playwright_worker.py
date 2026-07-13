@@ -12,7 +12,11 @@ import psutil
 import pytest
 
 import app.workers.playwright_worker as pw_module
-from app.workers.playwright_worker import cleanup_orphan_browsers
+from app.workers.playwright_worker import (
+    CMD_BROWSER,
+    CMD_LOGIN,
+    cleanup_orphan_browsers,
+)
 
 # ── cleanup_orphan_browsers ──
 
@@ -358,3 +362,12 @@ class TestCleanupDebugSession:
 
         fake_page.close.assert_not_called()
         assert worker._page is None
+
+
+# ── CMD_BROWSER 常量 ──
+
+
+def test_cmd_browser_constant_exists():
+    """CMD_BROWSER 常量已定义，与 CMD_LOGIN 区分。"""
+    assert CMD_BROWSER == "browser"
+    assert CMD_BROWSER != CMD_LOGIN

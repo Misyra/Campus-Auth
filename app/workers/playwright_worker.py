@@ -384,6 +384,8 @@ class PlaywrightWorker:
         try:
             if cmd.type == CMD_LOGIN:
                 result = await self._handle_login(cmd.data)
+            elif cmd.type == CMD_BROWSER:
+                result = await self._handle_browser_task(cmd.data)
             elif cmd.type == CMD_DEBUG_START:
                 result = await self._handle_debug_start(cmd.data)
             elif cmd.type == CMD_DEBUG_STEP:
@@ -446,6 +448,68 @@ class PlaywrightWorker:
             logger.exception(
                 "登录执行异常: task_id={}", config.get("task_id", "unknown")
             )
+            return WorkerResponse(success=False, error=str(e))
+
+    async def _handle_browser_task(self, data: dict) -> WorkerResponse:
+        """处理通用浏览器任务（签到/打卡等）。
+
+        与 _handle_login 的区别：
+        - 不走 LoginSession 重试循环
+        - 不记录登录历史
+        - 直接用 BrowserTaskRunner.execute(page) 执行步骤
+        """
+        from app.constants import PROJECT_ROOT
+        from app.tasks import BrowserTaskRunner, TaskConfig
+        from app.tasks.manager import TaskManager
+
+        config = data.get("config", {})
+        cancel_event = data.get("cancel_event")
+
+        if cancel_event is None:
+            logger.error("浏览器任务命令缺少 cancel_event")
+            return WorkerResponse(success=False, error="cancel_event 缺失")
+
+        task_id = config.get("active_task", "")
+        if not task_id:
+            return WorkerResponse(success=False, error="未指定任务")
+
+        # 加载任务定义
+        task_mgr = TaskManager(PROJECT_ROOT / "tasks")
+        task_detail = task_mgr.get_task_detail(task_id)
+        if not task_detail or task_detail.get("type") != "browser":
+            return WorkerResponse(
+                success=False, error=f"浏览器任务不存在: {task_id}"
+            )
+
+        # TaskConfig 是 dataclass，用 from_dict 而非 **dict
+        # （dict 含 id/type/raw_json 等非字段键）
+        try:
+            task_config = TaskConfig.from_dict(task_detail)
+        except Exception as e:
+            logger.exception("解析 TaskConfig 失败: task_id={}", task_id)
+            return WorkerResponse(success=False, error=f"任务配置解析失败: {e}")
+
+        try:
+            # 确保浏览器就绪（复用现有 ensure_browser）
+            await self.ensure_browser(config)
+
+            if self._page is None or self._page.is_closed():
+                return WorkerResponse(success=False, error="浏览器页面初始化失败")
+
+            # 执行任务
+            runner = BrowserTaskRunner(
+                task_config,
+                template_vars=config.get("template_vars", {}),
+                cancel_event=cancel_event,
+            )
+            success, message = await runner.execute(self._page)
+            return WorkerResponse(
+                success=success,
+                data=message if success else None,
+                error=None if success else message,
+            )
+        except Exception as e:
+            logger.exception("浏览器任务执行异常: task_id={}", task_id)
             return WorkerResponse(success=False, error=str(e))
 
     async def _cleanup_debug_session(self):
