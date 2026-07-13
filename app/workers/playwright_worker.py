@@ -417,8 +417,8 @@ class PlaywrightWorker:
         LoginSession 在单次 Worker 调用内复用浏览器并管理重试循环，
         所有终态（成功/失败/取消/耗尽）都关闭浏览器。
         """
-        from app.services.login_models import AttemptOutcomeType
-        from app.services.login_session import LoginSession
+        from app.workers.login_models import AttemptOutcomeType
+        from app.workers.login_session import LoginSession
 
         config = data.get("config", {})
         cancel_event: threading.Event | None = data.get("cancel_event")
@@ -695,7 +695,6 @@ class PlaywrightWorker:
 
         logger.info("停止调试会话成功")
         return WorkerResponse(success=True, data="调试会话已停止")
-
 
     async def ensure_browser(self, config: dict) -> None:
         """确保浏览器和页面已就绪（可从 Worker 事件循环内直接调用）。

@@ -3,6 +3,19 @@
 
 ## 2026-07-13
 
+### refactor: 移动 login_session/login_attempt/login_models 到 workers 层
+
+- `app/services/login_models.py` → `app/workers/login_models.py`
+- `app/services/login_attempt.py` → `app/workers/login_attempt.py`
+- `app/services/login_session.py` → `app/workers/login_session.py`
+- 更新移动后文件的内部 import（`app.services.login_*` → `app.workers.login_*`）
+- 更新 `app/workers/playwright_worker.py` 的延迟 import（`_handle_login` 中）
+- 移动测试文件：`tests/test_services/test_login_models.py` → `tests/test_workers/test_login_models.py`，`tests/test_services/test_login_session.py` → `tests/test_workers/test_login_session.py`
+- 更新测试中的 import 和 patch 路径（`app.services.login_session.*` → `app.workers.login_session.*`，共 29 处 patch 路径）
+- 更新其他测试文件的 import：`tests/test_utils/test_utils.py`、`tests/test_utils/test_login.py`（含 26 处 patch 路径）、`tests/test_core/test_monitor.py`
+- 新增 `tests/test_workers/test_login_files_moved.py`：7 个回归测试验证模块位置与旧路径失效
+- 背景：这 3 个文件实际运行在 Worker 线程内，属于 workers 层逻辑。移动后消除 `playwright_worker → app.services.login_*` 的反向依赖，依赖方向变为 workers → workers 同层
+
 ### feat: 新建 WorkerPort Protocol 抽象 Worker 接口
 
 - 新建 `app/services/worker_port.py`：

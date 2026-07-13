@@ -9,12 +9,11 @@ import time
 from pathlib import Path
 from typing import Any
 
-from app.services.login_models import AttemptOutcome, AttemptOutcomeType
 from app.utils.browser import BrowserContextManager
 from app.utils.env import build_login_template_vars
 from app.utils.exceptions import LoginCancelledError
 from app.utils.logging import get_logger
-
+from app.workers.login_models import AttemptOutcome, AttemptOutcomeType
 
 # 登录成功后等待页面完成跳转和状态更新的时间（秒）
 LOGIN_SUCCESS_SETTLE_SECONDS = 2
