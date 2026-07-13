@@ -107,6 +107,7 @@ class TaskExecutor:
         worker_getter: Callable,
         login_orchestrator: LoginOrchestrator | None = None,
         task_manager: TaskManager | None = None,
+        browser_task_service=None,
         get_runtime_config: Callable[[], RuntimeConfig] | None = None,
     ) -> None:
         self._registry = registry
@@ -115,6 +116,7 @@ class TaskExecutor:
         self._get_runtime_config = get_runtime_config
         self._login_orchestrator = login_orchestrator
         self._task_manager = task_manager
+        self._browser_task_service = browser_task_service
 
         # 线程池：任务池懒初始化（无定时任务时不创建线程）
         self._task_pool: BoundedExecutor | None = None
@@ -331,8 +333,10 @@ class TaskExecutor:
         timeout: int,
         cancel_event: threading.Event | None = None,
     ) -> tuple[bool, str]:
-        """执行浏览器任务。委托 LoginOrchestrator，与登录共享去重。"""
-        task = self._task_manager.get_task_detail(task_id) if self._task_manager else None
+        """执行浏览器任务。委托 BrowserTaskService（签到/打卡等通用自动化）。"""
+        task = (
+            self._task_manager.get_task_detail(task_id) if self._task_manager else None
+        )
         if not task or task.get("type") != "browser":
             return False, f"浏览器任务不存在: {task_id}"
 
@@ -346,9 +350,13 @@ class TaskExecutor:
         if task_id and task_id != config.active_task:
             config = config.model_copy(update={"active_task": task_id})
 
-        handle = self._login_orchestrator.submit(
-            source="browser",
-            config=config,
+        # 构建 Worker config dict（复用 runtime_config_to_worker_dict）
+        from app.services.login_orchestrator import runtime_config_to_worker_dict
+
+        worker_config = runtime_config_to_worker_dict(config)
+
+        handle = self._browser_task_service.submit_task(
+            task_config=worker_config,
             cancel_event=cancel_event,
             timeout=timeout,
         )

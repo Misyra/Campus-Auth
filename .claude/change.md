@@ -3,6 +3,15 @@
 
 ## 2026-07-13
 
+### refactor: TaskExecutor._execute_browser 改走 BrowserTaskService
+
+- `app/services/task_executor.py`：`__init__` 新增 `browser_task_service=None` 参数（位于 `task_manager` 与 `get_runtime_config` 之间），存储为 `self._browser_task_service`
+- `app/services/task_executor.py`：`_execute_browser` 不再调用 `self._login_orchestrator.submit(source="browser", ...)`，改为通过 `runtime_config_to_worker_dict` 构建 worker config dict 后委托 `self._browser_task_service.submit_task(task_config=..., cancel_event=..., timeout=...)`，让签到/打卡等通用浏览器任务独立于登录路径
+- `tests/test_core/test_task_executor.py`：新增 `test_execute_browser_uses_browser_task_service` 验证委托关系
+- `tests/test_services/test_task_executor_lifecycle.py`：`TestTaskExecutorExecuteBrowser` 全部用例改为 mock `_browser_task_service.submit_task`，移除已失效的 `test_browser_data_no_pure_mode`（不再委托 orchestrator，pure_mode 检查无意义），新增 `test_browser_rejected_returns_reason` 覆盖 rejected 路径
+- `tests/test_services/test_p0_fixes.py`：`TestBrowserTaskIdInjection` 改为注入 `browser_task_service` mock，断言改为检查 `submit_task.call_args.kwargs["task_config"]["active_task"]`
+- `tests/test_integration/test_scheduled_task.py`：`_make_executor` 增加 `browser_task_service` kwarg；`test_execute_browser_task_with_variables` 改用 `browser_task_service` mock
+
 ### fix: 修复 CMD_BROWSER handler 浏览器泄漏与测试覆盖
 
 - **Critical #1 浏览器资源泄漏**：`_handle_browser_task` 的 try/except 末尾添加 `finally: await self._close_browser()`，确保一次性浏览器任务（签到/打卡）完成后关闭浏览器，与 `_handle_login` 行为一致

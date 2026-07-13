@@ -462,9 +462,17 @@ class TestTaskExecutorExecuteBrowser:
             worker_getter=MagicMock(),
             login_orchestrator=MagicMock(),
             task_manager=MagicMock(),
+            browser_task_service=MagicMock(),
         )
         defaults.update(kwargs)
         return TaskExecutor(**defaults)
+
+    def _make_handle(self, ok: bool, msg):
+        """构造 BrowserTaskService.submit_task 返回的 mock handle。"""
+        handle = MagicMock()
+        handle.rejected_reason = None
+        handle.result = MagicMock(return_value=(ok, msg))
+        return handle
 
     def test_task_not_found(self):
         executor = self._make_executor()
@@ -481,83 +489,49 @@ class TestTaskExecutorExecuteBrowser:
         assert "不存在" in msg
 
     def test_browser_success(self):
-        from app.services.login_orchestrator import LoginHandle
-        from app.utils.cancel_token import CompositeCancelEvent
-
         executor = self._make_executor()
         executor._task_manager.get_task_detail.return_value = {"type": "browser"}
         executor._get_runtime_config = lambda: RuntimeConfig()
-
-        mock_handle = LoginHandle(
-            future=None,
-            source="browser",
-            cancel_event=CompositeCancelEvent(),
+        executor._browser_task_service.submit_task.return_value = self._make_handle(
+            True, "登录成功"
         )
-        mock_handle.result = lambda: (True, "登录成功")
-        executor._login_orchestrator.submit.return_value = mock_handle
 
         success, msg = executor._execute_browser("b1", 60)
         assert success is True
         assert msg == "登录成功"
 
     def test_browser_failure(self):
-        from app.services.login_orchestrator import LoginHandle
-        from app.utils.cancel_token import CompositeCancelEvent
-
         executor = self._make_executor()
         executor._task_manager.get_task_detail.return_value = {"type": "browser"}
         executor._get_runtime_config = None
-
-        mock_handle = LoginHandle(
-            future=None,
-            source="browser",
-            cancel_event=CompositeCancelEvent(),
+        executor._browser_task_service.submit_task.return_value = self._make_handle(
+            False, "页面加载失败"
         )
-        mock_handle.result = lambda: (False, "页面加载失败")
-        executor._login_orchestrator.submit.return_value = mock_handle
 
         success, msg = executor._execute_browser("b1", 60)
         assert success is False
         assert "页面加载失败" in msg
 
     def test_browser_import_error(self):
-        from app.services.login_orchestrator import LoginHandle
-        from app.utils.cancel_token import CompositeCancelEvent
-
         executor = self._make_executor()
         executor._task_manager.get_task_detail.return_value = {"type": "browser"}
         executor._get_runtime_config = None
-
-        mock_handle = LoginHandle(
-            future=None,
-            source="browser",
-            cancel_event=CompositeCancelEvent(),
-        )
-        mock_handle.result = lambda: (
+        executor._browser_task_service.submit_task.return_value = self._make_handle(
             False,
             "登录需要额外依赖，请检查 Playwright 安装状态",
         )
-        executor._login_orchestrator.submit.return_value = mock_handle
 
         success, msg = executor._execute_browser("b1", 60)
         assert success is False
         assert "依赖" in msg
 
     def test_browser_generic_exception(self):
-        from app.services.login_orchestrator import LoginHandle
-        from app.utils.cancel_token import CompositeCancelEvent
-
         executor = self._make_executor()
         executor._task_manager.get_task_detail.return_value = {"type": "browser"}
         executor._get_runtime_config = lambda: RuntimeConfig()
-
-        mock_handle = LoginHandle(
-            future=None,
-            source="browser",
-            cancel_event=CompositeCancelEvent(),
+        executor._browser_task_service.submit_task.return_value = self._make_handle(
+            False, "登录执行异常: worker crash"
         )
-        mock_handle.result = lambda: (False, "登录执行异常: worker crash")
-        executor._login_orchestrator.submit.return_value = mock_handle
 
         success, msg = executor._execute_browser("b1", 60)
         assert success is False
@@ -565,20 +539,12 @@ class TestTaskExecutorExecuteBrowser:
 
     def test_browser_result_data_not_string(self):
         """result.data 不是字符串时应返回默认消息。"""
-        from app.services.login_orchestrator import LoginHandle
-        from app.utils.cancel_token import CompositeCancelEvent
-
         executor = self._make_executor()
         executor._task_manager.get_task_detail.return_value = {"type": "browser"}
         executor._get_runtime_config = lambda: RuntimeConfig()
-
-        mock_handle = LoginHandle(
-            future=None,
-            source="browser",
-            cancel_event=CompositeCancelEvent(),
+        executor._browser_task_service.submit_task.return_value = self._make_handle(
+            True, {"key": "value"}
         )
-        mock_handle.result = lambda: (True, {"key": "value"})  # 非字符串
-        executor._login_orchestrator.submit.return_value = mock_handle
 
         success, msg = executor._execute_browser("b1", 60)
         assert success is True
@@ -586,65 +552,43 @@ class TestTaskExecutorExecuteBrowser:
 
     def test_browser_failure_no_error_msg(self):
         """失败但无 error 时应返回默认错误消息。"""
-        from app.services.login_orchestrator import LoginHandle
-        from app.utils.cancel_token import CompositeCancelEvent
-
         executor = self._make_executor()
         executor._task_manager.get_task_detail.return_value = {"type": "browser"}
         executor._get_runtime_config = lambda: RuntimeConfig()
-
-        mock_handle = LoginHandle(
-            future=None,
-            source="browser",
-            cancel_event=CompositeCancelEvent(),
+        executor._browser_task_service.submit_task.return_value = self._make_handle(
+            False, ""
         )
-        mock_handle.result = lambda: (False, "")
-        executor._login_orchestrator.submit.return_value = mock_handle
 
         success, msg = executor._execute_browser("b1", 60)
         assert success is False
         assert "浏览器任务执行失败" in msg
 
-    def test_browser_data_no_pure_mode(self):
-        """F20: submit() 调用时不应包含 pure_mode（委托 Orchestrator 后由 Orchestrator 处理 config）。"""
-        from app.services.login_orchestrator import LoginHandle
-        from app.utils.cancel_token import CompositeCancelEvent
-
+    def test_browser_rejected_returns_reason(self):
+        """submit_task 返回 rejected_reason 时应直接返回失败。"""
         executor = self._make_executor()
         executor._task_manager.get_task_detail.return_value = {"type": "browser"}
         executor._get_runtime_config = lambda: RuntimeConfig()
 
-        mock_handle = LoginHandle(
-            future=None,
-            source="browser",
-            cancel_event=CompositeCancelEvent(),
-        )
-        mock_handle.result = lambda: (True, "ok")
-        executor._login_orchestrator.submit.return_value = mock_handle
+        handle = MagicMock()
+        handle.rejected_reason = "任务队列已满，请稍后重试"
+        handle.result = MagicMock(return_value=(False, "should not be called"))
+        executor._browser_task_service.submit_task.return_value = handle
 
-        executor._execute_browser("b1", 60)
-        call_kwargs = executor._login_orchestrator.submit.call_args.kwargs
-        assert "pure_mode" not in call_kwargs.get("config", {})
+        success, msg = executor._execute_browser("b1", 60)
+        assert success is False
+        assert "任务队列已满" in msg
 
     def test_browser_timeout_forwarded(self):
-        """timeout 应传递给 orchestrator.submit()。"""
-        from app.services.login_orchestrator import LoginHandle
-        from app.utils.cancel_token import CompositeCancelEvent
-
+        """timeout 应传递给 browser_task_service.submit_task()。"""
         executor = self._make_executor()
         executor._task_manager.get_task_detail.return_value = {"type": "browser"}
         executor._get_runtime_config = lambda: RuntimeConfig()
-
-        mock_handle = LoginHandle(
-            future=None,
-            source="browser",
-            cancel_event=CompositeCancelEvent(),
+        executor._browser_task_service.submit_task.return_value = self._make_handle(
+            True, "ok"
         )
-        mock_handle.result = lambda: (True, "ok")
-        executor._login_orchestrator.submit.return_value = mock_handle
 
         executor._execute_browser("b1", 120)
-        call_kwargs = executor._login_orchestrator.submit.call_args.kwargs
+        call_kwargs = executor._browser_task_service.submit_task.call_args.kwargs
         assert call_kwargs["timeout"] == 120
 
 

@@ -1002,3 +1002,35 @@ class TestBrowserTaskRunner:
         assert call_args <= 1100  # 允许少量误差
         # 验证 duration 恢复原值
         assert step.duration == 300000
+
+
+# =====================================================================
+# TaskExecutor._execute_browser 委托 BrowserTaskService
+# =====================================================================
+
+
+def test_execute_browser_uses_browser_task_service():
+    """_execute_browser 应委托 BrowserTaskService，不走 LoginOrchestrator。"""
+    from app.services.task_executor import TaskExecutor
+
+    browser_svc = MagicMock()
+    browser_svc.submit_task.return_value = MagicMock(
+        rejected_reason=None,
+        result=MagicMock(return_value=(True, "成功")),
+    )
+
+    executor = TaskExecutor(
+        registry=MagicMock(),
+        history_store=MagicMock(),
+        worker_getter=MagicMock(),
+        task_manager=MagicMock(),
+        browser_task_service=browser_svc,
+    )
+
+    # 模拟 task_manager 返回浏览器任务
+    executor._task_manager.get_task_detail.return_value = {"type": "browser"}
+
+    ok, msg = executor._execute_browser("task_123", 60, None)
+
+    browser_svc.submit_task.assert_called_once()
+    assert ok is True
