@@ -334,6 +334,7 @@ class TestStepType:
             "sleep",
             "ocr",
             "click_select",
+            "assert_text",
         }
         actual = {t.value for t in StepType}
         assert actual == expected
