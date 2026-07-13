@@ -45,14 +45,6 @@ CMD_LOGIN = "login"  # 执行完整登录流程（登录和浏览器定时任务
 CMD_DEBUG_START = "debug_start"  # 启动调试会话
 CMD_DEBUG_STEP = "debug_step"  # 调试下一步
 CMD_DEBUG_STOP = "debug_stop"  # 停止调试会话
-CMD_BROWSER_HEALTH_CHECK = "browser_health_check"  # 浏览器健康检查
-CMD_BROWSER_ACQUIRE = (
-    "browser_acquire"  # 获取/确保浏览器就绪（供外部线程使用 submit 调用）
-)
-CMD_BROWSER_RELEASE = (
-    "browser_release"  # 释放浏览器引用（浏览器常驻 Worker 不实际关闭）
-)
-CMD_BROWSER_CLOSE = "browser_close"  # 实际关闭浏览器进程
 CMD_SHUTDOWN = "shutdown"  # 关闭 Worker
 
 
@@ -397,14 +389,6 @@ class PlaywrightWorker:
                 result = await self._handle_debug_step(cmd.data)
             elif cmd.type == CMD_DEBUG_STOP:
                 result = await self._handle_debug_stop()
-            elif cmd.type == CMD_BROWSER_ACQUIRE:
-                result = await self._handle_browser_acquire(cmd.data)
-            elif cmd.type == CMD_BROWSER_RELEASE:
-                result = await self._handle_browser_release()
-            elif cmd.type == CMD_BROWSER_CLOSE:
-                result = await self._handle_browser_close()
-            elif cmd.type == CMD_BROWSER_HEALTH_CHECK:
-                result = await self._handle_health_check()
             elif cmd.type == CMD_SHUTDOWN:
                 result = WorkerResponse(success=True, data="Worker 正在关闭")
             else:
@@ -645,39 +629,11 @@ class PlaywrightWorker:
         logger.info("停止调试会话成功")
         return WorkerResponse(success=True, data="调试会话已停止")
 
-    async def _handle_health_check(self) -> WorkerResponse:
-        """处理浏览器健康检查命令。"""
-        healthy = await self._health_check()
-        return WorkerResponse(success=healthy, data=healthy)
-
-    async def _handle_browser_acquire(self, data: dict) -> WorkerResponse:
-        """处理浏览器获取命令（从 submit 队列派发）。
-
-        外部线程（非 Worker 事件循环）通过 submit(CMD_BROWSER_ACQUIRE)
-        调用此方法，确保 Worker 中的浏览器已就绪。
-        """
-        config = data.get("config", {})
-        await self.ensure_browser(config)
-        return WorkerResponse(success=True, data="Browser ready")
-
-    async def _handle_browser_release(self) -> WorkerResponse:
-        """处理浏览器释放命令。
-
-        浏览器常驻 Worker 生命周期内，不会实际关闭。
-        仅用于释放 BrowserContextManager 的引用计数。
-        """
-        return WorkerResponse(success=True, data="Browser released (alive in Worker)")
-
-    async def _handle_browser_close(self) -> WorkerResponse:
-        """处理 CMD_BROWSER_CLOSE —— 实际关闭浏览器进程。"""
-        await self._close_browser()
-        return WorkerResponse(success=True, data="Browser closed")
 
     async def ensure_browser(self, config: dict) -> None:
         """确保浏览器和页面已就绪（可从 Worker 事件循环内直接调用）。
 
-        此方法供同线程调用者使用（如 BrowserContextManager），
-        外部调用应使用 CMD_BROWSER_ACQUIRE 命令通过 submit 队列派发。
+        此方法供同线程调用者使用（如 BrowserContextManager）。
         复用已存在的浏览器实例，仅在未就绪或配置变更时重建。
         """
         browser_settings = config.get("browser_settings", {})

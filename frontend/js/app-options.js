@@ -1,4 +1,4 @@
-import { api, SETTINGS_TABS, LOG_LEVELS, LEVEL_VALUES } from './constants.js';
+import { api, SETTINGS_TABS, LOG_LEVELS, LEVEL_VALUES, LOG_SOURCES } from './constants.js';
 import { apiService } from './api-service.js';
 import { createFrontendLogger } from './logger.js';
 import { actionMethods } from './methods/actions.js';
@@ -64,10 +64,7 @@ export const appOptions = {
         { value: 'monitor', label: '启动后开始监控（推荐）' },
         { value: 'login_once', label: '自动登录，成功后退出' },
       ],
-      logSourceOptions: (() => {
-        const srcs = [{ value: 'backend',  label: 'backend' }, { value: 'frontend', label: 'frontend' }];
-        return [{ value: '', label: '全部来源' }, ...srcs];
-      })(),
+      logSourceOptions: [{ value: '', label: '全部来源' }, ...LOG_SOURCES],
       scheduledTaskTypeOptions: [
         { value: 'script', label: '自定义脚本' },
         { value: 'browser', label: '浏览器任务' },
@@ -189,10 +186,6 @@ export const appOptions = {
         login_once: '启动后尝试登录一次，成功后自动退出。适用于开机自启动场景',
       };
       return hints[this.config.app_settings.startup_action] || hints.none;
-    },
-    startupActionLabel() {
-      const opt = this.loginActionOptions.find(o => o.value === this.config.app_settings.startup_action);
-      return opt ? opt.label.replace('（推荐）', '') : '不自动执行';
     },
     scriptTypeOptions() {
       return [

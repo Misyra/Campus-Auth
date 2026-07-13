@@ -24,10 +24,6 @@ from app.workers.playwright_bootstrap import (
     ensure_playwright_ready,
 )
 from app.workers.playwright_worker import (
-    CMD_BROWSER_ACQUIRE,
-    CMD_BROWSER_CLOSE,
-    CMD_BROWSER_HEALTH_CHECK,
-    CMD_BROWSER_RELEASE,
     CMD_DEBUG_START,
     CMD_DEBUG_STEP,
     CMD_DEBUG_STOP,
@@ -101,7 +97,6 @@ class TestBrowserContextManager:
 
     def test_initial_browser_state(self):
         ctx = BrowserContextManager({})
-        assert ctx.playwright is None
         assert ctx.browser is None
         assert ctx.context is None
         assert ctx.page is None
@@ -361,10 +356,6 @@ class TestCommandConstants:
         assert CMD_DEBUG_START == "debug_start"
         assert CMD_DEBUG_STEP == "debug_step"
         assert CMD_DEBUG_STOP == "debug_stop"
-        assert CMD_BROWSER_HEALTH_CHECK == "browser_health_check"
-        assert CMD_BROWSER_ACQUIRE == "browser_acquire"
-        assert CMD_BROWSER_RELEASE == "browser_release"
-        assert CMD_BROWSER_CLOSE == "browser_close"
         assert CMD_SHUTDOWN == "shutdown"
 
 
@@ -594,17 +585,15 @@ class TestBrowserContextManagerAexit:
     async def test_clears_references(self):
         """清空引用。"""
         mgr = BrowserContextManager({})
-        mgr.playwright = MagicMock()
         mgr.browser = MagicMock()
         mgr.context = MagicMock()
         mgr.page = MagicMock()
 
-        mock_worker = MagicMock()
+        mock_worker = AsyncMock()
         with patch(
             "app.workers.playwright_worker.get_worker", return_value=mock_worker
         ):
             await mgr.__aexit__(None, None, None)
-            assert mgr.playwright is None
             assert mgr.browser is None
             assert mgr.context is None
             assert mgr.page is None
@@ -1396,14 +1385,6 @@ class TestDispatch:
         assert cmd.response_data.success is False
         assert "未知命令" in cmd.response_data.error
 
-    @pytest.mark.asyncio
-    async def test_browser_release_command(self):
-        """BROWSER_RELEASE 命令返回成功。"""
-        worker = PlaywrightWorker()
-        event = threading.Event()
-        cmd = WorkerCommand(type=CMD_BROWSER_RELEASE, response_event=event)
-        await worker._dispatch(cmd)
-        assert cmd.response_data.success is True
 
     @pytest.mark.asyncio
     async def test_dispatch_sets_response_event(self):

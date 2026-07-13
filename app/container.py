@@ -84,8 +84,6 @@ class ServiceContainer:
             project_root,
             self.profile_service,
             self.ws_manager,
-            login_history_service=self.login_history_service,
-            worker_getter=_get_worker,
             task_registry=self.task_registry,
             task_executor=self.task_executor,
             orchestrator=self.login_orchestrator,

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from contextlib import contextmanager
 
 from fastapi import APIRouter, HTTPException, Request
 
@@ -30,18 +29,6 @@ api_logger = get_logger("api", source="backend")
 config_logger = get_logger("config", source="backend")
 
 
-@contextmanager
-def _handle_config_error(operation: str, *, log_warning: bool = False):
-    """统一配置端点的 ValueError / 通用异常处理。"""
-    try:
-        yield
-    except ValueError as exc:
-        if log_warning:
-            api_logger.warning("配置更新被拒绝: {}", exc)
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except Exception as exc:
-        api_logger.warning("{}失败: {}", operation, exc, exc_info=True)
-        raise HTTPException(status_code=500, detail=f"{operation}失败: {exc}") from exc
 
 
 @router.get("/api/config/log-levels", response_model=LogLevelResponse)
@@ -135,15 +122,6 @@ def get_config_defaults() -> dict:
 
 
 
-def _save_and_reload(
-    payload: ConfigSaveRequest,
-    profile_svc: ProfileServiceDep,
-    svc: MonitorServiceDep,
-) -> None:
-    """保存配置并重载监控。"""
-    result = save_global_and_profile(payload, profile_svc, svc.reload_config)
-    if not result.success:
-        raise ValueError(result.message)
 
 
 @router.put("/api/config", response_model=ApiResponse)
@@ -152,10 +130,11 @@ def save_config(
     svc: MonitorServiceDep,
     profile_svc: ProfileServiceDep,
 ) -> ApiResponse:
-    with _handle_config_error("配置保存", log_warning=True):
-        _save_and_reload(payload, profile_svc, svc)
-        api_logger.info("保存配置成功")
-        return ApiResponse(success=True, message="配置保存成功")
+    result = save_global_and_profile(payload, profile_svc, svc.reload_config)
+    if not result.success:
+        raise ValueError(result.message)
+    api_logger.info("保存配置成功")
+    return ApiResponse(success=True, message="配置保存成功")
 
 
 @router.patch("/api/config", response_model=ApiResponse)
@@ -165,31 +144,32 @@ def patch_config(
     profile_svc: ProfileServiceDep,
 ) -> ApiResponse:
     """增量更新配置 — 仅修改 payload 中非 None 的字段。"""
-    with _handle_config_error("配置增量保存"):
-        old_data = profile_svc.load()
-        old_cfg = profile_svc.build_runtime_config(old_data)
+    old_data = profile_svc.load()
+    old_cfg = profile_svc.build_runtime_config(old_data)
 
-        current = old_cfg.model_dump()
-        # 将 credentials 扁平化到顶层，与 ConfigSaveRequest/ConfigPatchRequest 的平铺结构对齐
-        # 否则 merged 顶层缺失 username/auth_url/isp/carrier_custom，ConfigSaveRequest 取默认空串，
-        # save_global_and_profile 会用空串覆盖已有凭据（BUG-027）
-        creds = current.pop("credentials", {})
-        current.update(creds)
-        # password 空串语义为不修改（见 save_password_field），不回填运行时明文以免无谓重新加密
-        current["password"] = None
+    current = old_cfg.model_dump()
+    # 将 credentials 扁平化到顶层，与 ConfigSaveRequest/ConfigPatchRequest 的平铺结构对齐
+    # 否则 merged 顶层缺失 username/auth_url/isp/carrier_custom，ConfigSaveRequest 取默认空串，
+    # save_global_and_profile 会用空串覆盖已有凭据（BUG-027）
+    creds = current.pop("credentials", {})
+    current.update(creds)
+    # password 空串语义为不修改（见 save_password_field），不回填运行时明文以免无谓重新加密
+    current["password"] = None
 
-        patch_data = payload.model_dump(exclude_none=True)
+    patch_data = payload.model_dump(exclude_none=True)
 
-        merged = {**current, **patch_data}
-        for key in ("browser", "monitor", "retry", "pause", "logging", "app_settings"):
-            if key in patch_data:
-                merged[key] = {**current.get(key, {}), **patch_data[key]}
+    merged = {**current, **patch_data}
+    for key in ("browser", "monitor", "retry", "pause", "logging", "app_settings"):
+        if key in patch_data:
+            merged[key] = {**current.get(key, {}), **patch_data[key]}
 
-        full_request = ConfigSaveRequest.model_validate(merged)
-        _save_and_reload(full_request, profile_svc, svc)
-        api_logger.info("配置增量保存成功 (fields={})", list(patch_data.keys()))
-        return ApiResponse(
-            success=True,
-            message="配置保存成功",
-            data={"patched": list(patch_data.keys())},
-        )
+    full_request = ConfigSaveRequest.model_validate(merged)
+    result = save_global_and_profile(full_request, profile_svc, svc.reload_config)
+    if not result.success:
+        raise ValueError(result.message)
+    api_logger.info("配置增量保存成功 (fields={})", list(patch_data.keys()))
+    return ApiResponse(
+        success=True,
+        message="配置保存成功",
+        data={"patched": list(patch_data.keys())},
+    )

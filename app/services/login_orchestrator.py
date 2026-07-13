@@ -77,18 +77,12 @@ def validate_login_config(config: RuntimeConfig) -> str | None:
 # ── 超时解析（F09 单一来源）──
 
 
-def resolve_worker_timeout(config: RuntimeConfig, fallback: int = 300) -> int:
+def resolve_worker_timeout(config: RuntimeConfig) -> int:
     """从 RuntimeConfig 解析 Worker 提交超时。
 
-    优先用 login_timeout（用户在 UI 配置），缺失时用 fallback。
     下限 60s 防止误配导致登录必失败；上限 600s 与 BrowserSettings(le=600) 对齐。
     """
-    raw = config.browser.login_timeout
-    try:
-        timeout = int(raw)
-    except (TypeError, ValueError):
-        return fallback
-    return max(60, min(timeout, 600))
+    return max(60, min(config.browser.login_timeout, 600))
 
 
 # ── 登录句柄 ──
@@ -184,10 +178,6 @@ class LoginOrchestrator:
 
     # ── 公共 API ──
 
-    def validate(self, config: RuntimeConfig | None = None) -> str | None:
-        """校验。config 为 None 时从 get_runtime_config 读取。"""
-        cfg = config if config is not None else self._runtime_config()
-        return validate_login_config(cfg)
 
     def is_running(self) -> bool:
         """是否有登录正在执行。"""

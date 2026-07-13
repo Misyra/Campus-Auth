@@ -12,7 +12,6 @@ import pytest
 
 from app.services.login_attempt import (
     LOGIN_SUCCESS_SETTLE_SECONDS,
-    SCREENSHOT_URL_PATTERN,
     LoginAttempt,
 )
 from app.services.login_models import AttemptOutcome, AttemptOutcomeType
@@ -871,32 +870,34 @@ class TestInitBrowser:
 
 
 class TestScreenshotUrlPattern:
+    PATTERN = r"\s*截图[:：]\s*/\S+\.(?:png|jpg|jpeg|webp|gif)"
+
     def test_removes_chinese_colon(self):
         import re
 
         msg = "操作失败 截图：/tmp/shot.png"
-        result = re.sub(SCREENSHOT_URL_PATTERN, "", msg)
+        result = re.sub(self.PATTERN, "", msg)
         assert result == "操作失败"
 
     def test_removes_english_colon(self):
         import re
 
         msg = "操作失败 截图: /tmp/shot.png"
-        result = re.sub(SCREENSHOT_URL_PATTERN, "", msg)
+        result = re.sub(self.PATTERN, "", msg)
         assert result == "操作失败"
 
     def test_removes_jpg(self):
         import re
 
         msg = "失败 截图：/path/to/screen.jpg"
-        result = re.sub(SCREENSHOT_URL_PATTERN, "", msg)
+        result = re.sub(self.PATTERN, "", msg)
         assert result == "失败"
 
     def test_no_screenshot_unchanged(self):
         import re
 
         msg = "普通错误消息"
-        result = re.sub(SCREENSHOT_URL_PATTERN, "", msg)
+        result = re.sub(self.PATTERN, "", msg)
         assert result == msg
 
 

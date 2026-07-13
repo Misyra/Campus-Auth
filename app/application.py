@@ -73,10 +73,6 @@ def _cleanup_dated_screenshots() -> None:
         startup_logger.warning("清理旧截图失败: {}", exc)
 
 
-def _cleanup_screenshots() -> None:
-    """启动时清理截图文件。"""
-    _cleanup_temp_screenshots()
-    _cleanup_dated_screenshots()
 
 
 _access_log_event = threading.Event()  # 默认未 set（即关闭）
@@ -149,16 +145,10 @@ def _create_lifespan(existing_container, boot_engine=False):
             cfg.monitor.check_interval_seconds // 60,
         )
 
-        # 检查 cryptography 库是否可用
-        try:
-            import cryptography  # noqa: F401
-        except ImportError:
-            startup_logger.warning(
-                "cryptography 库未安装，密码将以明文存储（非加密），建议安装 cryptography"
-            )
 
         # 启动时清理截图文件
-        _cleanup_screenshots()
+        _cleanup_temp_screenshots()
+        _cleanup_dated_screenshots()
 
         startup_logger.info(
             "FastAPI 启动成功 (耗时 {:.3f}s)",

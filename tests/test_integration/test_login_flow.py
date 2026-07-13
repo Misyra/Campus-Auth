@@ -58,8 +58,6 @@ def _make_raw_engine() -> ScheduleEngine:
         get_monitor_core=lambda: svc._monitor_core,
         ws_manager=svc._ws_manager,
     )
-    svc._login_history = None
-    svc._worker_getter = None
     svc._profile_service = MagicMock()
     svc.project_root = MagicMock()
     svc._logger = MagicMock()

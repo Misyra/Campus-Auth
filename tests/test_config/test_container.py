@@ -108,11 +108,10 @@ class TestInit:
     def test_engine_created_with_dependencies(
         self, container, project_root, mock_classes
     ):
-        """ScheduleEngine 应接收 project_root、profile_service、ws_manager、login_history_service。"""
+        """ScheduleEngine 应接收 project_root、profile_service、ws_manager。"""
         mock_classes["ScheduleEngine"].assert_called_once()
         call_args = mock_classes["ScheduleEngine"].call_args
         assert call_args[0][0] == project_root
-        assert call_args[1]["login_history_service"] is container.login_history_service
 
     def test_task_manager_created_with_root(
         self, container, project_root, mock_classes

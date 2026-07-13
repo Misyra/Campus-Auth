@@ -201,8 +201,7 @@ class TestLoginConnection:
         assert ok is True
         assert msg == "登录成功"
 
-        # 验证 login_history 服务存在且被调用
-        assert engine._login_history is not None
+        # 验证登录成功（历史记录由 orchestrator 管理）
 
     def test_concurrent_dedup(self, integration_stack):
         """两个线程同时提交 → 只有一个实际执行。"""

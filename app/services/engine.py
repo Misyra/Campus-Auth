@@ -47,7 +47,6 @@ class EngineCmdType(StrEnum):
     RELOAD = "reload"
     APPLY_PROFILE = "apply_profile"
     TEST_NETWORK = "test_network"
-    NOOP = "noop"  # 空操作，仅用于唤醒 loop
 
 
 @dataclass
@@ -307,8 +306,6 @@ class ScheduleEngine:
         project_root: Path,
         profile_service: ProfileService = None,
         ws_manager: WebSocketManager | None = None,
-        login_history_service=None,
-        worker_getter=None,
         task_registry=None,
         task_executor=None,
         orchestrator=None,
@@ -321,8 +318,6 @@ class ScheduleEngine:
             )
         self._profile_service = profile_service
         self._ws_manager = ws_manager
-        self._login_history = login_history_service
-        self._worker_getter = worker_getter
 
         # 新组件注入
         self._task_registry = task_registry
@@ -468,8 +463,6 @@ class ScheduleEngine:
                 self._handle_apply_profile(cmd)
             elif cmd.type == EngineCmdType.TEST_NETWORK:
                 await self._handle_test_network(cmd)
-            elif cmd.type == EngineCmdType.NOOP:
-                pass  # 空操作，仅唤醒 loop
         except Exception:
             logger.warning("命令执行失败: {}", cmd.type, exc_info=True)
             if cmd.response_future and not cmd.response_future.done():
@@ -520,7 +513,6 @@ class ScheduleEngine:
             temp_core = NetworkMonitorCore(
                 get_config=self.get_runtime_config,
                 logger=self._logger,
-                login_history=self._login_history,
             )
             temp_core.set_profile_service(self._profile_service)
             if temp_core.check_and_switch_profile_sync():
@@ -558,7 +550,6 @@ class ScheduleEngine:
             core = NetworkMonitorCore(
                 get_config=get_config,
                 logger=self._logger,
-                login_history=self._login_history,
             )
             core.set_profile_service(self._profile_service)
             core.init_monitoring()  # 只初始化，不启动循环

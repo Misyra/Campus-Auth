@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import subprocess
 from pathlib import Path
 
@@ -17,21 +18,6 @@ router = APIRouter()
 api_logger = get_logger("api", source="backend")
 
 
-def _check_ddddocr_installed() -> bool:
-    """检测 ddddocr 是否已安装（检查 pyproject.toml 中是否有声明）"""
-    import tomllib
-
-    pyproject_path = PROJECT_ROOT / "pyproject.toml"
-    if not pyproject_path.exists():
-        return False
-    try:
-        with open(pyproject_path, "rb") as f:
-            data = tomllib.load(f)
-        deps = data.get("project", {}).get("dependencies", [])
-        return any("ddddocr" in dep for dep in deps)
-    except Exception:
-        api_logger.debug("读取 pyproject.toml 失败", exc_info=True)
-        return False
 
 
 def _estimate_pkg_size_mb(pkg_name: str) -> float:
@@ -52,7 +38,7 @@ def _estimate_pkg_size_mb(pkg_name: str) -> float:
 @router.get("/api/ocr/status", response_model=OcrStatusResponse)
 def ocr_status() -> OcrStatusResponse:
     """获取 OCR 依赖安装状态"""
-    installed = _check_ddddocr_installed()
+    installed = importlib.util.find_spec("ddddocr") is not None
     size_mb = 0.0
     if installed:
         size_mb = round(
@@ -67,7 +53,7 @@ def ocr_status() -> OcrStatusResponse:
 @router.post("/api/ocr/install", response_model=ApiResponse)
 def ocr_install() -> ApiResponse:
     """安装 ddddocr 依赖"""
-    if _check_ddddocr_installed():
+    if importlib.util.find_spec("ddddocr") is not None:
         return ApiResponse(success=True, message="ddddocr 已安装")
 
     api_logger.debug("开始安装 ddddocr")
@@ -107,7 +93,7 @@ def ocr_install() -> ApiResponse:
 @router.post("/api/ocr/uninstall", response_model=ApiResponse)
 def ocr_uninstall() -> ApiResponse:
     """卸载 ddddocr 依赖"""
-    if not _check_ddddocr_installed():
+    if importlib.util.find_spec("ddddocr") is None:
         return ApiResponse(success=True, message="ddddocr 未安装，无需卸载")
 
     api_logger.debug("开始卸载 ddddocr")

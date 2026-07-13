@@ -43,10 +43,9 @@ class TestEngineCmdType:
         assert EngineCmdType.SHUTDOWN == "shutdown"
         assert EngineCmdType.RELOAD == "reload"
         assert EngineCmdType.APPLY_PROFILE == "apply_profile"
-        assert EngineCmdType.NOOP == "noop"
 
     def test_enum_members(self):
-        assert len(EngineCmdType) == 8
+        assert len(EngineCmdType) == 7
 
 
 # =====================================================================
@@ -1674,17 +1673,6 @@ class TestBoot:
 class TestEngineLoopAsyncCommands:
     """_engine_loop_async 应通过 asyncio.Queue 处理命令。"""
 
-    def test_noop_command_processed(self, engine_factory):
-        """NOOP 命令应被 _process_command_async 正常处理（无操作）。"""
-        svc = engine_factory(raw=True)
-        cmd = EngineCommand(type=EngineCmdType.NOOP)
-        loop = asyncio.new_event_loop()
-        loop.run_until_complete(svc._cmd_queue.put(cmd))
-        got = loop.run_until_complete(svc._cmd_queue.get())
-        loop.run_until_complete(svc._process_command_async(got))
-        # NOOP 不应设置 response_data
-        assert cmd.response_data is None
-        loop.close()
 
 
     def test_engine_loop_async_processes_commands(self):

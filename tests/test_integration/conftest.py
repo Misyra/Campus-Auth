@@ -86,8 +86,6 @@ def integration_stack(tmp_path, mock_worker):
         project_root=tmp_path,
         profile_service=profile_service,
         ws_manager=None,
-        login_history_service=login_history,
-        worker_getter=lambda: mock_worker,
         task_registry=task_registry,
         task_executor=None,
         orchestrator=None,

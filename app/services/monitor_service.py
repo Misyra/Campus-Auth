@@ -54,11 +54,9 @@ class NetworkMonitorCore:
         self,
         get_config: Callable[[], RuntimeConfig],
         logger=None,
-        login_history: Any = None,
     ) -> None:
         self._get_config = get_config
         self._log_callback_logger = logger
-        self._login_history = login_history
 
         # 状态锁：保护 snapshot() 读取的状态字段，防止跨线程竞态
         self._state_lock = threading.Lock()
@@ -253,8 +251,6 @@ class NetworkMonitorCore:
                 ),
             )
 
-        # 2. IP 变化检测（网卡绑定场景下 DHCP 续租可能导致 IP 变化）
-        self._check_bind_ip_change()
 
         # 3. 网络状态检测
         net_ok, net_reason, net_method = await check_network_status(
@@ -366,31 +362,6 @@ class NetworkMonitorCore:
         current = self._get_config().monitor.bind_interface_name
         return current != self._last_bind_interface
 
-    def _check_bind_ip_change(self) -> None:
-        """检测绑定网卡的 IP 变化。
-
-        接口索引绑定模式下，DHCP IP 变化不影响绑定（接口索引不变）。
-        fallback_source_ip 仅 Linux 无 CAP_NET_RAW 时使用，变化影响有限。
-        此处仅记录日志，不重建代理；接口名变化走 _needs_bind_proxy_rebuild 路径。
-        """
-        bind_name = self._get_config().monitor.bind_interface_name
-        if (
-            not bind_name
-            or not hasattr(self, "_interface_mgr")
-            or not self._interface_mgr
-        ):
-            return
-
-        new_ip = self._interface_mgr.resolve_ip(bind_name)
-        old_ip = getattr(self, "_last_bind_ip", None)
-        if new_ip == old_ip:
-            return
-
-        self._last_bind_ip = new_ip
-        if new_ip:
-            self.log_message(
-                f"绑定网卡 DHCP IP 变化: {old_ip} -> {new_ip}（接口索引绑定不受影响）"
-            )
 
     def _get_test_sites(self) -> list[tuple[str, int]]:
         """获取测试站点列表（每次重算，targets 量小无需缓存）。"""

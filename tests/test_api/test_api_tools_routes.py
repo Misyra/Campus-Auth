@@ -13,7 +13,6 @@ from fastapi.testclient import TestClient
 from app.api.tools import (
     ALLOWED_EXTENSIONS,
     MAX_FILE_SIZE,
-    _cleanup_old_backgrounds,
 )
 from app.schemas import FetchUrlRequest
 
@@ -223,36 +222,31 @@ class TestConstants:
         assert MAX_FILE_SIZE == 5 * 1024 * 1024
 
 
-# ── _cleanup_old_backgrounds 纯函数 ──
+# ── _save_background 背景清理 ──
 
 
-class TestCleanupOldBackgrounds:
-    """旧背景清理。"""
+class TestSaveBackgroundCleanup:
+    """_save_background 中的旧背景清理逻辑。"""
 
     def test_removes_other_files(self, tmp_path):
-        """删除其他文件。"""
+        """保存新文件时删除其他文件。"""
         (tmp_path / "old.jpg").write_bytes(b"old")
-        (tmp_path / "keep.jpg").write_bytes(b"keep")
 
         with patch("app.api.tools.BG_DIR", tmp_path):
-            _cleanup_old_backgrounds("keep.jpg")
+            from app.api.tools import _save_background
+
+            result = _save_background(b"new", ".jpg")
 
         assert not (tmp_path / "old.jpg").exists()
-        assert (tmp_path / "keep.jpg").exists()
+        assert (tmp_path / result["filename"]).exists()
 
-    def test_no_files(self, tmp_path):
-        """无文件时不抛异常。"""
+    def test_no_old_files(self, tmp_path):
+        """无旧文件时不抛异常。"""
         with patch("app.api.tools.BG_DIR", tmp_path):
-            _cleanup_old_backgrounds("keep.jpg")
+            from app.api.tools import _save_background
 
-    def test_empty_exclude(self, tmp_path):
-        """空排除名删除所有。"""
-        (tmp_path / "test.jpg").write_bytes(b"test")
-
-        with patch("app.api.tools.BG_DIR", tmp_path):
-            _cleanup_old_backgrounds("")
-
-        assert not (tmp_path / "test.jpg").exists()
+            result = _save_background(b"new", ".jpg")
+        assert (tmp_path / result["filename"]).exists()
 
 
 # ── 路径安全 ──
@@ -369,7 +363,6 @@ class TestFetchUrlContentLength:
             patch("app.api.tools.validate_url"),
             patch("app.api.tools.httpx.AsyncClient", return_value=mock_client),
             patch("app.api.tools.BG_DIR", bg_dir),
-            patch("app.api.tools._cleanup_old_backgrounds"),
         ):
             from app.api.tools import fetch_background_url
 
@@ -398,7 +391,6 @@ class TestFetchUrlContentLength:
             patch("app.api.tools.validate_url"),
             patch("app.api.tools.httpx.AsyncClient", return_value=mock_client),
             patch("app.api.tools.BG_DIR", bg_dir),
-            patch("app.api.tools._cleanup_old_backgrounds"),
         ):
             from app.api.tools import fetch_background_url
 

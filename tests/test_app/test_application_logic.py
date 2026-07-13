@@ -9,8 +9,12 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.application import _cleanup_screenshots
+from app.application import _cleanup_temp_screenshots, _cleanup_dated_screenshots
 from app.utils.ports import resolve_port
+
+def _cleanup_screenshots():
+    _cleanup_temp_screenshots()
+    _cleanup_dated_screenshots()
 
 
 @pytest.fixture(autouse=True)

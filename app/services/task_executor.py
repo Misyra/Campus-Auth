@@ -332,7 +332,7 @@ class TaskExecutor:
         cancel_event: threading.Event | None = None,
     ) -> tuple[bool, str]:
         """执行浏览器任务。委托 LoginOrchestrator，与登录共享去重。"""
-        task = self._registry.get_task(task_id)
+        task = self._task_manager.get_task_detail(task_id) if self._task_manager else None
         if not task or task.get("type") != "browser":
             return False, f"浏览器任务不存在: {task_id}"
 

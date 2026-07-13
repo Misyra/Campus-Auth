@@ -45,15 +45,6 @@ def health() -> HealthResponse:
     proc = psutil.Process(os.getpid())
     mem = proc.memory_info()
 
-    try:
-        threads = proc.threads()
-    except (psutil.AccessDenied, psutil.ZombieProcess, psutil.NoSuchProcess):
-        threads = []
-    try:
-        open_files = proc.open_files()
-    except (psutil.AccessDenied, psutil.ZombieProcess, psutil.NoSuchProcess):
-        open_files = []
-
     return HealthResponse(
         status="ok",
         version=get_project_version(PROJECT_ROOT),
@@ -63,8 +54,6 @@ def health() -> HealthResponse:
             "vms_mb": round(mem.vms / 1024 / 1024, 1),
         },
         process={
-            "threads": threads,
-            "open_files": open_files,
             "pid": proc.pid,
         },
     )
@@ -192,15 +181,11 @@ def shutdown_server(
     # Playwright Worker 和孤儿浏览器清理由 lifespan 的 container.shutdown() 统一处理
 
     # 通过 shutdown_event 触发 lifespan 正常关闭
-    bg_tasks.add_task(_trigger_shutdown_event, request)
+    bg_tasks.add_task(lambda: request.app.state.shutdown_event.set())
 
     return ApiResponse(success=True, message="服务器正在关闭，请稍候，页面将自动断开")
 
 
-def _trigger_shutdown_event(request: Request) -> None:
-    """在 HTTP 响应发送后触发 shutdown_event"""
-    if hasattr(request.app.state, "shutdown_event"):
-        request.app.state.shutdown_event.set()
 
 
 # ── 卸载 ──

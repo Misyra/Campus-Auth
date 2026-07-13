@@ -15,8 +15,6 @@ from app.utils.env import build_login_template_vars
 from app.utils.exceptions import LoginCancelledError
 from app.utils.logging import get_logger
 
-# 从日志消息中提取截图 URL 的正则（前端 formatters.js 也使用同款格式）
-SCREENSHOT_URL_PATTERN = r"\s*截图[:：]\s*/\S+\.(?:png|jpg|jpeg|webp|gif)"
 
 # 登录成功后等待页面完成跳转和状态更新的时间（秒）
 LOGIN_SUCCESS_SETTLE_SECONDS = 2

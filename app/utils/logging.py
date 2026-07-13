@@ -204,7 +204,6 @@ class LogConfigCenter:
         if self._initialized:
             return
         self._config = self.DEFAULT_CONFIG.copy()
-        self._source = "backend"
         self._configured = False
         self._initialized = True
         self._file_sink_id: int | None = None
@@ -226,7 +225,6 @@ class LogConfigCenter:
 
             if config:
                 self._config.update(config)
-            self._source = source
 
             # 设置全局日志级别
             level = normalize_level(self._config.get("level", "INFO"))

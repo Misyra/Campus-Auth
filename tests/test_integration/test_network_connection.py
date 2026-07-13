@@ -17,7 +17,6 @@ def _make_monitor_core(engine) -> NetworkMonitorCore:
     core = NetworkMonitorCore(
         get_config=lambda: config,
         logger=engine._logger,
-        login_history=engine._login_history,
     )
     core.set_profile_service(engine._profile_service)
     core.init_monitoring()

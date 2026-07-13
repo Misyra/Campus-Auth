@@ -84,11 +84,6 @@ class TestResolveWorkerTimeout:
         cfg = RuntimeConfig()
         assert resolve_worker_timeout(cfg) == 90
 
-    def test_custom_fallback_only_when_invalid(self):
-        """fallback 仅在 login_timeout 无法解析时使用。
-        RuntimeConfig 保证 login_timeout 是 int，所以 fallback 实际不会触发。"""
-        cfg = _make_runtime_config(login_timeout=120)
-        assert resolve_worker_timeout(cfg, fallback=200) == 120
 
     def test_floor_60(self):
         cfg = _make_runtime_config(login_timeout=10)
@@ -299,25 +294,6 @@ class TestOrchestratorCancel:
     def test_cancel_running_no_op_when_idle(self, orchestrator):
         orchestrator.cancel_running()
 
-
-# ── validate ──
-
-
-class TestOrchestratorValidate:
-    def test_validate_passes_valid_config(self, orchestrator):
-        assert orchestrator.validate(VALID_CONFIG) is None
-
-    def test_validate_fails_bad_config(self, orchestrator):
-        assert orchestrator.validate(RuntimeConfig()) is not None
-
-    def test_validate_uses_runtime_config(self):
-        worker = _make_slow_worker()
-        orch = LoginOrchestrator(
-            worker_getter=lambda: worker,
-            get_runtime_config=lambda: VALID_CONFIG,
-            executor=_make_mock_executor(),
-        )
-        assert orch.validate() is None
 
 
 # ── shutdown ──
