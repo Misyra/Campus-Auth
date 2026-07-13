@@ -5117,3 +5117,11 @@
 ### 范围
 - 消除 login_runner 的自建组件，统一由 Container 管理服务生命周期
 - 调整启动时序，Container 在 handle_startup_action 之前创建
+
+## Task 4.3 review fix: docstring 补充异常返回说明 (2026-07-13)
+
+### 变更
+- `app/services/login_runner.py`：execute_login_with_retries docstring Returns 部分补充"或执行过程异常"说明
+
+### 范围
+- code quality review MINOR 修复

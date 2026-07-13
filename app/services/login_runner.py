@@ -29,7 +29,7 @@ def execute_login_with_retries(
 
     Returns:
         LoginResult.SUCCESS — 登录成功
-        LoginResult.TEMPORARY_FAILURE — 重试耗尽仍失败
+        LoginResult.TEMPORARY_FAILURE — 重试耗尽仍失败，或执行过程异常
     """
     from app.services.login_orchestrator import validate_login_config
     from app.services.worker_port import cleanup_orphan_browsers
