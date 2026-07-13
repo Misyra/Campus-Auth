@@ -8,6 +8,7 @@ import shutil
 from pathlib import Path
 
 from app.services.autostart import AutoStartService
+from app.services.config_service import ConfigService
 from app.services.engine import ScheduleEngine
 from app.services.login_history_service import LoginHistoryService
 from app.services.profile_service import get_profile_service
@@ -30,6 +31,8 @@ class ServiceContainer:
         # 基础服务
         self.ws_manager = WebSocketManager()
         self.profile_service = get_profile_service(project_root)
+        # ConfigService — 运行时配置的唯一持有者（基于 profile_service）
+        self.config_service = ConfigService(self.profile_service)
         from app.constants import AUTH_DATA_DIR
 
         self.login_history_service = LoginHistoryService(AUTH_DATA_DIR)
@@ -101,11 +104,14 @@ class ServiceContainer:
             orchestrator=self.login_orchestrator,
             scheduler=self.scheduler_service,
             browser_task_service=self.browser_task_service,
+            config_service=self.config_service,
         )
 
-        # --- 延迟绑定 get_runtime_config（engine 现在存在） ---
-        self.login_orchestrator.bind_runtime_config(self.engine.get_runtime_config)
-        self.task_executor.bind_runtime_config(self.engine.get_runtime_config)
+        # --- 延迟绑定 get_runtime_config（config_service 现在存在） ---
+        self.login_orchestrator.bind_runtime_config(
+            self.config_service.get_runtime_config
+        )
+        self.task_executor.bind_runtime_config(self.config_service.get_runtime_config)
 
         self._ws_drain_task: asyncio.Task | None = None
         self._log_handler_id: int | None = None

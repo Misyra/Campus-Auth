@@ -4971,3 +4971,20 @@
 - Engine 公共 API 保持兼容（委托方法），Container 和 API 在 Task 3.3/3.4 修改
 - Container 创建 Engine 时未传 `config_service` 会触发 `ValueError`（预期，Task 3.3 修复）
 - 全量测试 2424 passed，0 failed
+
+## Task 3.3: Container 调整，删除 bind_* (2026-07-13)
+
+### 变更
+- `app/container.py`：
+  - 顶部新增 `from app.services.config_service import ConfigService`（按字母序插入 autostart 与 engine 之间）
+  - 在 `self.profile_service = get_profile_service(project_root)` 之后创建 `self.config_service = ConfigService(self.profile_service)`
+  - `ScheduleEngine(...)` 构造调用新增 `config_service=self.config_service` 参数
+  - `login_orchestrator.bind_runtime_config` 从 `self.engine.get_runtime_config` 改为 `self.config_service.get_runtime_config`
+  - `task_executor.bind_runtime_config` 从 `self.engine.get_runtime_config` 改为 `self.config_service.get_runtime_config`
+- 新增 `tests/test_config/test_container_config_service.py`：6 个测试验证 ConfigService 创建、profile_service 注入、Engine 注入、orchestrator/executor 绑定、以及不再绑定 engine.get_runtime_config 的回归保护
+
+### 范围
+- 修复 Task 3.2 引入的过渡态问题（Container 未注入 config_service 导致启动崩溃 ValueError）
+- ConfigService 为运行时配置的唯一持有者，login_orchestrator 与 task_executor 不再经 Engine 间接读取配置
+- API 改用 ConfigServiceDep 在 Task 3.4 完成
+- 全量测试 2430 passed（2424 既有 + 6 新增），0 failed
