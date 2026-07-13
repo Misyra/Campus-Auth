@@ -5,9 +5,9 @@ from __future__ import annotations
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException
 
-from app.deps import TaskManagerDep
+from app.deps import ConfigServiceDep, TaskManagerDep
 from app.schemas import ApiResponse, TaskSummary
 from app.utils.logging import get_logger
 from app.workers.script_runner import ScriptRunner
@@ -76,9 +76,9 @@ def delete_script(
 
 @router.post("/api/scripts/{task_id}/run", response_model=ApiResponse)
 async def run_script(
-    request: Request,
     task_id: str,
     task_mgr: TaskManagerDep,
+    config_svc: ConfigServiceDep,
 ) -> ApiResponse:
     """手动执行脚本任务（测试用）。"""
     task = task_mgr.get_task_detail(task_id)
@@ -90,10 +90,9 @@ async def run_script(
     if not script_path or not script_path.exists():
         return ApiResponse(success=False, message="脚本文件不存在")
 
-    # 从配置读取脚本超时，默认 60 秒
+    # Task 3.4：从 ConfigService 读取脚本超时（不再经 Engine 委托），默认 60 秒
     try:
-        services = request.app.state.services
-        timeout = services.engine.get_runtime_config().monitor.script_timeout
+        timeout = config_svc.get_runtime_config().monitor.script_timeout
     except Exception:
         timeout = 60
 

@@ -209,10 +209,11 @@ class TestScriptThreadPool:
             exists=MagicMock(return_value=True)
         )
 
-        mock_request = MagicMock()
-        mock_request.app.state.services.monitor_service.get_runtime_config.return_value = {
-            "monitor": {"script_timeout": 60}
-        }
+        # Task 3.4：run_script 改用 ConfigServiceDep.get_runtime_config
+        mock_config_svc = MagicMock()
+        mock_config_svc.get_runtime_config.return_value = MagicMock(
+            monitor=MagicMock(script_timeout=60)
+        )
 
         async def mock_run_in_executor(executor, func):
             captured_executor["executor"] = executor
@@ -228,7 +229,7 @@ class TestScriptThreadPool:
         ):
             mock_runner = MagicMock()
             mock_runner_cls.return_value = mock_runner
-            result = await run_script(mock_request, "test_task", mock_task_mgr)
+            result = await run_script("test_task", mock_task_mgr, mock_config_svc)
 
         assert result.success is True
         executor = captured_executor.get("executor")

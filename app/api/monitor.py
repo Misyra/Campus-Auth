@@ -6,7 +6,7 @@ import asyncio
 
 from fastapi import APIRouter, HTTPException, Query
 
-from app.deps import MonitorServiceDep
+from app.deps import ConfigServiceDep, MonitorServiceDep
 from app.schemas import ApiResponse, LogEntry, MonitorStatusResponse, PureModeResponse
 from app.utils.logging import get_logger
 
@@ -94,17 +94,19 @@ def test_network(
 
 @router.get("/api/pure-mode", response_model=PureModeResponse)
 def get_pure_mode(
-    svc: MonitorServiceDep,
+    config_svc: ConfigServiceDep,
 ) -> PureModeResponse:
-    return PureModeResponse(enabled=svc.pure_mode)
+    # Task 3.4：pure_mode 直接从 ConfigService 读取（不再经 Engine 委托）
+    return PureModeResponse(enabled=config_svc.pure_mode)
 
 
 @router.post("/api/pure-mode", response_model=ApiResponse)
 def toggle_pure_mode(
-    svc: MonitorServiceDep,
+    config_svc: ConfigServiceDep,
 ) -> ApiResponse:
     try:
-        new_value = svc.toggle_pure_mode()
+        # Task 3.4：toggle_pure_mode 直接调用 ConfigService（不再经 Engine 委托）
+        new_value = config_svc.toggle_pure_mode()
         api_logger.info("切换纯净模式成功: {}", new_value)
         return ApiResponse(
             success=True,

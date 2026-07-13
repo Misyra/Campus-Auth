@@ -126,21 +126,26 @@ class TestPureMode:
     """测试 GET/POST /api/pure-mode 端点。"""
 
     def test_get_pure_mode(self, api_client):
+        """GET /api/pure-mode 应从 config_service.pure_mode 读取（Task 3.4）。"""
         test_client, mock_services = api_client
-        mock_services.engine.pure_mode = False
+        mock_services.config_service.pure_mode = False
         resp = test_client.get("/api/pure-mode")
         assert resp.status_code == 200
         assert "enabled" in resp.json()
         assert resp.json()["enabled"] is False
 
     def test_toggle_pure_mode(self, api_client):
+        """POST /api/pure-mode 应调用 config_service.toggle_pure_mode（Task 3.4）。"""
         test_client, mock_services = api_client
-        mock_services.engine.toggle_pure_mode.return_value = True
+        mock_services.config_service.toggle_pure_mode.return_value = True
         resp = test_client.post("/api/pure-mode")
         assert resp.status_code == 200
         body = resp.json()
         assert body["success"] is True
         assert body["data"]["enabled"] is True
+        # 验证 config_service 被调用而非 engine
+        mock_services.config_service.toggle_pure_mode.assert_called_once()
+        mock_services.engine.toggle_pure_mode.assert_not_called()
 
 
 class TestNetworkInterfacesAPI:

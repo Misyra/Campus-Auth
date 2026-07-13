@@ -4998,3 +4998,28 @@
 - 补充 `test_task_executor_not_binds_engine_get_runtime_config` 回归保护测试（对称保护）
 - 将 `test_bind_runtime_config` 测试替换为 `test_constructor_injects_get_runtime_config`
 - 全量测试 2431 passed（2430 既有 + 1 新增），0 failed
+
+## Task 3.4: API 改用 ConfigServiceDep (2026-07-13)
+
+### 变更
+- `app/deps.py`：新增 `ConfigServiceDep = Annotated[ConfigService, Depends(_get("config_service"))]` 类型别名
+- `app/api/config.py`：`set_log_level` 添加 `config_svc: ConfigServiceDep` 参数，调用 `config_svc.update_log_level(actual)`，删除 `engine = request.app.state.services.engine` 行；`save_config`/`patch_config` 保留 `MonitorServiceDep`（需要 `svc.reload_config` 处理 bind proxy 重建）
+- `app/api/monitor.py`：`get_pure_mode`/`toggle_pure_mode` 改用 `ConfigServiceDep`，不再注入 `MonitorServiceDep`
+- `app/api/scripts.py`：`run_script` 添加 `config_svc: ConfigServiceDep`，使用 `config_svc.get_runtime_config().monitor.script_timeout`，移除不再使用的 `request: Request` 参数
+- `app/api/system.py`：`get_init_status` 同时注入 `MonitorServiceDep`（用于 `svc.project_root`）和 `ConfigServiceDep`（用于 `config_svc.get_runtime_config()`）
+- `app/application.py`：lifespan 中 `services.engine.get_runtime_config()` 改为 `services.config_service.get_runtime_config()`
+
+### 测试
+- `tests/test_config/test_deps.py`：新增 `TestConfigServiceDep`（2 个测试）和 `test_get_config_service`（1 个测试），验证 ConfigServiceDep 类型别名和 Depends 工厂解析
+- `tests/test_api/test_api_config_routes.py`：`TestSetLogLevel` 改为断言 `config_service.update_log_level` 被调用，且 `engine.update_log_level` 未被调用；移除未使用的 `LoggingSettings` 导入
+- `tests/test_api/test_api_monitor_routes.py`：`TestPureMode` 改为 mock `config_service.pure_mode`/`toggle_pure_mode`
+- `tests/test_api/test_api_scripts_routes.py`：`test_run_script_uses_dedicated_executor` 适配新签名，传入 mock `config_svc`
+- `tests/test_api/test_api_system_routes.py`：`TestInitStatus` 改为 mock `config_service.get_runtime_config`
+- `tests/test_app/test_application_logic.py`：lifespan 测试改为 mock `config_service.get_runtime_config`
+
+### 范围
+- API 层直接使用 ConfigServiceDep 访问配置，不再通过 Engine 委托方法
+- `save_config`/`patch_config` 保留 `MonitorServiceDep`（需要 `engine.reload_config` 处理 bind proxy 重建）
+- `get_init_status` 同时注入两个依赖（`project_root` 仍从 Engine 获取，非配置职责）
+- 全量测试 2434 passed（2431 既有 + 3 新增），0 failed
+- Ruff 检查全部通过

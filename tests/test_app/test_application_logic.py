@@ -253,7 +253,10 @@ class TestWebSocketMessageHandling:
             # 通过 existing_container 传入 mock 避免创建真实 ServiceContainer
             mock_services = MagicMock()
             mock_services.engine.list_logs.return_value = []
-            mock_services.engine.get_runtime_config.return_value = RuntimeConfig()
+            # Task 3.4：lifespan 改用 services.config_service.get_runtime_config
+            mock_services.config_service.get_runtime_config.return_value = (
+                RuntimeConfig()
+            )
             mock_services.engine.is_monitoring = False
             mock_services.shutdown = AsyncMock()
 
@@ -313,7 +316,10 @@ class TestWindowsSigterm:
             # 通过 existing_container 传入 mock 避免创建真实 ServiceContainer
             mock_services = MagicMock()
             mock_services.engine = MagicMock()
-            mock_services.engine.get_runtime_config.return_value = RuntimeConfig()
+            # Task 3.4：lifespan 改用 services.config_service.get_runtime_config
+            mock_services.config_service.get_runtime_config.return_value = (
+                RuntimeConfig()
+            )
             mock_services.engine.is_monitoring = False
             mock_services.startup = MagicMock()
             mock_services.shutdown = AsyncMock()
