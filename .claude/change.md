@@ -3,6 +3,14 @@
 
 ## 2026-07-13
 
+### fix: 修复 CMD_BROWSER handler 浏览器泄漏与测试覆盖
+
+- **Critical #1 浏览器资源泄漏**：`_handle_browser_task` 的 try/except 末尾添加 `finally: await self._close_browser()`，确保一次性浏览器任务（签到/打卡）完成后关闭浏览器，与 `_handle_login` 行为一致
+- **Minor #4 统一 import 路径**：`from app.tasks.manager import TaskManager` 改为 `from app.tasks import BrowserTaskRunner, TaskConfig, TaskManager`（`app.tasks` 包已导出 TaskManager）
+- **Minor #5 类型注解**：`cancel_event` 添加 `threading.Event | None` 类型注解（与 `_handle_login` 一致）
+- **Minor #6 缺失日志**：`task_id` 为空和 `task_detail` None/类型不匹配的早返回处添加 `logger.warning(...)`
+- **Important #2 测试覆盖**：补充 4 个测试用例（缺 cancel_event、缺 active_task、任务不存在、任务类型不匹配），用 mock TaskManager 避免真实浏览器
+
 ### fix: 修复 BrowserTaskService 线程安全与测试覆盖问题
 
 - **Critical #1 线程安全**：`submit_task` 锁外 dispatch 前用 `future=None` 占位 handle 写入 `_slot`，而 `BrowserTaskHandle.done()` 对 `future is None` 返回 `True`，导致并发调用方跳过去重重复 dispatch。引入模块级 `_DISPATCHING` 哨兵对象（参考 LoginOrchestrator 模式），用 `is _DISPATCHING` 身份检查区分"正在 dispatch"与"已完成"，dispatch 期间用 `while self._slot is _DISPATCHING: wait()` 等待

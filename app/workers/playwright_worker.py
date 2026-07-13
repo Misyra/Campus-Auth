@@ -459,11 +459,10 @@ class PlaywrightWorker:
         - 直接用 BrowserTaskRunner.execute(page) 执行步骤
         """
         from app.constants import PROJECT_ROOT
-        from app.tasks import BrowserTaskRunner, TaskConfig
-        from app.tasks.manager import TaskManager
+        from app.tasks import BrowserTaskRunner, TaskConfig, TaskManager
 
         config = data.get("config", {})
-        cancel_event = data.get("cancel_event")
+        cancel_event: threading.Event | None = data.get("cancel_event")
 
         if cancel_event is None:
             logger.error("浏览器任务命令缺少 cancel_event")
@@ -471,15 +470,15 @@ class PlaywrightWorker:
 
         task_id = config.get("active_task", "")
         if not task_id:
+            logger.warning("浏览器任务命令缺少 active_task")
             return WorkerResponse(success=False, error="未指定任务")
 
         # 加载任务定义
         task_mgr = TaskManager(PROJECT_ROOT / "tasks")
         task_detail = task_mgr.get_task_detail(task_id)
         if not task_detail or task_detail.get("type") != "browser":
-            return WorkerResponse(
-                success=False, error=f"浏览器任务不存在: {task_id}"
-            )
+            logger.warning("浏览器任务不存在或类型不匹配: task_id={}", task_id)
+            return WorkerResponse(success=False, error=f"浏览器任务不存在: {task_id}")
 
         # TaskConfig 是 dataclass，用 from_dict 而非 **dict
         # （dict 含 id/type/raw_json 等非字段键）
@@ -511,6 +510,9 @@ class PlaywrightWorker:
         except Exception as e:
             logger.exception("浏览器任务执行异常: task_id={}", task_id)
             return WorkerResponse(success=False, error=str(e))
+        finally:
+            # 一次性任务，完成后关闭浏览器（与 _handle_login 一致）
+            await self._close_browser()
 
     async def _cleanup_debug_session(self):
         """统一清理调试会话资源。"""

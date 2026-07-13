@@ -371,3 +371,78 @@ def test_cmd_browser_constant_exists():
     """CMD_BROWSER 常量已定义，与 CMD_LOGIN 区分。"""
     assert CMD_BROWSER == "browser"
     assert CMD_BROWSER != CMD_LOGIN
+
+
+# ── _handle_browser_task 参数校验与错误路径 ──
+
+
+class TestHandleBrowserTask:
+    """_handle_browser_task 早返回路径（无需真实浏览器）。"""
+
+    async def test_missing_cancel_event(self):
+        """缺 cancel_event → 返回 cancel_event 缺失。"""
+        from app.workers.playwright_worker import PlaywrightWorker
+
+        worker = PlaywrightWorker()
+        data = {"config": {"active_task": "some_task"}}
+
+        resp = await worker._handle_browser_task(data)
+
+        assert resp.success is False
+        assert resp.error == "cancel_event 缺失"
+
+    async def test_missing_active_task(self):
+        """active_task 为空 → 返回未指定任务。"""
+        from app.workers.playwright_worker import PlaywrightWorker
+
+        worker = PlaywrightWorker()
+        cancel_event = threading.Event()
+        data = {"config": {}, "cancel_event": cancel_event}
+
+        resp = await worker._handle_browser_task(data)
+
+        assert resp.success is False
+        assert resp.error == "未指定任务"
+
+    async def test_task_not_found(self):
+        """TaskManager 返回 None → 返回浏览器任务不存在。"""
+        from app.workers.playwright_worker import PlaywrightWorker
+
+        worker = PlaywrightWorker()
+        cancel_event = threading.Event()
+        data = {
+            "config": {"active_task": "nonexistent"},
+            "cancel_event": cancel_event,
+        }
+
+        with patch("app.tasks.TaskManager") as MockTaskManager:
+            mock_instance = MockTaskManager.return_value
+            mock_instance.get_task_detail.return_value = None
+
+            resp = await worker._handle_browser_task(data)
+
+        assert resp.success is False
+        assert resp.error == "浏览器任务不存在: nonexistent"
+
+    async def test_wrong_task_type(self):
+        """任务类型不是 browser → 返回浏览器任务不存在。"""
+        from app.workers.playwright_worker import PlaywrightWorker
+
+        worker = PlaywrightWorker()
+        cancel_event = threading.Event()
+        data = {
+            "config": {"active_task": "script_task"},
+            "cancel_event": cancel_event,
+        }
+
+        with patch("app.tasks.TaskManager") as MockTaskManager:
+            mock_instance = MockTaskManager.return_value
+            mock_instance.get_task_detail.return_value = {
+                "id": "script_task",
+                "type": "script",
+            }
+
+            resp = await worker._handle_browser_task(data)
+
+        assert resp.success is False
+        assert resp.error == "浏览器任务不存在: script_task"
