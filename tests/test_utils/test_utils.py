@@ -372,6 +372,7 @@ class TestGetProjectVersion:
 # time_utils
 # =====================================================================
 
+
 class TestIsInPausePeriod:
     """is_in_pause_period(now, ranges) 纯函数测试。"""
 
@@ -678,7 +679,7 @@ class TestCreateNoWindowFlag:
 class TestLoginAttemptCloseIdempotent:
     def test_close_browser_idempotent(self):
         """多次调用 close_browser 不应报错（幂等）"""
-        from app.services.login_attempt import LoginAttempt
+        from app.workers.login_attempt import LoginAttempt
 
         handler = LoginAttempt(config={})
         # _browser_ctx 为 None 时，close_browser 应安全返回

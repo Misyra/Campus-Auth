@@ -442,6 +442,7 @@ class TestWaitForCallbacks:
             registry=MagicMock(),
             history_store=MagicMock(),
             worker_getter=MagicMock(),
+            get_runtime_config=MagicMock(),
             login_orchestrator=MagicMock(),
         )
 

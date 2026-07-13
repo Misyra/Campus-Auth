@@ -10,12 +10,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.services.login_attempt import (
+from app.utils.exceptions import LoginCancelledError
+from app.workers.login_attempt import (
     LOGIN_SUCCESS_SETTLE_SECONDS,
     LoginAttempt,
 )
-from app.services.login_models import AttemptOutcome, AttemptOutcomeType
-from app.utils.exceptions import LoginCancelledError
+from app.workers.login_models import AttemptOutcome, AttemptOutcomeType
 
 # ── helpers ──────────────────────────────────────────────────────────
 
@@ -285,7 +285,7 @@ class TestExecuteBrowserTask:
 
         with (
             patch(
-                "app.services.login_attempt.build_login_template_vars", return_value={}
+                "app.workers.login_attempt.build_login_template_vars", return_value={}
             ),
             patch("app.tasks.BrowserTaskRunner") as MockExecutor,
         ):
@@ -320,11 +320,11 @@ class TestExecuteBrowserTask:
 
         with (
             patch(
-                "app.services.login_attempt.BrowserContextManager",
+                "app.workers.login_attempt.BrowserContextManager",
                 return_value=mock_browser_mgr,
             ),
             patch(
-                "app.services.login_attempt.build_login_template_vars", return_value={}
+                "app.workers.login_attempt.build_login_template_vars", return_value={}
             ),
             pytest.raises(RuntimeError, match="browser fail"),
         ):
@@ -348,11 +348,11 @@ class TestExecuteBrowserTask:
 
         with (
             patch(
-                "app.services.login_attempt.BrowserContextManager",
+                "app.workers.login_attempt.BrowserContextManager",
                 return_value=mock_browser_mgr,
             ),
             patch(
-                "app.services.login_attempt.build_login_template_vars", return_value={}
+                "app.workers.login_attempt.build_login_template_vars", return_value={}
             ),
             pytest.raises(RuntimeError, match="浏览器页面初始化失败"),
         ):
@@ -377,15 +377,15 @@ class TestExecuteBrowserTask:
 
         with (
             patch(
-                "app.services.login_attempt.BrowserContextManager",
+                "app.workers.login_attempt.BrowserContextManager",
                 return_value=mock_browser_mgr,
             ),
             patch(
-                "app.services.login_attempt.build_login_template_vars", return_value={}
+                "app.workers.login_attempt.build_login_template_vars", return_value={}
             ),
             patch("app.tasks.BrowserTaskRunner") as MockExecutor,
             patch(
-                "app.services.login_attempt.asyncio.sleep", new_callable=AsyncMock
+                "app.workers.login_attempt.asyncio.sleep", new_callable=AsyncMock
             ) as mock_sleep,
         ):
             MockExecutor.return_value.execute = AsyncMock(return_value=(True, "成功"))
@@ -418,11 +418,11 @@ class TestExecuteBrowserTask:
 
         with (
             patch(
-                "app.services.login_attempt.BrowserContextManager",
+                "app.workers.login_attempt.BrowserContextManager",
                 return_value=mock_browser_mgr,
             ),
             patch(
-                "app.services.login_attempt.build_login_template_vars", return_value={}
+                "app.workers.login_attempt.build_login_template_vars", return_value={}
             ),
             patch("app.tasks.BrowserTaskRunner") as MockExecutor,
         ):
@@ -457,11 +457,11 @@ class TestExecuteBrowserTask:
 
         with (
             patch(
-                "app.services.login_attempt.BrowserContextManager",
+                "app.workers.login_attempt.BrowserContextManager",
                 return_value=mock_browser_mgr,
             ),
             patch(
-                "app.services.login_attempt.build_login_template_vars", return_value={}
+                "app.workers.login_attempt.build_login_template_vars", return_value={}
             ),
             patch("app.tasks.BrowserTaskRunner") as MockExecutor,
         ):
@@ -495,11 +495,11 @@ class TestExecuteBrowserTask:
 
         with (
             patch(
-                "app.services.login_attempt.BrowserContextManager",
+                "app.workers.login_attempt.BrowserContextManager",
                 return_value=mock_browser_mgr,
             ),
             patch(
-                "app.services.login_attempt.build_login_template_vars", return_value={}
+                "app.workers.login_attempt.build_login_template_vars", return_value={}
             ),
             patch("app.tasks.BrowserTaskRunner") as MockExecutor,
         ):
@@ -546,7 +546,7 @@ class TestExecuteScriptTask:
         with (
             patch("app.workers.script_runner.ScriptRunner") as MockRunner,
             patch(
-                "app.services.login_attempt.asyncio.get_running_loop"
+                "app.workers.login_attempt.asyncio.get_running_loop"
             ) as mock_get_loop,
         ):
             mock_runner_instance = MagicMock()
@@ -573,12 +573,12 @@ class TestExecuteScriptTask:
         with (
             patch("app.workers.script_runner.ScriptRunner") as MockRunner,
             patch(
-                "app.services.login_attempt.asyncio.get_running_loop"
+                "app.workers.login_attempt.asyncio.get_running_loop"
             ) as mock_get_loop,
             patch(
-                "app.services.login_attempt.asyncio.to_thread", new_callable=AsyncMock
+                "app.workers.login_attempt.asyncio.to_thread", new_callable=AsyncMock
             ) as mock_to_thread,
-            patch("app.services.login_attempt.asyncio.sleep", new_callable=AsyncMock),
+            patch("app.workers.login_attempt.asyncio.sleep", new_callable=AsyncMock),
         ):
             mock_runner_instance = MagicMock()
             MockRunner.return_value = mock_runner_instance
@@ -605,12 +605,12 @@ class TestExecuteScriptTask:
         with (
             patch("app.workers.script_runner.ScriptRunner") as MockRunner,
             patch(
-                "app.services.login_attempt.asyncio.get_running_loop"
+                "app.workers.login_attempt.asyncio.get_running_loop"
             ) as mock_get_loop,
             patch(
-                "app.services.login_attempt.asyncio.to_thread", new_callable=AsyncMock
+                "app.workers.login_attempt.asyncio.to_thread", new_callable=AsyncMock
             ) as mock_to_thread,
-            patch("app.services.login_attempt.asyncio.sleep", new_callable=AsyncMock),
+            patch("app.workers.login_attempt.asyncio.sleep", new_callable=AsyncMock),
         ):
             mock_runner_instance = MagicMock()
             MockRunner.return_value = mock_runner_instance
@@ -638,12 +638,12 @@ class TestExecuteScriptTask:
         with (
             patch("app.workers.script_runner.ScriptRunner") as MockRunner,
             patch(
-                "app.services.login_attempt.asyncio.get_running_loop"
+                "app.workers.login_attempt.asyncio.get_running_loop"
             ) as mock_get_loop,
             patch(
-                "app.services.login_attempt.asyncio.to_thread", new_callable=AsyncMock
+                "app.workers.login_attempt.asyncio.to_thread", new_callable=AsyncMock
             ) as mock_to_thread,
-            patch("app.services.login_attempt.asyncio.sleep", new_callable=AsyncMock),
+            patch("app.workers.login_attempt.asyncio.sleep", new_callable=AsyncMock),
         ):
             mock_runner_instance = MagicMock()
             MockRunner.return_value = mock_runner_instance

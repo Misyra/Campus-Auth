@@ -8,10 +8,11 @@ import shutil
 from pathlib import Path
 
 from app.services.autostart import AutoStartService
+from app.services.config_service import ConfigService
 from app.services.engine import ScheduleEngine
 from app.services.login_history_service import LoginHistoryService
 from app.services.profile_service import get_profile_service
-from app.services.task_executor import TaskExecutor
+from app.services.task_executor import BoundedExecutor, TaskExecutor
 from app.services.task_registry import TaskHistoryStore, TaskRegistry
 from app.services.websocket_manager import WebSocketManager
 from app.tasks import TaskManager
@@ -30,6 +31,8 @@ class ServiceContainer:
         # 基础服务
         self.ws_manager = WebSocketManager()
         self.profile_service = get_profile_service(project_root)
+        # ConfigService — 运行时配置的唯一持有者（基于 profile_service）
+        self.config_service = ConfigService(self.profile_service)
         from app.constants import AUTH_DATA_DIR
 
         self.login_history_service = LoginHistoryService(AUTH_DATA_DIR)
@@ -50,12 +53,25 @@ class ServiceContainer:
 
             return get_worker()
 
-        # --- 创建 TaskExecutor（login_orchestrator 延迟绑定，打破循环依赖） ---
+        # --- 创建 BrowserTaskService（独立线程池，不与登录共享） ---
+        from app.services.browser_task_service import BrowserTaskService
+
+        self._browser_task_executor = BoundedExecutor(
+            max_workers=1, queue_size=5, thread_name_prefix="browser-task"
+        )
+        self.browser_task_service = BrowserTaskService(
+            worker_getter=_get_worker,
+            executor=self._browser_task_executor,
+        )
+
+        # --- 创建 TaskExecutor（get_runtime_config 构造时注入） ---
         self.task_executor = TaskExecutor(
             registry=self.task_registry,
             history_store=self.task_history_store,
             worker_getter=_get_worker,
+            get_runtime_config=self.config_service.get_runtime_config,
             task_manager=self.task_manager,
+            browser_task_service=self.browser_task_service,
         )
 
         # --- 创建 LoginOrchestrator（executor 复用 TaskExecutor 的 login_executor） ---
@@ -63,6 +79,7 @@ class ServiceContainer:
 
         self.login_orchestrator = LoginOrchestrator(
             worker_getter=_get_worker,
+            get_runtime_config=self.config_service.get_runtime_config,
             executor=self.task_executor.login_executor,
             login_history=self.login_history_service,
             profile_service=self.profile_service,
@@ -88,11 +105,9 @@ class ServiceContainer:
             task_executor=self.task_executor,
             orchestrator=self.login_orchestrator,
             scheduler=self.scheduler_service,
+            browser_task_service=self.browser_task_service,
+            config_service=self.config_service,
         )
-
-        # --- 延迟绑定 get_runtime_config（engine 现在存在） ---
-        self.login_orchestrator.bind_runtime_config(self.engine.get_runtime_config)
-        self.task_executor.bind_runtime_config(self.engine.get_runtime_config)
 
         self._ws_drain_task: asyncio.Task | None = None
         self._log_handler_id: int | None = None
@@ -191,10 +206,8 @@ class ServiceContainer:
 
         shutdown_probes()
 
-        # 关闭 scripts API 模块级 executor
-        from app.api.scripts import shutdown_script_executor
-
-        shutdown_script_executor()
+        # 关闭浏览器任务执行器
+        self._browser_task_executor.shutdown(wait=True, timeout=10)
 
         self.task_executor.shutdown(wait=True, timeout=10)
 

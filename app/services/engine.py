@@ -281,6 +281,7 @@ class LoginBridge:
                 logger.exception("登录任务异常")
                 if on_complete is not None:
                     on_complete(False, f"登录内部错误: {e}")
+
         with self._futures_lock:
             self._registered_futures.add(handle.future)
         handle.future.add_done_callback(_on_done)
@@ -310,6 +311,8 @@ class ScheduleEngine:
         task_executor=None,
         orchestrator=None,
         scheduler=None,
+        browser_task_service=None,
+        config_service=None,
     ):
         self.project_root = project_root
         if profile_service is None:
@@ -326,18 +329,18 @@ class ScheduleEngine:
         # 调度器（从 ScheduleEngine 提取为独立组件）
         self._scheduler = scheduler
 
-        # 锁（必须在 _reload_config_internal 之前初始化）
+        # 浏览器任务服务（通用浏览器自动化，由容器注入）
+        self._browser_task_service = browser_task_service
+
+        # ConfigService — 运行时配置的唯一持有者
+        if config_service is None:
+            raise ValueError("config_service is required; inject from ServiceContainer")
+        self._config_service = config_service
+
+        # 锁（仅保留与监控/登录相关的锁，配置锁已迁移至 ConfigService）
         self._manual_login_in_progress = False
         self._manual_login_lock: threading.Lock = threading.Lock()
-        self._reload_lock: threading.Lock = threading.Lock()
-        self._pure_mode: bool = False
         self._start_stop_lock: threading.Lock = threading.Lock()
-
-        # 配置对象（由 _reload_config_internal 初始化）
-        self._runtime_config: RuntimeConfig = RuntimeConfig()
-
-        # 加载配置（复用 _reload_config_internal）
-        self._reload_config_internal()
 
         self._monitor_core: NetworkMonitorCore | None = None
 
@@ -516,11 +519,12 @@ class ScheduleEngine:
             )
             temp_core.set_profile_service(self._profile_service)
             if temp_core.check_and_switch_profile_sync():
-                self._reload_config_internal()
+                self._config_service.reload()
                 self._logger.info("启动时方案已自动切换，使用新配置")
 
         # 统一验证配置（确保所有路径都经过验证）
-        valid, error = validate_env_config(self._runtime_config)
+        runtime_config = self._config_service.get_runtime_config()
+        valid, error = validate_env_config(runtime_config)
         if not valid:
             self._logger.warning("启动监控失败: 配置无效: {}", error)
             if cmd.response_future and not cmd.response_future.done():
@@ -555,9 +559,11 @@ class ScheduleEngine:
             core.init_monitoring()  # 只初始化，不启动循环
             self._monitor_core = core
 
-            # 传递网卡绑定代理 URL 到登录编排器
+            # 传递网卡绑定代理 URL 到登录编排器和浏览器任务服务
             if self._orchestrator is not None:
                 self._orchestrator.set_bind_proxy(core.bind_proxy_url)
+            if self._browser_task_service is not None:
+                self._browser_task_service.set_bind_proxy(core.bind_proxy_url)
             self._next_network_check = time.time()  # 立即执行第一次检测
             self._update_status_snapshot(force=True)
             self._logger.info("监控已启动")
@@ -615,7 +621,7 @@ class ScheduleEngine:
             core._update_state(login_attempt_count=core.login_attempt_count + 1)
         await self._login_bridge.submit_login(
             is_manual=True,
-            config_snapshot=self._runtime_config,
+            config_snapshot=self._config_service.get_runtime_config(),
             on_complete=_on_complete,
         )
 
@@ -629,11 +635,11 @@ class ScheduleEngine:
     def _handle_reload(self, cmd: EngineCommand) -> None:
         """重载配置（仅在引擎线程中调用）。
 
-        B2 优化：不再 stop+start 重建 core。_swap_runtime_config 后
+        B2 优化：不再 stop+start 重建 core。ConfigService.reload 后
         NetworkMonitorCore 通过 getter 自动看到新配置。
         仅当 bind_interface_name 变化时才重建 SOCKS5 Forwarder。
         """
-        if not self._reload_config_internal():
+        if not self._config_service.reload():
             logger.warning("配置重载失败，继续使用当前配置")
             cmd.response_data = (False, "配置重载失败")
             if cmd.response_future and not cmd.response_future.done():
@@ -672,15 +678,16 @@ class ScheduleEngine:
                 cmd.response_future.set_result(cmd.response_data)
             return
 
-        if not self._reload_config_internal():
+        if not self._config_service.reload():
             logger.warning("配置重载失败，继续使用当前配置")
             cmd.response_data = (False, "方案切换失败")
             if cmd.response_future and not cmd.response_future.done():
                 cmd.response_future.set_result(cmd.response_data)
             return
 
-        new_url = self._runtime_config.credentials.auth_url
-        new_user = self._runtime_config.credentials.username
+        new_config = self._config_service.get_runtime_config()
+        new_url = new_config.credentials.auth_url
+        new_user = new_config.credentials.username
         self._logger.info("切换方案: {}", profile_id)
         logger.debug(
             "方案详情: 认证={}, 用户={}",
@@ -702,14 +709,13 @@ class ScheduleEngine:
             core.init_monitoring()
             core._update_state(**saved)
 
-
         cmd.response_data = (True, "方案切换成功")
         if cmd.response_future and not cmd.response_future.done():
             cmd.response_future.set_result(cmd.response_data)
 
     async def _handle_test_network(self, cmd: EngineCommand) -> None:
         """执行手动网络测试（引擎 loop 内异步调用）。"""
-        monitor = self._runtime_config.monitor
+        monitor = self._config_service.get_runtime_config().monitor
         targets = monitor.ping_targets
         enable_tcp = monitor.enable_tcp_check
         enable_http = monitor.enable_http_check
@@ -781,7 +787,7 @@ class ScheduleEngine:
     def _start_engine_thread(self) -> None:
         """启动引擎 loop 线程（内部方法）。"""
         # 清理孤儿浏览器：冷却期内（30s）自动跳过，避免与 application.py 重复扫描
-        from app.workers.playwright_worker import cleanup_orphan_browsers
+        from app.services.worker_port import cleanup_orphan_browsers
 
         try:
             cleanup_orphan_browsers()
@@ -802,9 +808,8 @@ class ScheduleEngine:
 
     @property
     def pure_mode(self) -> bool:
-        """线程安全地读取纯净模式标志。"""
-        with self._reload_lock:
-            return self._pure_mode
+        """纯净模式标志（委托给 ConfigService）。"""
+        return self._config_service.pure_mode
 
     @property
     def is_monitoring(self) -> bool:
@@ -812,59 +817,9 @@ class ScheduleEngine:
         core = self._monitor_core
         return core is not None and core.monitoring
 
-    @property
-    def tasks(self):
-        """定时任务接口（供 API 路由使用）。"""
-        return self._task_executor
-
-    def _swap_runtime_config(
-        self, new: RuntimeConfig, *, pure_mode: bool | None = None
-    ) -> None:
-        """原子替换运行时配置（线程安全）。
-
-        所有 _runtime_config 写入必须经此方法，在 _reload_lock 保护下
-        原子替换 frozen 引用。禁止直接赋值 self._runtime_config = ...
-        """
-        with self._reload_lock:
-            self._runtime_config = new
-            if pure_mode is not None:
-                self._pure_mode = pure_mode
-
     def update_log_level(self, level: str) -> None:
-        """更新运行时日志级别（线程安全，供 API 层调用）。
-
-        替代 api/config.py 直接裸改 _runtime_config 的旧行为。
-        不入队命令队列——frozen 引用替换已是原子操作，无需串行化。
-        """
-        from app.constants import VALID_LOG_LEVELS
-
-        if level not in VALID_LOG_LEVELS:
-            raise ValueError(f"无效的日志级别: {level}")
-        new_config = self._runtime_config.model_copy(
-            update={
-                "logging": self._runtime_config.logging.model_copy(
-                    update={"level": level}
-                )
-            }
-        )
-        self._swap_runtime_config(new_config)
-
-    def _reload_config_internal(self) -> bool:
-        """从 settings.json 重新加载 UI 和运行时配置。返回 True 表示成功。
-
-        磁盘 IO 在锁外执行（B5：缩小锁粒度），仅 frozen 引用替换持锁。
-        """
-        try:
-            # 无锁加载+构建（磁盘 IO 不持锁，避免阻塞 pure_mode getter）
-            data = self._profile_service.load()
-            new_config = self._profile_service.build_runtime_config(data)
-            pure_mode = data.global_config.browser.pure_mode
-        except Exception:
-            logger.warning("配置重载失败", exc_info=True)
-            return False
-        # 持锁原子替换
-        self._swap_runtime_config(new_config, pure_mode=pure_mode)
-        return True
+        """更新日志级别（委托给 ConfigService）。"""
+        self._config_service.update_log_level(level)
 
     # ── 跨线程命令派发桥接 ──
 
@@ -964,7 +919,9 @@ class ScheduleEngine:
             logger.debug("收到手动登录请求")
 
             # API 等待超时应略大于 Worker 超时，给足执行余量
-            login_timeout = self._runtime_config.browser.login_timeout
+            login_timeout = (
+                self._config_service.get_runtime_config().browser.login_timeout
+            )
             worker_timeout = max(login_timeout, 60)
             api_wait_timeout = worker_timeout + 10
 
@@ -997,43 +954,12 @@ class ScheduleEngine:
         return self._status_manager.list_logs(limit=limit)
 
     def toggle_pure_mode(self) -> bool:
-        """切换纯净模式，返回新值。
-
-        行为变更（Review 标注）：profile_service.update 原在 _reload_lock 内，
-        现移出锁外。toggle_pure_mode 极少并发调用（仅 API 手动触发），
-        profile_service 内部有锁，风险可接受。
-        """
-        with self._reload_lock:
-            new_value = not self._pure_mode
-            base_config = self._runtime_config
-        # 磁盘持久化（profile_service 内部有自己的锁，无需 _reload_lock 保护）
-        self._profile_service.update(
-            lambda d: d.model_copy(
-                update={
-                    "global_config": d.global_config.model_copy(
-                        update={
-                            "browser": d.global_config.browser.model_copy(
-                                update={"pure_mode": new_value}
-                            )
-                        }
-                    )
-                }
-            )
-        )
-        # 原子替换运行时配置（通过 _swap_runtime_config 同步 _pure_mode）
-        new_config = base_config.model_copy(
-            update={
-                "browser": base_config.browser.model_copy(
-                    update={"pure_mode": new_value}
-                )
-            }
-        )
-        self._swap_runtime_config(new_config, pure_mode=new_value)
-        return new_value
+        """切换纯净模式（委托给 ConfigService）。"""
+        return self._config_service.toggle_pure_mode()
 
     def get_runtime_config(self) -> RuntimeConfig:
-        """线程安全地获取运行时配置（frozen 对象，直接返回引用）。"""
-        return self._runtime_config
+        """获取运行时配置（委托给 ConfigService）。"""
+        return self._config_service.get_runtime_config()
 
     # ── 定时任务调度（委托代理，向后兼容 API 路由）──
 

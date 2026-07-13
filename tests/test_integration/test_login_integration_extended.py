@@ -22,8 +22,8 @@ from app.workers.playwright_worker import WorkerResponse
 
 def _ensure_login_config(engine) -> None:
     """确保引擎运行时配置包含登录所需字段。"""
-    old = engine._runtime_config
-    engine._runtime_config = old.model_copy(
+    old = engine._config_service.get_runtime_config()
+    new_config = old.model_copy(
         update={
             "credentials": LoginCredentials(
                 username="testuser",
@@ -34,6 +34,7 @@ def _ensure_login_config(engine) -> None:
             ),
         }
     )
+    engine._config_service._swap(new_config)
 
 
 def _capture_login_completion(engine=None, timeout: float = 5.0):
@@ -92,7 +93,6 @@ class TestFullEngineLoginChain:
         assert result == (True, "登录成功")
         mock_worker.submit.assert_called_once()
 
-
     def test_chain_failure(self, integration_stack):
         engine, profile_service, task_executor, _, mock_worker = integration_stack
         _ensure_login_config(engine)
@@ -142,7 +142,8 @@ class TestNetworkDetectionLogin:
 
         from app.schemas import MonitorSettings, RetrySettings
 
-        engine._runtime_config = engine._runtime_config.model_copy(
+        old_rc = engine._config_service.get_runtime_config()
+        new_rc = old_rc.model_copy(
             update={
                 "retry": RetrySettings(max_retries=3, retry_interval=30),
                 "monitor": MonitorSettings(
@@ -150,6 +151,7 @@ class TestNetworkDetectionLogin:
                 ),
             }
         )
+        engine._config_service._swap(new_rc)
 
         assert not task_executor.is_login_running()
 
@@ -176,13 +178,15 @@ class TestNetworkDetectionLogin:
 
         from app.schemas import MonitorSettings
 
-        engine._runtime_config = engine._runtime_config.model_copy(
+        old_rc = engine._config_service.get_runtime_config()
+        new_rc = old_rc.model_copy(
             update={
                 "monitor": MonitorSettings(
                     enable_local_check=False, check_auth_url=False
                 ),
             }
         )
+        engine._config_service._swap(new_rc)
 
         mock_worker.submit.return_value = WorkerResponse(
             success=False, error="认证失败"
@@ -193,7 +197,6 @@ class TestNetworkDetectionLogin:
         handle1 = engine._orchestrator.submit(source="manual", config=config)
         result1 = handle1.future.result(timeout=10)
         assert result1 == (False, "认证失败")
-
 
         # 第二次登录（自动重试路径）
         result_container2, done_event2, restore_fn2 = _capture_login_completion(
@@ -298,11 +301,11 @@ class TestReloadException:
             assert submit_called.wait(timeout=5), "worker.submit was not called in time"
             assert task_executor.is_login_running()
 
-            # _reload_config_internal 底层用 profile_service.load()
+            # ConfigService.reload 底层用 profile_service.load()
             # 读取 settings.json，且 ProfileService 对 IO 异常做了防御
             # 处理（捕获 Exception 返回空 ProfilesData）。
-            # 因此 mock _reload_config_internal 返回 False 来模拟重载失败。
-            with patch.object(engine, "_reload_config_internal", return_value=False):
+            # 因此 mock config_service.reload 返回 False 来模拟重载失败。
+            with patch.object(engine._config_service, "reload", return_value=False):
                 reload_cmd = EngineCommand(
                     type=EngineCmdType.RELOAD,
                     data={},
@@ -324,8 +327,9 @@ class TestReloadException:
             assert msg == "登录成功"
 
             # 验证引擎仍保留旧配置
-            assert engine._runtime_config.credentials.username == "testuser"
-            assert engine._runtime_config.credentials.auth_url == "http://10.0.0.1"
+            rc = engine.get_runtime_config()
+            assert rc.credentials.username == "testuser"
+            assert rc.credentials.auth_url == "http://10.0.0.1"
         finally:
             restore_fn()
 
@@ -334,9 +338,8 @@ class TestLoginOnceRetry:
     """LOGIN_ONCE 模式重试逻辑：_execute_login_with_retries 直接测试。"""
 
     def test_execute_login_with_retries_success(self, integration_stack):
-        engine, _, _, _, _ = integration_stack
+        engine, _, _, _, mock_worker = integration_stack
         _ensure_login_config(engine)
-        mock_worker = MagicMock()
         mock_worker.submit.return_value = WorkerResponse(success=True, data="登录成功")
         from app.schemas import RetrySettings
 
@@ -344,24 +347,23 @@ class TestLoginOnceRetry:
             update={"retry": RetrySettings(max_retries=3, retry_interval=1)}
         )
 
-        with (
-            patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
-            patch("app.workers.playwright_worker.cleanup_orphan_browsers"),
-        ):
+        container = MagicMock()
+        container.login_orchestrator = engine._orchestrator
+
+        with patch("app.services.worker_port.cleanup_orphan_browsers"):
             from app.schemas import LoginResult
             from app.services.login_runner import (
                 execute_login_with_retries as _execute_login_with_retries,
             )
 
-            result = _execute_login_with_retries(runtime_config, MagicMock())
+            result = _execute_login_with_retries(runtime_config, container, MagicMock())
 
         assert result == LoginResult.SUCCESS
         mock_worker.submit.assert_called_once()
 
     def test_execute_login_with_retries_exhausted(self, integration_stack):
-        engine, _, _, _, _ = integration_stack
+        engine, _, _, _, mock_worker = integration_stack
         _ensure_login_config(engine)
-        mock_worker = MagicMock()
         mock_worker.submit.return_value = WorkerResponse(success=False, error="超时")
         from app.schemas import RetrySettings
 
@@ -369,16 +371,16 @@ class TestLoginOnceRetry:
             update={"retry": RetrySettings(max_retries=2, retry_interval=1)}
         )
 
-        with (
-            patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
-            patch("app.workers.playwright_worker.cleanup_orphan_browsers"),
-        ):
+        container = MagicMock()
+        container.login_orchestrator = engine._orchestrator
+
+        with patch("app.services.worker_port.cleanup_orphan_browsers"):
             from app.schemas import LoginResult
             from app.services.login_runner import (
                 execute_login_with_retries as _execute_login_with_retries,
             )
 
-            result = _execute_login_with_retries(runtime_config, MagicMock())
+            result = _execute_login_with_retries(runtime_config, container, MagicMock())
 
         assert result == LoginResult.TEMPORARY_FAILURE
         # 单次 submit（重试由 LoginSession 内部负责）
@@ -431,7 +433,8 @@ class TestProfileSwitchDuringLogin:
             assert ok is True
             assert msg == "登录成功"
 
-            assert engine._runtime_config.credentials.username == "testuser"
-            assert engine._runtime_config.credentials.auth_url == "http://10.0.0.1"
+            rc = engine.get_runtime_config()
+            assert rc.credentials.username == "testuser"
+            assert rc.credentials.auth_url == "http://10.0.0.1"
         finally:
             restore_fn()

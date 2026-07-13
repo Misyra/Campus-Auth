@@ -3,25 +3,15 @@
 from __future__ import annotations
 
 import asyncio
-from concurrent.futures import ThreadPoolExecutor
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException
 
-from app.deps import TaskManagerDep
+from app.deps import TaskExecutorDep, TaskManagerDep
 from app.schemas import ApiResponse, TaskSummary
 from app.utils.logging import get_logger
-from app.workers.script_runner import ScriptRunner
 
 router = APIRouter()
 api_logger = get_logger("api", source="backend")
-_script_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="script_api")
-# 注意：脚本超时由 ScriptRunner 内部的 subprocess timeout 控制，
-# ThreadPoolExecutor 本身不设超时，依赖 ScriptRunner 返回。
-
-
-def shutdown_script_executor() -> None:
-    """关闭脚本 API 模块级线程池。"""
-    _script_executor.shutdown(wait=True)
 
 
 @router.get("/api/scripts", response_model=list[TaskSummary])
@@ -76,35 +66,22 @@ def delete_script(
 
 @router.post("/api/scripts/{task_id}/run", response_model=ApiResponse)
 async def run_script(
-    request: Request,
     task_id: str,
     task_mgr: TaskManagerDep,
+    task_executor: TaskExecutorDep,
 ) -> ApiResponse:
-    """手动执行脚本任务（测试用）。"""
+    """手动执行脚本任务（测试用）。
+
+    通过 TaskExecutor.run_script_on_demand 执行，超时由 ConfigService
+    在 run_script_on_demand 内部读取。保留 task_mgr 仅用于 404 验证。
+    """
     task = task_mgr.get_task_detail(task_id)
     if not task or task.get("type") not in ("py", "bat", "ps1", "sh", "exe"):
         raise HTTPException(status_code=404, detail="脚本任务不存在")
 
-    # 通过 TaskManager 公共 API 查找脚本文件
-    script_path = task_mgr.get_script_path(task_id)
-    if not script_path or not script_path.exists():
-        return ApiResponse(success=False, message="脚本文件不存在")
-
-    # 从配置读取脚本超时，默认 60 秒
-    try:
-        services = request.app.state.services
-        timeout = services.engine.get_runtime_config().monitor.script_timeout
-    except Exception:
-        timeout = 60
-
-    runner = ScriptRunner(
-        script_path=script_path,
-        script_type=task["type"],
-        timeout=timeout,
+    success, message = await asyncio.to_thread(
+        task_executor.run_script_on_demand, task_id
     )
-
-    loop = asyncio.get_running_loop()
-    success, message = await loop.run_in_executor(_script_executor, runner.run)
 
     if success:
         api_logger.info("运行脚本 {} 成功", task_id)

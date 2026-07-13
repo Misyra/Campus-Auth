@@ -73,8 +73,6 @@ def _cleanup_dated_screenshots() -> None:
         startup_logger.warning("清理旧截图失败: {}", exc)
 
 
-
-
 _access_log_event = threading.Event()  # 默认未 set（即关闭）
 
 # 模块级占位符，run() 调用后设为实际 FastAPI 实例
@@ -135,7 +133,7 @@ def _create_lifespan(existing_container, boot_engine=False):
             settings_path.exists(),
             settings_path.stat().st_size if settings_path.exists() else 0,
         )
-        cfg = services.engine.get_runtime_config()
+        cfg = services.config_service.get_runtime_config()
         startup_logger.debug(
             "当前配置: 用户={}, 密码={}, 认证={}, 运营商={}, 间隔={}min",
             f"'{cfg.credentials.username}'" if cfg.credentials.username else "(空)",
@@ -144,7 +142,6 @@ def _create_lifespan(existing_container, boot_engine=False):
             cfg.credentials.isp,
             cfg.monitor.check_interval_seconds // 60,
         )
-
 
         # 启动时清理截图文件
         _cleanup_temp_screenshots()

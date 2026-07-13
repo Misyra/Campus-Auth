@@ -32,7 +32,8 @@ class TestInitStatus:
     def test_initialized(self, api_client):
         """已初始化时返回 True。"""
         test_client, mock_services = api_client
-        mock_services.engine.get_runtime_config.return_value = RuntimeConfig(
+        # Task 3.4：get_runtime_config 改从 config_service 获取
+        mock_services.config_service.get_runtime_config.return_value = RuntimeConfig(
             credentials=LoginCredentials(username="test", password="test"),
         )
         with patch("app.utils.crypto.has_decryption_error", return_value=False):
@@ -44,12 +45,12 @@ class TestInitStatus:
     def test_not_initialized(self, api_client):
         """未初始化时返回 False。"""
         test_client, mock_services = api_client
-        mock_services.engine.get_runtime_config.return_value = RuntimeConfig()
+        # Task 3.4：get_runtime_config 改从 config_service 获取
+        mock_services.config_service.get_runtime_config.return_value = RuntimeConfig()
         with patch("app.utils.crypto.has_decryption_error", return_value=False):
             resp = test_client.get("/api/init-status")
         assert resp.status_code == 200
         assert resp.json()["initialized"] is False
-
 
 
 # ── 自启动管理 ──

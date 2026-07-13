@@ -12,6 +12,7 @@ import threading
 import time
 import webbrowser
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import psutil
 
@@ -32,6 +33,9 @@ from app.utils.process import (
     write_pid,
 )
 from app.utils.shutdown import force_exit
+
+if TYPE_CHECKING:
+    from app.container import ServiceContainer
 
 # ==================== 内部辅助函数 ====================
 
@@ -165,7 +169,9 @@ def create_tray(
 
 
 def handle_startup_action(
-    ctx: ApplicationContext, logger
+    ctx: ApplicationContext,
+    container: ServiceContainer,
+    logger,
 ) -> tuple[StartupResult, bool]:
     """第一层状态机：处理启动动作。返回 (结果, 是否需要启动监控引擎)。
 
@@ -179,13 +185,16 @@ def handle_startup_action(
         case StartupAction.MONITOR:
             return StartupResult.CONTINUE, True
         case StartupAction.LOGIN_ONCE:
-            result = run_login_then_exit(ctx, logger)
+            result = run_login_then_exit(ctx, container, logger)
             if result == LoginResult.SUCCESS:
+                shutdown_container(container, logger, fallback_shutdown=True)
                 return StartupResult.EXIT, False
             if result == LoginResult.CONFIG_ERROR:
                 # 配置错误无法自动恢复，退出让用户修正
+                shutdown_container(container, logger, fallback_shutdown=True)
                 return StartupResult.EXIT, False
             # TEMPORARY_FAILURE → 网络等临时性问题，继续监控等待恢复
+            # Container 透传给 launch_lightweight/launch_full
             return StartupResult.CONTINUE, True
         case _:
             return StartupResult.CONTINUE, False
@@ -281,13 +290,12 @@ def _open_console(
         logger.warning("Web 服务未就绪 (15s)，跳过打开浏览器")
 
 
-def launch_lightweight(ctx: ApplicationContext, logger):
+def launch_lightweight(
+    ctx: ApplicationContext,
+    container: ServiceContainer,
+    logger,
+):
     """轻量模式：始终启动监控 + 定时任务，可选托盘，支持按需唤醒 WebUI。"""
-    from app.container import ServiceContainer
-
-    container = ServiceContainer(
-        Path(__file__).parent.parent.parent.resolve()
-    )
     container.engine.boot()
     container.engine.sync_scheduler_state()
     logger.info("轻量模式启动: 仅监控 + 定时任务，按 Ctrl+C 停止")
@@ -358,14 +366,16 @@ def launch_lightweight(ctx: ApplicationContext, logger):
 
 
 def launch_full(
-    ctx: ApplicationContext, should_boot_engine: bool, logger, startup_begin: float
+    ctx: ApplicationContext,
+    container: ServiceContainer,
+    should_boot_engine: bool,
+    logger,
+    startup_begin: float,
 ):
     """完整模式：Web 服务 + 监控 + 定时任务"""
     from app.application import run
-    from app.container import ServiceContainer
 
     port = resolve_port()
-    container = ServiceContainer(Path(__file__).parent.parent.parent.resolve())
 
     features = get_runtime_features(
         RuntimeMode.FULL,
@@ -463,8 +473,9 @@ def launch_full(
 
 def launch_server(ctx: ApplicationContext, force: bool = False) -> None:
     """主启动流程：两层正交状态机（StartupAction → RuntimeMode）"""
+    from app.container import ServiceContainer
+    from app.services.worker_port import ensure_playwright_ready
     from app.utils.logging import get_logger
-    from app.workers.playwright_bootstrap import ensure_playwright_ready
 
     startup_logger = get_logger("startup", source="backend")
     startup_begin = time.perf_counter()
@@ -500,14 +511,17 @@ def launch_server(ctx: ApplicationContext, force: bool = False) -> None:
         ctx.config.auto_open_browser,
     )
 
+    # 提前创建 Container（仅 __init__，不 startup），供 handle_startup_action 和后续模式共用
+    container = ServiceContainer(Path(__file__).parent.parent.parent.resolve())
+
     # 第一层：启动动作
-    result, should_boot_engine = handle_startup_action(ctx, startup_logger)
+    result, should_boot_engine = handle_startup_action(ctx, container, startup_logger)
     if result == StartupResult.EXIT:
         cleanup_pid()
         return
 
-    # 第二层：运行模式
+    # 第二层：运行模式（Container 透传，避免重复创建）
     if ctx.config.runtime_mode == RuntimeMode.LIGHTWEIGHT:
-        launch_lightweight(ctx, startup_logger)
+        launch_lightweight(ctx, container, startup_logger)
     else:
-        launch_full(ctx, should_boot_engine, startup_logger, startup_begin)
+        launch_full(ctx, container, should_boot_engine, startup_logger, startup_begin)

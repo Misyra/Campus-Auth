@@ -5,12 +5,13 @@ from __future__ import annotations
 import json
 import os
 import time
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.application import _cleanup_temp_screenshots, _cleanup_dated_screenshots
+from app.application import _cleanup_dated_screenshots, _cleanup_temp_screenshots
 from app.utils.ports import resolve_port
+
 
 def _cleanup_screenshots():
     _cleanup_temp_screenshots()
@@ -246,10 +247,26 @@ class TestWebSocketMessageHandling:
             patch("app.constants.TEMP_DIR", tmp_path / "temp"),
         ):
             from app.application import create_app
+            from app.schemas import RuntimeConfig
 
+            # Task 3.2: Engine 需要 config_service（Task 3.3 注入 Container），
+            # 通过 existing_container 传入 mock 避免创建真实 ServiceContainer
             mock_services = MagicMock()
             mock_services.engine.list_logs.return_value = []
-            app = create_app()
+            # Task 3.4：lifespan 改用 services.config_service.get_runtime_config
+            mock_services.config_service.get_runtime_config.return_value = (
+                RuntimeConfig()
+            )
+            mock_services.engine.is_monitoring = False
+            mock_services.shutdown = AsyncMock()
+
+            # ws_manager.connect 必须调用 websocket.accept()，否则 TestClient 挂起
+            async def _mock_connect(ws):
+                await ws.accept()
+
+            mock_services.ws_manager.connect = AsyncMock(side_effect=_mock_connect)
+            mock_services.ws_manager.disconnect = AsyncMock()
+            app = create_app(existing_container=mock_services)
             app.state.services = mock_services
             return app
 
@@ -293,13 +310,21 @@ class TestWindowsSigterm:
             patch("app.constants.TEMP_DIR", tmp_path / "temp"),
         ):
             from app.application import create_app
+            from app.schemas import RuntimeConfig
 
+            # Task 3.2: Engine 需要 config_service（Task 3.3 注入 Container），
+            # 通过 existing_container 传入 mock 避免创建真实 ServiceContainer
             mock_services = MagicMock()
             mock_services.engine = MagicMock()
+            # Task 3.4：lifespan 改用 services.config_service.get_runtime_config
+            mock_services.config_service.get_runtime_config.return_value = (
+                RuntimeConfig()
+            )
+            mock_services.engine.is_monitoring = False
             mock_services.startup = MagicMock()
-            mock_services.shutdown = MagicMock()
+            mock_services.shutdown = AsyncMock()
 
-            app = create_app()
+            app = create_app(existing_container=mock_services)
             app.state.services = mock_services
 
             with TestClient(app):

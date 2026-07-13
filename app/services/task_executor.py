@@ -16,6 +16,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from app.services.browser_task_service import BrowserTaskService
     from app.services.login_orchestrator import LoginOrchestrator
     from app.services.task_registry import TaskHistoryStore, TaskRegistry
     from app.tasks.manager import TaskManager
@@ -105,9 +106,10 @@ class TaskExecutor:
         registry: TaskRegistry,
         history_store: TaskHistoryStore,
         worker_getter: Callable,
+        get_runtime_config: Callable[[], RuntimeConfig],
         login_orchestrator: LoginOrchestrator | None = None,
         task_manager: TaskManager | None = None,
-        get_runtime_config: Callable[[], RuntimeConfig] | None = None,
+        browser_task_service: BrowserTaskService | None = None,
     ) -> None:
         self._registry = registry
         self._history_store = history_store
@@ -115,6 +117,7 @@ class TaskExecutor:
         self._get_runtime_config = get_runtime_config
         self._login_orchestrator = login_orchestrator
         self._task_manager = task_manager
+        self._browser_task_service = browser_task_service
 
         # 线程池：任务池懒初始化（无定时任务时不创建线程）
         self._task_pool: BoundedExecutor | None = None
@@ -143,10 +146,6 @@ class TaskExecutor:
     def login_executor(self) -> BoundedExecutor:
         """登录专用 BoundedExecutor（只读，供 container 注入 LoginOrchestrator）。"""
         return self._login_executor
-
-    def bind_runtime_config(self, getter: Callable[[], RuntimeConfig]) -> None:
-        """延迟绑定运行时配置获取器（用于解决 Engine 循环依赖）。"""
-        self._get_runtime_config = getter
 
     def bind_login_orchestrator(self, orchestrator: Any) -> None:
         """延迟绑定登录编排器（用于解决与 LoginOrchestrator 的循环依赖）。"""
@@ -296,6 +295,33 @@ class TaskExecutor:
             logger.warning("定时任务 {} 执行失败: {}", task_id, message[:100])
         return success, message
 
+    def run_script_on_demand(
+        self,
+        task_id: str,
+        timeout: int | None = None,
+    ) -> tuple[bool, str]:
+        """按需执行脚本任务（不记录历史、不更新 last_run）。
+
+        供 API 层手动触发脚本执行使用。与定时任务路径（execute_task）的区别：
+        - 不记录执行历史
+        - 不更新 last_run 时间戳
+        - 无 cancel_event（不支持外部取消）
+        - timeout 可选，None 时从 runtime_config 读取
+
+        Args:
+            task_id: 脚本任务 ID
+            timeout: 超时秒数，None 时使用 monitor.script_timeout（默认 60）
+
+        Returns:
+            (success, message) — 与 _execute_script 返回格式一致
+        """
+        if timeout is None:
+            try:
+                timeout = self._get_runtime_config().monitor.script_timeout
+            except Exception:
+                timeout = 60
+        return self._execute_script(task_id, timeout, cancel_event=None)
+
     # ── 内部执行方法 ──
 
     def _execute_script(
@@ -311,13 +337,13 @@ class TaskExecutor:
         if cancel_event is not None and cancel_event.is_set():
             return False, "任务已被取消"
 
-        from app.workers.script_runner import ScriptRunner
+        from app.services.worker_port import get_script_runner
 
         script_path = self._task_manager.get_script_path(script_id)
         if not script_path or not script_path.exists():
             return False, f"脚本文件不存在: {script_id}"
 
-        runner = ScriptRunner(
+        runner = get_script_runner()(
             script_path=script_path,
             script_type=task["type"],
             timeout=timeout,
@@ -331,8 +357,10 @@ class TaskExecutor:
         timeout: int,
         cancel_event: threading.Event | None = None,
     ) -> tuple[bool, str]:
-        """执行浏览器任务。委托 LoginOrchestrator，与登录共享去重。"""
-        task = self._task_manager.get_task_detail(task_id) if self._task_manager else None
+        """执行浏览器任务。委托 BrowserTaskService（签到/打卡等通用自动化）。"""
+        task = (
+            self._task_manager.get_task_detail(task_id) if self._task_manager else None
+        )
         if not task or task.get("type") != "browser":
             return False, f"浏览器任务不存在: {task_id}"
 
@@ -346,9 +374,16 @@ class TaskExecutor:
         if task_id and task_id != config.active_task:
             config = config.model_copy(update={"active_task": task_id})
 
-        handle = self._login_orchestrator.submit(
-            source="browser",
-            config=config,
+        # 构建 Worker config dict（复用 runtime_config_to_worker_dict）
+        from app.services.login_orchestrator import runtime_config_to_worker_dict
+
+        worker_config = runtime_config_to_worker_dict(config)
+
+        if self._browser_task_service is None:
+            return False, "BrowserTaskService 未注入"
+
+        handle = self._browser_task_service.submit_task(
+            task_config=worker_config,
             cancel_event=cancel_event,
             timeout=timeout,
         )

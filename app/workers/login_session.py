@@ -17,15 +17,15 @@ from __future__ import annotations
 import threading
 from typing import Any
 
-from app.services.login_attempt import LoginAttempt
-from app.services.login_models import (
+from app.utils.browser import BrowserContextManager
+from app.utils.concurrent import interruptible_sleep
+from app.utils.logging import get_logger
+from app.workers.login_attempt import LoginAttempt
+from app.workers.login_models import (
     AttemptOutcome,
     AttemptOutcomeType,
     LoginRetryPolicy,
 )
-from app.utils.browser import BrowserContextManager
-from app.utils.concurrent import interruptible_sleep
-from app.utils.logging import get_logger
 
 logger = get_logger("login_session", source="backend")
 

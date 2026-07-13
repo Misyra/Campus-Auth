@@ -1,6 +1,129 @@
 # 修改日志
 
 
+## 2026-07-13
+
+### refactor: services 层删除直接 import workers，统一通过 worker_port 访问
+
+- `app/services/worker_port.py`：
+  - 新增 `ensure_playwright_ready(log)` 延迟导入委托函数
+  - 新增 `get_script_runner()` 工厂函数（延迟导入 ScriptRunner 类）
+  - 添加 `Callable` 到 typing import（Ruff 自动迁移至 `collections.abc.Callable`）
+- services 层 10 处 import 全部迁移到 `app.services.worker_port`：
+  - `browser_task_service.py`：CMD_BROWSER
+  - `debug_service.py`（4 处）：CMD_DEBUG_*/get_worker
+  - `login_runner.py`：cleanup_orphan_browsers/get_worker
+  - `launcher.py`：ensure_playwright_ready
+  - `login_orchestrator.py`：CMD_LOGIN
+  - `engine.py`：cleanup_orphan_browsers
+  - `task_executor.py`：ScriptRunner → get_script_runner()
+- `tests/test_services/test_worker_port.py`：新增 4 个测试（ensure_playwright_ready 重导出、get_script_runner 工厂、ScriptRunner 类身份、services 层无直接 import workers 回归守卫）
+- 彻底消除 services → workers 直接依赖，所有跨层访问通过 worker_port 端口模块
+
+### refactor: PlaywrightWorker 显式实现 WorkerPort 并统一 CMD_*/WorkerResponse 单一来源
+
+- `app/workers/playwright_worker.py`：
+  - `PlaywrightWorker` 显式继承 `WorkerPort`（`class PlaywrightWorker(WorkerPort):`）
+  - 删除 6 个 CMD_* 常量定义，改为从 `app.services.worker_port` 导入
+  - 删除 `WorkerResponse` @dataclass 定义，改为从 `app.services.worker_port` 导入
+  - 删除 `_DEFAULT_SUBMIT_TIMEOUT` 别名常量
+  - `submit()` 方法签名 `timeout` 默认值从 `_DEFAULT_SUBMIT_TIMEOUT` 改为 `None`（与 Protocol 一致），方法体内 `if timeout is None: timeout = WORKER_SUBMIT_TIMEOUT` 保持行为（原显式 None=无限等待的能力不再支持，但已验证无调用方依赖）
+- `app/services/worker_port.py`：
+  - `WorkerResponse` 从普通 class 改为 `@dataclass`（与原 playwright_worker 定义一致，保持字段顺序与默认值）
+  - 移除 `__init__` 方法
+  - `submit` Protocol docstring 同步：`timeout: None 表示使用 WORKER_SUBMIT_TIMEOUT 默认值`（与 PlaywrightWorker 实现一致）
+- `tests/test_workers/test_playwright_worker.py`：新增 `TestWorkerPortCompliance` 测试类（8 个用例）验证显式继承、常量单一来源、WorkerResponse 单一来源、dataclass 行为、submit 签名一致性
+- 解决 Task 2.1 追踪的 3 个过渡债：CMD_* 双定义、WorkerResponse 双定义、submit timeout 默认值差异
+
+### refactor: 移动 login_session/login_attempt/login_models 到 workers 层
+
+- `app/services/login_models.py` → `app/workers/login_models.py`
+- `app/services/login_attempt.py` → `app/workers/login_attempt.py`
+- `app/services/login_session.py` → `app/workers/login_session.py`
+- 更新移动后文件的内部 import（`app.services.login_*` → `app.workers.login_*`）
+- 更新 `app/workers/playwright_worker.py` 的延迟 import（`_handle_login` 中）
+- 移动测试文件：`tests/test_services/test_login_models.py` → `tests/test_workers/test_login_models.py`，`tests/test_services/test_login_session.py` → `tests/test_workers/test_login_session.py`
+- 更新测试中的 import 和 patch 路径（`app.services.login_session.*` → `app.workers.login_session.*`，共 29 处 patch 路径）
+- 更新其他测试文件的 import：`tests/test_utils/test_utils.py`、`tests/test_utils/test_login.py`（含 26 处 patch 路径）、`tests/test_core/test_monitor.py`
+- 新增 `tests/test_workers/test_login_files_moved.py`：7 个回归测试验证模块位置与旧路径失效
+- 背景：这 3 个文件实际运行在 Worker 线程内，属于 workers 层逻辑。移动后消除 `playwright_worker → app.services.login_*` 的反向依赖，依赖方向变为 workers → workers 同层
+
+### feat: 新建 WorkerPort Protocol 抽象 Worker 接口
+
+- 新建 `app/services/worker_port.py`：
+  - 定义 `WorkerPort` Protocol（@runtime_checkable）含 start/stop/is_alive/submit 四个方法
+  - 定义 `WorkerResponse` 数据类作为 services ↔ workers 契约
+  - 定义 `CMD_LOGIN/CMD_BROWSER/CMD_DEBUG_*/CMD_SHUTDOWN` 命令常量作为契约单一来源
+  - 提供 `get_worker()` / `cleanup_orphan_browsers()` 延迟导入委托函数
+- 新建 `tests/test_services/test_worker_port.py`：10 个测试验证 Protocol 可导入、runtime_checkable、方法签名、常量值、WorkerResponse 字段
+- 背景：阶段 2 第一步，为消除 services ↔ workers 双向依赖建立协议层。后续 Task 2.3 让 PlaywrightWorker 实现此协议，Task 2.4 让 services 改从此模块导入
+
+### test: 阶段 1 集成验证
+
+- 完整测试套件通过：2389 passed, 0 failed
+- 集成测试子集通过：browser_task_service / login_orchestrator / task_executor_lifecycle / playwright_worker / test_integration（229 passed）
+- 死代码扫描：app/ 目录下无 `source="browser"` 调用、`source != "browser"` 分支、`source == "browser"` 分支残留
+- 端到端委托链路验证：_execute_browser → BrowserTaskService.submit_task → Worker CMD_BROWSER → _handle_browser_task → BrowserTaskRunner.execute → finally close_browser
+- LoginSource Literal 仅含 "auto" | "manual" | "login_once"
+- Ruff 检查全部通过
+- 阶段 1 交付物：BrowserTaskService 独立服务、LoginOrchestrator 移除死代码、Container 完整注入
+
+### refactor: LoginOrchestrator 移除 source=browser 死代码分支
+
+- `app/services/login_orchestrator.py`：
+  - `LoginSource` Literal 移除 `"browser"`，仅保留 `"auto" | "manual" | "login_once"`
+  - `submit()` 移除 `if source != "browser":` 校验跳过分支，所有 source 均执行 `validate_login_config`
+  - `submit()` 移除 `elif source == "browser":` 抢占分支
+  - `_dispatch._run()` 移除 4 处 `if source != "browser":` 历史记录跳过分支，所有 source 均记录登录历史
+  - docstring 同步更新
+- `tests/test_services/test_login_orchestrator.py`：新增 `TestSourceBrowserRemoved` 测试类（3 个用例）验证类型移除、历史记录无差别、校验对所有 source 生效
+- 背景：Task 1.3 已将 `_execute_browser` 改走 `BrowserTaskService`，LoginOrchestrator 不再接收 `source="browser"` 提交，相关分支为死代码
+
+### feat: Container 注入 BrowserTaskService 并接入 bind_proxy
+
+- `app/container.py`：在 `TaskExecutor` 创建之前新增 `BrowserTaskService` 实例与独立 `BoundedExecutor(max_workers=1, queue_size=5, thread_name_prefix="browser-task")`，并将 `browser_task_service` 传入 `TaskExecutor` 与 `ScheduleEngine`
+- `app/container.py`：导入语句追加 `BoundedExecutor`（与 `TaskExecutor` 同行）
+- `app/container.py`：`shutdown()` 在 `task_executor.shutdown` 之前关闭 `_browser_task_executor`，遵循"先停引擎→再关线程池"的顺序
+- `app/services/engine.py`：`ScheduleEngine.__init__` 新增 `browser_task_service=None` 参数（位于 `scheduler` 之后），存储为 `self._browser_task_service`
+- `app/services/engine.py`：监控启动处 `set_bind_proxy` 同时调用 `self._browser_task_service.set_bind_proxy(core.bind_proxy_url)`，确保定时浏览器任务走绑定网卡
+
+### fix: 修复 bind_proxy 回归与类型注解
+
+- **Important #1 bind_proxy 行为回归**：`app/services/browser_task_service.py` 的 `BrowserTaskService` 新增 `_bind_proxy_url` 字段与 `set_bind_proxy()` 方法（与 `LoginOrchestrator.set_bind_proxy` 对齐），`submit_task` 在派发前若 `_bind_proxy_url` 非空且 `task_config.browser_settings` 未显式设置 `bind_proxy`，则不可变地注入到新 dict 中（不修改调用方原 dict）。修复启用网卡绑定代理的用户其定时浏览器任务走默认路由的回归
+- **Minor #1 类型注解**：`app/services/task_executor.py` 的 `browser_task_service=None` 改为 `browser_task_service: BrowserTaskService | None = None`，并在 `TYPE_CHECKING` 块中导入 `BrowserTaskService`
+- **Minor #2 None 防御**：`TaskExecutor._execute_browser` 在调用 `submit_task` 前添加 None 检查，返回 `(False, "BrowserTaskService 未注入")`，避免 NoneType 异常掩盖真实配置问题
+- **测试**：`tests/test_services/test_browser_task_service.py` 新增 `test_bind_proxy_injected_into_task_config` 验证注入行为、原字段保留、不修改调用方 dict
+
+### refactor: TaskExecutor._execute_browser 改走 BrowserTaskService
+
+- `app/services/task_executor.py`：`__init__` 新增 `browser_task_service=None` 参数（位于 `task_manager` 与 `get_runtime_config` 之间），存储为 `self._browser_task_service`
+- `app/services/task_executor.py`：`_execute_browser` 不再调用 `self._login_orchestrator.submit(source="browser", ...)`，改为通过 `runtime_config_to_worker_dict` 构建 worker config dict 后委托 `self._browser_task_service.submit_task(task_config=..., cancel_event=..., timeout=...)`，让签到/打卡等通用浏览器任务独立于登录路径
+- `tests/test_core/test_task_executor.py`：新增 `test_execute_browser_uses_browser_task_service` 验证委托关系
+- `tests/test_services/test_task_executor_lifecycle.py`：`TestTaskExecutorExecuteBrowser` 全部用例改为 mock `_browser_task_service.submit_task`，移除已失效的 `test_browser_data_no_pure_mode`（不再委托 orchestrator，pure_mode 检查无意义），新增 `test_browser_rejected_returns_reason` 覆盖 rejected 路径
+- `tests/test_services/test_p0_fixes.py`：`TestBrowserTaskIdInjection` 改为注入 `browser_task_service` mock，断言改为检查 `submit_task.call_args.kwargs["task_config"]["active_task"]`
+- `tests/test_integration/test_scheduled_task.py`：`_make_executor` 增加 `browser_task_service` kwarg；`test_execute_browser_task_with_variables` 改用 `browser_task_service` mock
+
+### fix: 修复 CMD_BROWSER handler 浏览器泄漏与测试覆盖
+
+- **Critical #1 浏览器资源泄漏**：`_handle_browser_task` 的 try/except 末尾添加 `finally: await self._close_browser()`，确保一次性浏览器任务（签到/打卡）完成后关闭浏览器，与 `_handle_login` 行为一致
+- **Minor #4 统一 import 路径**：`from app.tasks.manager import TaskManager` 改为 `from app.tasks import BrowserTaskRunner, TaskConfig, TaskManager`（`app.tasks` 包已导出 TaskManager）
+- **Minor #5 类型注解**：`cancel_event` 添加 `threading.Event | None` 类型注解（与 `_handle_login` 一致）
+- **Minor #6 缺失日志**：`task_id` 为空和 `task_detail` None/类型不匹配的早返回处添加 `logger.warning(...)`
+- **Important #2 测试覆盖**：补充 4 个测试用例（缺 cancel_event、缺 active_task、任务不存在、任务类型不匹配），用 mock TaskManager 避免真实浏览器
+
+### fix: 修复 BrowserTaskService 线程安全与测试覆盖问题
+
+- **Critical #1 线程安全**：`submit_task` 锁外 dispatch 前用 `future=None` 占位 handle 写入 `_slot`，而 `BrowserTaskHandle.done()` 对 `future is None` 返回 `True`，导致并发调用方跳过去重重复 dispatch。引入模块级 `_DISPATCHING` 哨兵对象（参考 LoginOrchestrator 模式），用 `is _DISPATCHING` 身份检查区分"正在 dispatch"与"已完成"，dispatch 期间用 `while self._slot is _DISPATCHING: wait()` 等待
+- **Important #3 魔法数字**：`submit_task` 与 `_dispatch` 的 `timeout: int = 300` 改为复用 `app/constants.py` 中的 `WORKER_SUBMIT_TIMEOUT` 常量
+- **Important #2 测试覆盖**：补充 5 个测试用例（运行与完成、并发去重、cancel_running 触发 cancel_event、executor 满时 rejected、rejected handle 的 result()），使用真实 `ThreadPoolExecutor(max_workers=1)` 包裹 mock，确保 `_run` 闭包真实执行
+
+### feat: 新增 BrowserTaskService 通用浏览器自动化服务
+
+- 新建 `app/services/browser_task_service.py`：BrowserTaskService 骨架，与 LoginOrchestrator 平级，独立去重槽，共享 Playwright Worker
+- 新增 `BrowserTaskHandle` 句柄数据类（future/cancel_event/rejected_reason），支持 done/result/cancel
+- `app/workers/playwright_worker.py`：新增 `CMD_BROWSER = "browser"` 命令常量（handler 待 Task 1.2 实现）
+- 新增测试 `tests/test_services/test_browser_task_service.py`：实例化与 submit_task 返回 handle 两个用例
+
 ### chore: 版本升级至 v4.2.1
 
 - `pyproject.toml`：version 4.2.0 → 4.2.1
@@ -4793,3 +4916,212 @@
 
 - `app/container.py`：`stop_web_services()` 中 await `_ws_drain_task` 前检查 `task.get_loop() is asyncio.get_running_loop()`，不同循环时跳过 await 仅置空引用，避免 Python 3.12+ 跨循环 await 抛 RuntimeError
 - `tests/test_config/test_container.py`：新增 `test_shutdown_handles_cross_loop_ws_drain_task` 测试（独立线程创建事件循环和 task，从当前循环调用 shutdown 验证无 RuntimeError）
+
+## Task 3.1: 新建 ConfigService (2026-07-13)
+
+### 变更
+- 新增 `app/services/config_service.py`：ConfigService 类，承担 Engine 的配置管理职责
+  - 持有 frozen RuntimeConfig 引用，原子替换（_swap）
+  - pure_mode 状态管理（property + toggle_pure_mode）
+  - update_log_level 原子更新日志级别
+  - reload 从 profile_service.load() 重建配置
+- 新增 `tests/test_services/test_config_service.py`：17 个测试覆盖初始化、获取配置、纯净模式、日志级别、重载、线程安全
+  - 覆盖原命名不一致的旧文件（原文件测试 build_runtime_config，与 test_config_builder.py 重复）
+
+### 范围
+- 仅创建 ConfigService 和测试，不修改 Engine/Container/API
+- Engine 的配置管理职责将在 Task 3.2 移除
+- Container 注入将在 Task 3.3 完成
+- API 改用 ConfigServiceDep 在 Task 3.4 完成
+
+### Spec Review 修复 (MAJOR 1)
+- `update_log_level` 和 `toggle_pure_mode` 原在锁内直接赋值 `self._runtime_config = new_config`，违反 `_swap` docstring 契约"禁止直接赋值"
+- 修复：将 `model_copy` 移到锁外（基于当前引用快照），改为调用 `_swap(new_config)` / `_swap(new_config, pure_mode=new_value)`，与 Engine 原始行为对齐
+- 避免后续 `_swap` 扩展（如通知监听器）时绕过扩展点
+
+## Task 3.2: Engine 瘦身，移除 _runtime_config (2026-07-13)
+
+### 变更
+- `app/services/engine.py`：Engine 移除配置状态，改为委托 ConfigService
+  - `__init__` 新增 `config_service` 必传参数（与 `profile_service` 一致校验风格）
+  - 移除 `_runtime_config`、`_pure_mode`、`_reload_lock` 属性持有
+  - 移除 `_swap_runtime_config`、`_reload_config_internal` 内部方法
+  - `get_runtime_config()`、`pure_mode` property、`update_log_level()`、`toggle_pure_mode()` 改为委托 `self._config_service`
+  - `_handle_start`：`_reload_config_internal()` → `_config_service.reload()`；`validate_env_config(_runtime_config)` → `validate_env_config(_config_service.get_runtime_config())`
+  - `_handle_login`：`config_snapshot=_runtime_config` → `config_snapshot=_config_service.get_runtime_config()`
+  - `_handle_reload`：`_reload_config_internal()` → `_config_service.reload()`
+  - `_handle_apply_profile`：`_reload_config_internal()` → `_config_service.reload()`；配置读取改用 `_config_service.get_runtime_config()`
+  - `_handle_test_network`：`_runtime_config.monitor` → `_config_service.get_runtime_config().monitor`
+  - `run_manual_login`：`_runtime_config.browser.login_timeout` → `_config_service.get_runtime_config().browser.login_timeout`
+  - 保留 `reload_config()` 公共方法（仍派发 RELOAD 命令）
+
+### 测试适配
+- `tests/test_services/conftest.py`：新增 `_make_mock_config_service()` 工厂；`_make` 注入 `config_service`；`_make_raw` 移除 `_runtime_config`/`_pure_mode`/`_reload_lock` 属性
+- `tests/test_services/test_engine.py`：27+ 处 `_runtime_config` 引用迁移为 `_config_service.get_runtime_config.return_value`；删除 `TestSwapRuntimeConfig`、`TestPureModeLockConsolidation`（已迁移至 test_config_service.py）；重写 `TestUpdateLogLevel`、`TestTogglePureMode`、`TestGetConfig` 为委托验证
+- `tests/test_integration/conftest.py`：创建真实 `ConfigService(profile_service)` 并传入 Engine
+- `tests/test_integration/test_full_mode.py`、`test_lightweight_mode.py`、`test_login_connection.py`、`test_login_integration_extended.py`、`test_login_flow.py`：`_ensure_login_config` 改用 `_config_service._swap()`；配置读取改用 `engine.get_runtime_config()`
+
+### 失败测试修复（Container 未注入 config_service — 预期行为）
+- `tests/test_app/test_application_logic.py`：3 个测试通过 `existing_container=mock_services` 传入 mock 避免创建真实 ServiceContainer
+  - `_make_app_with_ws`：mock `ws_manager.connect` 用 `AsyncMock(side_effect=_mock_connect)` 调用 `websocket.accept()`
+  - `test_lifespan_registers_signal_or_fallback`：`shutdown` 改为 `AsyncMock`
+- `tests/test_services/test_container_cleanup.py::test_lightweight_container_has_real_task_executor`：patch `ScheduleEngine` 以验证 `TaskExecutor` 仍为真实实例
+
+### 范围
+- Engine 公共 API 保持兼容（委托方法），Container 和 API 在 Task 3.3/3.4 修改
+- Container 创建 Engine 时未传 `config_service` 会触发 `ValueError`（预期，Task 3.3 修复）
+- 全量测试 2424 passed，0 failed
+
+## Task 3.3: Container 调整，删除 bind_* (2026-07-13)
+
+### 变更
+- `app/container.py`：
+  - 顶部新增 `from app.services.config_service import ConfigService`（按字母序插入 autostart 与 engine 之间）
+  - 在 `self.profile_service = get_profile_service(project_root)` 之后创建 `self.config_service = ConfigService(self.profile_service)`
+  - `ScheduleEngine(...)` 构造调用新增 `config_service=self.config_service` 参数
+  - `login_orchestrator.bind_runtime_config` 从 `self.engine.get_runtime_config` 改为 `self.config_service.get_runtime_config`
+  - `task_executor.bind_runtime_config` 从 `self.engine.get_runtime_config` 改为 `self.config_service.get_runtime_config`
+- 新增 `tests/test_config/test_container_config_service.py`：6 个测试验证 ConfigService 创建、profile_service 注入、Engine 注入、orchestrator/executor 绑定、以及不再绑定 engine.get_runtime_config 的回归保护
+
+### 范围
+- 修复 Task 3.2 引入的过渡态问题（Container 未注入 config_service 导致启动崩溃 ValueError）
+- ConfigService 为运行时配置的唯一持有者，login_orchestrator 与 task_executor 不再经 Engine 间接读取配置
+- API 改用 ConfigServiceDep 在 Task 3.4 完成
+- 全量测试 2430 passed（2424 既有 + 6 新增），0 failed
+
+### Code Quality Review 修复 (M1)
+- 彻底删除 login_orchestrator 和 task_executor 的 `bind_runtime_config` 延迟绑定方法
+- `get_runtime_config` 参数改为必传，在构造时直接注入（移除 `| None = None` 默认值）
+- 更新 docstring（移除"用于解决 Engine 循环依赖"的过时说明）
+- `app/container.py`：TaskExecutor 和 LoginOrchestrator 构造时直接传入 `get_runtime_config=self.config_service.get_runtime_config`，删除延迟绑定调用与"延迟绑定"注释
+- `app/services/login_runner.py`：LoginOrchestrator 构造时传入 `get_runtime_config=profile_service.get_runtime_config`
+- 补充 `test_task_executor_not_binds_engine_get_runtime_config` 回归保护测试（对称保护）
+- 将 `test_bind_runtime_config` 测试替换为 `test_constructor_injects_get_runtime_config`
+- 全量测试 2431 passed（2430 既有 + 1 新增），0 failed
+
+## Task 3.4: API 改用 ConfigServiceDep (2026-07-13)
+
+### 变更
+- `app/deps.py`：新增 `ConfigServiceDep = Annotated[ConfigService, Depends(_get("config_service"))]` 类型别名
+- `app/api/config.py`：`set_log_level` 添加 `config_svc: ConfigServiceDep` 参数，调用 `config_svc.update_log_level(actual)`，删除 `engine = request.app.state.services.engine` 行；`save_config`/`patch_config` 保留 `MonitorServiceDep`（需要 `svc.reload_config` 处理 bind proxy 重建）
+- `app/api/monitor.py`：`get_pure_mode`/`toggle_pure_mode` 改用 `ConfigServiceDep`，不再注入 `MonitorServiceDep`
+- `app/api/scripts.py`：`run_script` 添加 `config_svc: ConfigServiceDep`，使用 `config_svc.get_runtime_config().monitor.script_timeout`，移除不再使用的 `request: Request` 参数
+- `app/api/system.py`：`get_init_status` 同时注入 `MonitorServiceDep`（用于 `svc.project_root`）和 `ConfigServiceDep`（用于 `config_svc.get_runtime_config()`）
+- `app/application.py`：lifespan 中 `services.engine.get_runtime_config()` 改为 `services.config_service.get_runtime_config()`
+
+### 测试
+- `tests/test_config/test_deps.py`：新增 `TestConfigServiceDep`（2 个测试）和 `test_get_config_service`（1 个测试），验证 ConfigServiceDep 类型别名和 Depends 工厂解析
+- `tests/test_api/test_api_config_routes.py`：`TestSetLogLevel` 改为断言 `config_service.update_log_level` 被调用，且 `engine.update_log_level` 未被调用；移除未使用的 `LoggingSettings` 导入
+- `tests/test_api/test_api_monitor_routes.py`：`TestPureMode` 改为 mock `config_service.pure_mode`/`toggle_pure_mode`
+- `tests/test_api/test_api_scripts_routes.py`：`test_run_script_uses_dedicated_executor` 适配新签名，传入 mock `config_svc`
+- `tests/test_api/test_api_system_routes.py`：`TestInitStatus` 改为 mock `config_service.get_runtime_config`
+- `tests/test_app/test_application_logic.py`：lifespan 测试改为 mock `config_service.get_runtime_config`
+
+### 范围
+- API 层直接使用 ConfigServiceDep 访问配置，不再通过 Engine 委托方法
+- `save_config`/`patch_config` 保留 `MonitorServiceDep`（需要 `engine.reload_config` 处理 bind proxy 重建）
+- `get_init_status` 同时注入两个依赖（`project_root` 仍从 Engine 获取，非配置职责）
+- 全量测试 2434 passed（2431 既有 + 3 新增），0 failed
+- Ruff 检查全部通过
+
+## Task 3.5: 删除 engine.tasks property (2026-07-13)
+
+### 变更
+- `app/deps.py`：新增 `TaskExecutorDep = Annotated[TaskExecutor, Depends(_get("task_executor"))]` 类型别名
+- `app/api/scheduled_tasks.py`：改用 `TaskExecutorDep` 直接访问 `task_executor`，保留 `MonitorServiceDep` 用于 `sync_scheduler_state`；所有 `engine.tasks.registry/history_store/execute_task/delete_task` 改为 `task_executor.X`
+- `app/services/engine.py`：删除 `tasks` property（不再需要，API 直接注入 TaskExecutor）
+
+### 测试
+- `tests/test_api/test_api_scheduled_tasks_routes.py`：所有测试将 `mock_engine.tasks = mock_tasks` 改为 `mock_services.task_executor = mock_tasks`（保留 `mock_services.engine` 用于 sync_scheduler_state）
+- `tests/test_api/test_api_scheduled_tasks_side_effect.py`：同上适配
+- `tests/test_services/test_engine.py`：删除 `test_tasks_property` 测试（property 已移除）
+
+### 范围
+- Engine 不再暴露 `tasks` property，API 层直接使用 `TaskExecutorDep`
+- 阶段 3 配置管理抽离完成
+- 全量测试 2433 passed（2434 既有 - 1 删除），0 failed
+- Ruff 检查全部通过
+
+## Task 4.1: TaskExecutor 新增 run_script_on_demand (2026-07-13)
+
+### 变更
+- `app/services/task_executor.py`：新增 `run_script_on_demand(task_id, timeout=None)` 公共方法
+  - 封装"按需执行脚本任务"逻辑，复用 `_execute_script`
+  - timeout 为 None 时从 runtime_config 读取，异常回退 60 秒
+  - 同步方法，供 API 层通过 asyncio.to_thread 调用
+  - 不记录历史、不更新 last_run（区别于定时任务路径）
+
+### 测试
+- `tests/test_services/test_task_executor_lifecycle.py`：新增 `TestRunScriptOnDemand` 类，8 个测试
+  - 成功执行、任务不存在、类型不匹配、文件缺失、TaskManager 未注入
+  - 默认超时从 config 读取、显式 timeout、config 异常回退 60
+- 全量测试：2441 passed
+
+### 范围
+- 仅新增方法，不修改现有 _execute_script 或其他方法
+- 为 Task 4.2（删除 api/scripts.py 模块级线程池）做准备
+
+## Task 4.1 review fix: 方法位置与测试补强 (2026-07-13)
+
+### 变更
+- `app/services/task_executor.py`：将 `run_script_on_demand` 从"内部执行方法"分节移至"同步执行接口"分节（紧跟 execute_task 之后），符合公共方法的位置约定
+- `app/services/task_executor.py`：docstring 中"无 cancel_event（同步阻塞执行）"改为"无 cancel_event（不支持外部取消）"，表述更精确
+- `tests/test_services/test_task_executor_lifecycle.py`：3 个 timeout 测试补充 `cancel_event=None` 透传断言
+
+### 测试
+- 全量测试：2441 passed
+
+### 范围
+- code quality review 的 MINOR + 2 个 SUGGESTION 修复
+
+## Task 4.2: api/scripts.py 删除模块级线程池 (2026-07-13)
+
+### 变更
+- `app/api/scripts.py`：
+  - 删除模块级 `_script_executor` 线程池和 `shutdown_script_executor` 函数
+  - `run_script` 端点改用 `TaskExecutorDep` + `asyncio.to_thread(task_executor.run_script_on_demand, task_id)`
+  - 移除 ScriptRunner 构造和 ConfigServiceDep 依赖（超时读取已迁入 run_script_on_demand）
+  - 保留 TaskManagerDep 仅用于 404 验证
+- `app/container.py`：删除 `shutdown_script_executor()` 调用
+
+### 测试
+- 删除 `tests/test_api/test_scripts.py`（模块级 executor 已消失，测试目标不存在）
+- `tests/test_api/test_api_scripts_routes.py`：
+  - 删除 `TestScriptThreadPool` 类
+  - `TestRunScript` 类 mock 改为 `task_executor.run_script_on_demand`
+  - 新增 `test_run_script_wrong_type` 浏览器任务类型 404 用例
+- 全量测试：2435 passed
+
+### 范围
+- 依赖 Task 4.1 的 `run_script_on_demand` 方法
+- 消除 API 层模块级线程池，统一由 TaskExecutor 管理脚本执行
+
+## Task 4.3: login_runner 改用 Container (2026-07-13)
+
+### 变更
+- `app/services/login_runner.py`：
+  - `execute_login_with_retries` 和 `run_login_then_exit` 新增 container 参数
+  - 移除自建 LoginOrchestrator + LoginHistoryService + ThreadPoolExecutor
+  - 改用 container.login_orchestrator 和 container.config_service
+  - 删除 finally 中的 shutdown（交给 Container）
+- `app/services/launcher.py`：
+  - launch_server 提前创建 Container 并透传
+  - handle_startup_action、launch_lightweight、launch_full 接受 container 参数
+  - login_once 退出时调用 shutdown_container
+
+### 测试
+- 修改 test_login_once_mode.py、test_main.py、test_login_integration_extended.py、test_boot_engine_flag.py
+- mock 模式从 patch 全局工厂改为注入 container
+- 全量测试：2435 passed
+
+### 范围
+- 消除 login_runner 的自建组件，统一由 Container 管理服务生命周期
+- 调整启动时序，Container 在 handle_startup_action 之前创建
+
+## Task 4.3 review fix: docstring 补充异常返回说明 (2026-07-13)
+
+### 变更
+- `app/services/login_runner.py`：execute_login_with_retries docstring Returns 部分补充"或执行过程异常"说明
+
+### 范围
+- code quality review MINOR 修复

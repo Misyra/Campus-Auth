@@ -7,12 +7,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.services.login_models import (
+from app.workers.login_models import (
     AttemptOutcome,
     AttemptOutcomeType,
     LoginRetryPolicy,
 )
-from app.services.login_session import LoginSession
+from app.workers.login_session import LoginSession
 
 
 def _make_config() -> dict:
@@ -67,10 +67,10 @@ class TestLoginSessionRetryLoop:
 
         with (
             patch(
-                "app.services.login_session.BrowserContextManager",
+                "app.workers.login_session.BrowserContextManager",
                 return_value=mock_browser_ctx,
             ),
-            patch("app.services.login_session.LoginAttempt", FakeAttempt),
+            patch("app.workers.login_session.LoginAttempt", FakeAttempt),
         ):
             session = LoginSession(_make_config(), threading.Event())
             result = await session.run()
@@ -94,11 +94,11 @@ class TestLoginSessionRetryLoop:
 
         with (
             patch(
-                "app.services.login_session.BrowserContextManager",
+                "app.workers.login_session.BrowserContextManager",
                 return_value=mock_browser_ctx,
             ),
-            patch("app.services.login_session.LoginAttempt", FakeAttempt),
-            patch("app.services.login_session.interruptible_sleep", sleep_mock),
+            patch("app.workers.login_session.LoginAttempt", FakeAttempt),
+            patch("app.workers.login_session.interruptible_sleep", sleep_mock),
         ):
             session = LoginSession(_make_config(), threading.Event())
             result = await session.run()
@@ -119,11 +119,11 @@ class TestLoginSessionRetryLoop:
 
         with (
             patch(
-                "app.services.login_session.BrowserContextManager",
+                "app.workers.login_session.BrowserContextManager",
                 return_value=mock_browser_ctx,
             ),
-            patch("app.services.login_session.LoginAttempt", FakeAttempt),
-            patch("app.services.login_session.interruptible_sleep", sleep_mock),
+            patch("app.workers.login_session.LoginAttempt", FakeAttempt),
+            patch("app.workers.login_session.interruptible_sleep", sleep_mock),
         ):
             session = LoginSession(
                 _make_config(),
@@ -146,10 +146,10 @@ class TestLoginSessionRetryLoop:
 
         with (
             patch(
-                "app.services.login_session.BrowserContextManager",
+                "app.workers.login_session.BrowserContextManager",
                 return_value=mock_browser_ctx,
             ),
-            patch("app.services.login_session.LoginAttempt", FakeAttempt),
+            patch("app.workers.login_session.LoginAttempt", FakeAttempt),
         ):
             session = LoginSession(_make_config(), threading.Event())
             result = await session.run()
@@ -167,10 +167,10 @@ class TestLoginSessionRetryLoop:
 
         with (
             patch(
-                "app.services.login_session.BrowserContextManager",
+                "app.workers.login_session.BrowserContextManager",
                 return_value=mock_browser_ctx,
             ),
-            patch("app.services.login_session.LoginAttempt", FakeAttempt),
+            patch("app.workers.login_session.LoginAttempt", FakeAttempt),
         ):
             session = LoginSession(_make_config(), threading.Event())
             result = await session.run()
@@ -191,10 +191,10 @@ class TestLoginSessionCancel:
 
         with (
             patch(
-                "app.services.login_session.BrowserContextManager",
+                "app.workers.login_session.BrowserContextManager",
                 return_value=mock_browser_ctx,
             ),
-            patch("app.services.login_session.LoginAttempt", FakeAttempt),
+            patch("app.workers.login_session.LoginAttempt", FakeAttempt),
         ):
             session = LoginSession(_make_config(), cancel_event)
             result = await session.run()
@@ -213,11 +213,11 @@ class TestLoginSessionCancel:
 
         with (
             patch(
-                "app.services.login_session.BrowserContextManager",
+                "app.workers.login_session.BrowserContextManager",
                 return_value=mock_browser_ctx,
             ),
-            patch("app.services.login_session.LoginAttempt", FakeAttempt),
-            patch("app.services.login_session.interruptible_sleep", sleep_mock),
+            patch("app.workers.login_session.LoginAttempt", FakeAttempt),
+            patch("app.workers.login_session.interruptible_sleep", sleep_mock),
         ):
             session = LoginSession(_make_config(), threading.Event())
             result = await session.run()
@@ -236,11 +236,11 @@ class TestLoginSessionCancel:
 
         with (
             patch(
-                "app.services.login_session.BrowserContextManager",
+                "app.workers.login_session.BrowserContextManager",
                 return_value=mock_browser_ctx,
             ),
-            patch("app.services.login_session.LoginAttempt", FakeAttempt),
-            patch("app.services.login_session.interruptible_sleep", sleep_mock),
+            patch("app.workers.login_session.LoginAttempt", FakeAttempt),
+            patch("app.workers.login_session.interruptible_sleep", sleep_mock),
         ):
             session = LoginSession(
                 _make_config(),
@@ -263,10 +263,10 @@ class TestLoginSessionBrowserClose:
 
         with (
             patch(
-                "app.services.login_session.BrowserContextManager",
+                "app.workers.login_session.BrowserContextManager",
                 return_value=mock_browser_ctx,
             ),
-            patch("app.services.login_session.LoginAttempt", FakeAttempt),
+            patch("app.workers.login_session.LoginAttempt", FakeAttempt),
         ):
             session = LoginSession(_make_config(), threading.Event())
             await session.run()
@@ -285,11 +285,11 @@ class TestLoginSessionBrowserClose:
 
         with (
             patch(
-                "app.services.login_session.BrowserContextManager",
+                "app.workers.login_session.BrowserContextManager",
                 return_value=mock_browser_ctx,
             ),
-            patch("app.services.login_session.LoginAttempt", FakeAttempt),
-            patch("app.services.login_session.interruptible_sleep", sleep_mock),
+            patch("app.workers.login_session.LoginAttempt", FakeAttempt),
+            patch("app.workers.login_session.interruptible_sleep", sleep_mock),
         ):
             session = LoginSession(
                 _make_config(),
@@ -311,10 +311,10 @@ class TestLoginSessionBrowserClose:
 
         with (
             patch(
-                "app.services.login_session.BrowserContextManager",
+                "app.workers.login_session.BrowserContextManager",
                 return_value=mock_browser_ctx,
             ),
-            patch("app.services.login_session.LoginAttempt", FakeAttempt),
+            patch("app.workers.login_session.LoginAttempt", FakeAttempt),
         ):
             session = LoginSession(_make_config(), cancel_event)
             await session.run()
@@ -333,10 +333,10 @@ class TestLoginSessionBrowserClose:
 
         with (
             patch(
-                "app.services.login_session.BrowserContextManager",
+                "app.workers.login_session.BrowserContextManager",
                 return_value=mock_browser_ctx,
             ),
-            patch("app.services.login_session.LoginAttempt", _FakeAttempt),
+            patch("app.workers.login_session.LoginAttempt", _FakeAttempt),
         ):
             session = LoginSession(_make_config(), threading.Event())
 

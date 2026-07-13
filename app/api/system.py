@@ -12,7 +12,7 @@ import psutil
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 
 from app.constants import AUTH_DATA_DIR, PROJECT_ROOT
-from app.deps import MonitorServiceDep
+from app.deps import ConfigServiceDep, MonitorServiceDep
 from app.schemas import (
     ApiResponse,
     HealthResponse,
@@ -36,8 +36,6 @@ _update_lock = asyncio.Lock()
 
 
 # ── 健康检查 / 更新检测 ──
-
-
 
 
 @router.get("/api/health", response_model=HealthResponse)
@@ -121,13 +119,15 @@ async def check_update() -> UpdateCheckResponse:
 @router.get("/api/init-status", response_model=InitStatusResponse)
 def get_init_status(
     svc: MonitorServiceDep,
+    config_svc: ConfigServiceDep,
 ) -> InitStatusResponse:
     from app.utils.crypto import has_decryption_error
 
-    config = svc.get_runtime_config()
+    # Task 3.4：runtime_config 改从 ConfigService 获取（不再经 Engine 委托）
+    config = config_svc.get_runtime_config()
     is_initialized = bool(config.credentials.username and config.credentials.password)
 
-    # 检查用户是否已同意使用协议
+    # project_root 仍从 Engine 获取（Engine 持有路径，非配置职责）
     agree_file = svc.project_root / "config" / ".agree"
     agreed = agree_file.exists()
 
@@ -184,8 +184,6 @@ def shutdown_server(
     bg_tasks.add_task(lambda: request.app.state.shutdown_event.set())
 
     return ApiResponse(success=True, message="服务器正在关闭，请稍候，页面将自动断开")
-
-
 
 
 # ── 卸载 ──

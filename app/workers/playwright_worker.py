@@ -34,23 +34,19 @@ from app.constants import (
     WORKER_READY_TIMEOUT,
     WORKER_SUBMIT_TIMEOUT,
 )
+from app.services.worker_port import (
+    CMD_BROWSER,
+    CMD_DEBUG_START,
+    CMD_DEBUG_STEP,
+    CMD_DEBUG_STOP,
+    CMD_LOGIN,
+    CMD_SHUTDOWN,
+    WorkerPort,
+    WorkerResponse,
+)
 from app.utils.logging import get_logger
 
 logger = get_logger("playwright_worker", source="backend")
-
-
-# ── 命令类型常量 ──
-
-CMD_LOGIN = "login"  # 执行完整登录流程（登录和浏览器定时任务共用此命令）
-CMD_DEBUG_START = "debug_start"  # 启动调试会话
-CMD_DEBUG_STEP = "debug_step"  # 调试下一步
-CMD_DEBUG_STOP = "debug_stop"  # 停止调试会话
-CMD_SHUTDOWN = "shutdown"  # 关闭 Worker
-
-
-# ── 常量 ──
-
-_DEFAULT_SUBMIT_TIMEOUT = WORKER_SUBMIT_TIMEOUT  # submit() 默认超时
 
 
 # ── 数据结构 ──
@@ -67,19 +63,10 @@ class WorkerCommand:
     cancelled: bool = False  # 超时后标记为已取消，跳过执行
 
 
-@dataclass
-class WorkerResponse:
-    """Worker 命令执行结果。"""
-
-    success: bool
-    data: Any = None
-    error: str | None = None
-
-
 # ── Worker 类 ──
 
 
-class PlaywrightWorker:
+class PlaywrightWorker(WorkerPort):
     """浏览器自动化工作线程。
 
     通过 Actor 模型的消息队列，将 Playwright 操作隔离在独立线程中执行。
@@ -234,7 +221,7 @@ class PlaywrightWorker:
         cmd_type: str,
         data: dict | None = None,
         wait: bool = True,
-        timeout: float | None = _DEFAULT_SUBMIT_TIMEOUT,
+        timeout: float | None = None,
     ) -> WorkerResponse:
         """提交命令到 Worker 队列。
 
@@ -245,11 +232,15 @@ class PlaywrightWorker:
             cmd_type: 命令类型（CMD_* 常量）
             data: 命令参数字典
             wait: 是否同步等待执行结果
-            timeout: 等待超时秒数（None 表示无限制）
+            timeout: 等待超时秒数（None 表示使用 WORKER_SUBMIT_TIMEOUT 默认值）
 
         返回:
             WorkerResponse 对象
         """
+        # timeout=None 时回退到默认超时（与 WorkerPort 协议签名一致）
+        if timeout is None:
+            timeout = WORKER_SUBMIT_TIMEOUT
+
         # Worker 已关闭时拒绝新命令（SHUTDOWN 命令走 stop() 路径不经过此检查）
         if self._stop_event.is_set() or self._shutdown_permanent.is_set():
             return WorkerResponse(success=False, error="Worker 已关闭，不接受新命令")
@@ -383,6 +374,8 @@ class PlaywrightWorker:
         try:
             if cmd.type == CMD_LOGIN:
                 result = await self._handle_login(cmd.data)
+            elif cmd.type == CMD_BROWSER:
+                result = await self._handle_browser_task(cmd.data)
             elif cmd.type == CMD_DEBUG_START:
                 result = await self._handle_debug_start(cmd.data)
             elif cmd.type == CMD_DEBUG_STEP:
@@ -414,8 +407,8 @@ class PlaywrightWorker:
         LoginSession 在单次 Worker 调用内复用浏览器并管理重试循环，
         所有终态（成功/失败/取消/耗尽）都关闭浏览器。
         """
-        from app.services.login_models import AttemptOutcomeType
-        from app.services.login_session import LoginSession
+        from app.workers.login_models import AttemptOutcomeType
+        from app.workers.login_session import LoginSession
 
         config = data.get("config", {})
         cancel_event: threading.Event | None = data.get("cancel_event")
@@ -446,6 +439,70 @@ class PlaywrightWorker:
                 "登录执行异常: task_id={}", config.get("task_id", "unknown")
             )
             return WorkerResponse(success=False, error=str(e))
+
+    async def _handle_browser_task(self, data: dict) -> WorkerResponse:
+        """处理通用浏览器任务（签到/打卡等）。
+
+        与 _handle_login 的区别：
+        - 不走 LoginSession 重试循环
+        - 不记录登录历史
+        - 直接用 BrowserTaskRunner.execute(page) 执行步骤
+        """
+        from app.constants import PROJECT_ROOT
+        from app.tasks import BrowserTaskRunner, TaskConfig, TaskManager
+
+        config = data.get("config", {})
+        cancel_event: threading.Event | None = data.get("cancel_event")
+
+        if cancel_event is None:
+            logger.error("浏览器任务命令缺少 cancel_event")
+            return WorkerResponse(success=False, error="cancel_event 缺失")
+
+        task_id = config.get("active_task", "")
+        if not task_id:
+            logger.warning("浏览器任务命令缺少 active_task")
+            return WorkerResponse(success=False, error="未指定任务")
+
+        # 加载任务定义
+        task_mgr = TaskManager(PROJECT_ROOT / "tasks")
+        task_detail = task_mgr.get_task_detail(task_id)
+        if not task_detail or task_detail.get("type") != "browser":
+            logger.warning("浏览器任务不存在或类型不匹配: task_id={}", task_id)
+            return WorkerResponse(success=False, error=f"浏览器任务不存在: {task_id}")
+
+        # TaskConfig 是 dataclass，用 from_dict 而非 **dict
+        # （dict 含 id/type/raw_json 等非字段键）
+        try:
+            task_config = TaskConfig.from_dict(task_detail)
+        except Exception as e:
+            logger.exception("解析 TaskConfig 失败: task_id={}", task_id)
+            return WorkerResponse(success=False, error=f"任务配置解析失败: {e}")
+
+        try:
+            # 确保浏览器就绪（复用现有 ensure_browser）
+            await self.ensure_browser(config)
+
+            if self._page is None or self._page.is_closed():
+                return WorkerResponse(success=False, error="浏览器页面初始化失败")
+
+            # 执行任务
+            runner = BrowserTaskRunner(
+                task_config,
+                template_vars=config.get("template_vars", {}),
+                cancel_event=cancel_event,
+            )
+            success, message = await runner.execute(self._page)
+            return WorkerResponse(
+                success=success,
+                data=message if success else None,
+                error=None if success else message,
+            )
+        except Exception as e:
+            logger.exception("浏览器任务执行异常: task_id={}", task_id)
+            return WorkerResponse(success=False, error=str(e))
+        finally:
+            # 一次性任务，完成后关闭浏览器（与 _handle_login 一致）
+            await self._close_browser()
 
     async def _cleanup_debug_session(self):
         """统一清理调试会话资源。"""
@@ -628,7 +685,6 @@ class PlaywrightWorker:
 
         logger.info("停止调试会话成功")
         return WorkerResponse(success=True, data="调试会话已停止")
-
 
     async def ensure_browser(self, config: dict) -> None:
         """确保浏览器和页面已就绪（可从 Worker 事件循环内直接调用）。

@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-
 from fastapi import APIRouter, HTTPException, Request
 
-from app.deps import MonitorServiceDep, ProfileServiceDep
+from app.deps import ConfigServiceDep, MonitorServiceDep, ProfileServiceDep
 from app.schemas import (
     ApiResponse,
     AppSettings,
@@ -29,8 +28,6 @@ api_logger = get_logger("api", source="backend")
 config_logger = get_logger("config", source="backend")
 
 
-
-
 @router.get("/api/config/log-levels", response_model=LogLevelResponse)
 def get_log_levels() -> LogLevelResponse:
     from app.utils.logging import LogConfigCenter
@@ -40,7 +37,11 @@ def get_log_levels() -> LogLevelResponse:
 
 
 @router.put("/api/config/log-level", response_model=ApiResponse)
-def set_log_level(payload: LogLevelRequest, request: Request) -> ApiResponse:
+def set_log_level(
+    payload: LogLevelRequest,
+    request: Request,
+    config_svc: ConfigServiceDep,
+) -> ApiResponse:
     from app.utils.logging import VALID_LOG_LEVELS, LogConfigCenter
 
     requested = payload.level.strip().upper()
@@ -64,9 +65,8 @@ def set_log_level(payload: LogLevelRequest, request: Request) -> ApiResponse:
             }
         )
     )
-    # 同步更新引擎运行时配置（经公共方法，不再裸改私有属性）
-    engine = request.app.state.services.engine
-    engine.update_log_level(actual)
+    # Task 3.4：通过 ConfigServiceDep 更新运行时日志级别（不再经 Engine 委托）
+    config_svc.update_log_level(actual)
     return ApiResponse(success=True, message=f"已设置全局日志级别为 {actual}")
 
 
@@ -118,10 +118,6 @@ def get_config_defaults() -> dict:
         "logging": LoggingSettings().model_dump(),
         "app_settings": AppSettings().model_dump(),
     }
-
-
-
-
 
 
 @router.put("/api/config", response_model=ApiResponse)
