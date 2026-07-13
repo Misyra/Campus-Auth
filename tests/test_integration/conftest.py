@@ -8,6 +8,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from app.services.config_service import ConfigService
 from app.services.engine import ScheduleEngine
 from app.services.login_history_service import LoginHistoryService
 from app.services.login_orchestrator import LoginOrchestrator
@@ -82,6 +83,7 @@ def integration_stack(tmp_path, mock_worker):
     task_registry = TaskRegistry(tmp_path / "tasks" / "scheduled")
     task_history_store = TaskHistoryStore(tmp_path / "tasks" / "scheduled" / "history")
 
+    config_service = ConfigService(profile_service)
     engine = ScheduleEngine(
         project_root=tmp_path,
         profile_service=profile_service,
@@ -89,6 +91,7 @@ def integration_stack(tmp_path, mock_worker):
         task_registry=task_registry,
         task_executor=None,
         orchestrator=None,
+        config_service=config_service,
     )
 
     task_executor = TaskExecutor(

@@ -14,8 +14,8 @@ from app.workers.playwright_worker import WorkerResponse
 
 def _ensure_login_config(engine) -> None:
     """确保引擎运行时配置包含登录所需字段。"""
-    old = engine._runtime_config
-    engine._runtime_config = old.model_copy(
+    old = engine._config_service.get_runtime_config()
+    new_config = old.model_copy(
         update={
             "credentials": LoginCredentials(
                 username="testuser",
@@ -26,6 +26,7 @@ def _ensure_login_config(engine) -> None:
             ),
         }
     )
+    engine._config_service._swap(new_config)
 
 
 class TestFullMode:
@@ -104,12 +105,13 @@ class TestFullMode:
         assert ok is True
 
         # t5: 保存配置 → 重载
+        rc = engine.get_runtime_config()
         payload = ConfigSaveRequest(
-            browser=engine._runtime_config.browser,
-            monitor=engine._runtime_config.monitor,
-            retry=engine._runtime_config.retry,
-            pause=engine._runtime_config.pause,
-            logging=engine._runtime_config.logging,
+            browser=rc.browser,
+            monitor=rc.monitor,
+            retry=rc.retry,
+            pause=rc.pause,
+            logging=rc.logging,
             app_settings=AppSettings(),
             username="testuser",
             password="testpass",

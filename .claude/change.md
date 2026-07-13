@@ -4938,3 +4938,36 @@
 - `update_log_level` 和 `toggle_pure_mode` 原在锁内直接赋值 `self._runtime_config = new_config`，违反 `_swap` docstring 契约"禁止直接赋值"
 - 修复：将 `model_copy` 移到锁外（基于当前引用快照），改为调用 `_swap(new_config)` / `_swap(new_config, pure_mode=new_value)`，与 Engine 原始行为对齐
 - 避免后续 `_swap` 扩展（如通知监听器）时绕过扩展点
+
+## Task 3.2: Engine 瘦身，移除 _runtime_config (2026-07-13)
+
+### 变更
+- `app/services/engine.py`：Engine 移除配置状态，改为委托 ConfigService
+  - `__init__` 新增 `config_service` 必传参数（与 `profile_service` 一致校验风格）
+  - 移除 `_runtime_config`、`_pure_mode`、`_reload_lock` 属性持有
+  - 移除 `_swap_runtime_config`、`_reload_config_internal` 内部方法
+  - `get_runtime_config()`、`pure_mode` property、`update_log_level()`、`toggle_pure_mode()` 改为委托 `self._config_service`
+  - `_handle_start`：`_reload_config_internal()` → `_config_service.reload()`；`validate_env_config(_runtime_config)` → `validate_env_config(_config_service.get_runtime_config())`
+  - `_handle_login`：`config_snapshot=_runtime_config` → `config_snapshot=_config_service.get_runtime_config()`
+  - `_handle_reload`：`_reload_config_internal()` → `_config_service.reload()`
+  - `_handle_apply_profile`：`_reload_config_internal()` → `_config_service.reload()`；配置读取改用 `_config_service.get_runtime_config()`
+  - `_handle_test_network`：`_runtime_config.monitor` → `_config_service.get_runtime_config().monitor`
+  - `run_manual_login`：`_runtime_config.browser.login_timeout` → `_config_service.get_runtime_config().browser.login_timeout`
+  - 保留 `reload_config()` 公共方法（仍派发 RELOAD 命令）
+
+### 测试适配
+- `tests/test_services/conftest.py`：新增 `_make_mock_config_service()` 工厂；`_make` 注入 `config_service`；`_make_raw` 移除 `_runtime_config`/`_pure_mode`/`_reload_lock` 属性
+- `tests/test_services/test_engine.py`：27+ 处 `_runtime_config` 引用迁移为 `_config_service.get_runtime_config.return_value`；删除 `TestSwapRuntimeConfig`、`TestPureModeLockConsolidation`（已迁移至 test_config_service.py）；重写 `TestUpdateLogLevel`、`TestTogglePureMode`、`TestGetConfig` 为委托验证
+- `tests/test_integration/conftest.py`：创建真实 `ConfigService(profile_service)` 并传入 Engine
+- `tests/test_integration/test_full_mode.py`、`test_lightweight_mode.py`、`test_login_connection.py`、`test_login_integration_extended.py`、`test_login_flow.py`：`_ensure_login_config` 改用 `_config_service._swap()`；配置读取改用 `engine.get_runtime_config()`
+
+### 失败测试修复（Container 未注入 config_service — 预期行为）
+- `tests/test_app/test_application_logic.py`：3 个测试通过 `existing_container=mock_services` 传入 mock 避免创建真实 ServiceContainer
+  - `_make_app_with_ws`：mock `ws_manager.connect` 用 `AsyncMock(side_effect=_mock_connect)` 调用 `websocket.accept()`
+  - `test_lifespan_registers_signal_or_fallback`：`shutdown` 改为 `AsyncMock`
+- `tests/test_services/test_container_cleanup.py::test_lightweight_container_has_real_task_executor`：patch `ScheduleEngine` 以验证 `TaskExecutor` 仍为真实实例
+
+### 范围
+- Engine 公共 API 保持兼容（委托方法），Container 和 API 在 Task 3.3/3.4 修改
+- Container 创建 Engine 时未传 `config_service` 会触发 `ValueError`（预期，Task 3.3 修复）
+- 全量测试 2424 passed，0 failed

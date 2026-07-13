@@ -106,7 +106,14 @@ class ScriptRunner:
     _CMD_TEMPLATES: dict[str, list[str]] = {
         "py": [sys.executable, "{file}"],
         "bat": ["cmd.exe", "/c", "{file}"],
-        "ps1": ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "{file}"],
+        "ps1": [
+            "powershell.exe",
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            "{file}",
+        ],
         "sh": ["sh", "{file}"],
     }
 
