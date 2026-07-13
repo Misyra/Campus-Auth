@@ -21,7 +21,6 @@ def _make_mock_config_service(
     mock_cs.get_runtime_config.return_value = runtime_config or RuntimeConfig()
     mock_cs.pure_mode = pure_mode
     mock_cs.reload.return_value = True
-    mock_cs.update_log_level = MagicMock()
     mock_cs.toggle_pure_mode.return_value = True
     return mock_cs
 
