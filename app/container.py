@@ -206,11 +206,6 @@ class ServiceContainer:
 
         shutdown_probes()
 
-        # 关闭 scripts API 模块级 executor
-        from app.api.scripts import shutdown_script_executor
-
-        shutdown_script_executor()
-
         # 关闭浏览器任务执行器
         self._browser_task_executor.shutdown(wait=True, timeout=10)
 

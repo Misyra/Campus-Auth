@@ -2,12 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
-from concurrent.futures import ThreadPoolExecutor
-from unittest.mock import MagicMock, patch
-
-import pytest
-
 # ── 列出脚本 ──
 
 
@@ -140,108 +134,72 @@ class TestDeleteScript:
 
 
 class TestRunScript:
-    """POST /api/scripts/{task_id}/run"""
+    """POST /api/scripts/{task_id}/run
 
-    def test_run_script_success(self, api_client, tmp_path):
-        """运行存在的脚本成功。"""
+    Task 4.2：run_script 改用 TaskExecutor.run_script_on_demand + asyncio.to_thread，
+    不再使用模块级 _script_executor 线程池，不再构造 ScriptRunner。
+    """
+
+    def test_run_script_success(self, api_client):
+        """运行存在的脚本成功 — 通过 task_executor.run_script_on_demand 返回成功。"""
         test_client, mock_services = api_client
-        script_file = tmp_path / "test_script.sh"
-        script_file.write_text("echo hello", encoding="utf-8")
-
         mock_services.task_manager.get_task_detail.return_value = {
             "id": "script1",
             "name": "测试",
             "type": "py",
         }
-        mock_services.task_manager.get_script_path.return_value = script_file
+        mock_services.task_executor.run_script_on_demand.return_value = (
+            True,
+            "执行成功",
+        )
 
-        with patch("app.api.scripts.ScriptRunner") as MockRunner:
-            mock_runner = MagicMock()
-            mock_runner.run.return_value = (True, "执行成功")
-            MockRunner.return_value = mock_runner
-
-            resp = test_client.post("/api/scripts/script1/run")
+        resp = test_client.post("/api/scripts/script1/run")
 
         assert resp.status_code == 200
         assert resp.json()["success"] is True
+        assert resp.json()["message"] == "执行成功"
+        # 应调用 task_executor.run_script_on_demand 且不传 timeout（使用默认 None）
+        mock_services.task_executor.run_script_on_demand.assert_called_once_with(
+            "script1"
+        )
 
     def test_run_script_not_found(self, api_client):
-        """运行不存在的脚本返回 404。"""
+        """运行不存在的脚本返回 404 — task_mgr.get_task_detail 返回 None 触发。"""
         test_client, mock_services = api_client
         mock_services.task_manager.get_task_detail.return_value = None
         resp = test_client.post("/api/scripts/nonexistent/run")
         assert resp.status_code == 404
+        # 404 时不应调用 run_script_on_demand
+        mock_services.task_executor.run_script_on_demand.assert_not_called()
 
     def test_run_script_file_missing(self, api_client):
-        """脚本文件不存在时返回失败。"""
+        """脚本文件不存在时返回失败 — 由 run_script_on_demand 内部检查。"""
         test_client, mock_services = api_client
         mock_services.task_manager.get_task_detail.return_value = {
-            "id": "script1",
+            "id": "test_task",
             "name": "测试",
             "type": "py",
         }
-        mock_services.task_manager.get_script_path.return_value = None
-        resp = test_client.post("/api/scripts/script1/run")
+        # 模拟 _execute_script 内部检查脚本文件不存在时的返回
+        mock_services.task_executor.run_script_on_demand.return_value = (
+            False,
+            "脚本文件不存在: test_task",
+        )
+
+        resp = test_client.post("/api/scripts/test_task/run")
+
         assert resp.status_code == 200
         assert resp.json()["success"] is False
+        assert resp.json()["message"] == "脚本文件不存在: test_task"
 
-
-# ── 线程池验证 ──
-
-
-class TestScriptThreadPool:
-    """验证 run_script 使用专用线程池。"""
-
-    @pytest.mark.asyncio
-    async def test_run_script_uses_dedicated_executor(self):
-        """run_script 应使用专用 ThreadPoolExecutor 而非默认线程池。"""
-        from app.api.scripts import run_script
-
-        if hasattr(run_script, "_executor"):
-            delattr(run_script, "_executor")
-
-        captured_executor = {}
-        mock_task_mgr = MagicMock()
-        mock_task_mgr.get_task_detail.return_value = {
-            "type": "py",
+    def test_run_script_wrong_type(self, api_client):
+        """任务类型非脚本时返回 404 — 仍由 task_mgr 验证触发。"""
+        test_client, mock_services = api_client
+        mock_services.task_manager.get_task_detail.return_value = {
+            "id": "task1",
+            "name": "浏览器任务",
+            "type": "browser",
         }
-        mock_task_mgr.get_script_path.return_value = MagicMock(
-            exists=MagicMock(return_value=True)
-        )
-
-        # Task 3.4：run_script 改用 ConfigServiceDep.get_runtime_config
-        mock_config_svc = MagicMock()
-        mock_config_svc.get_runtime_config.return_value = MagicMock(
-            monitor=MagicMock(script_timeout=60)
-        )
-
-        async def mock_run_in_executor(executor, func):
-            captured_executor["executor"] = executor
-            return True, "mock success"
-
-        with (
-            patch("app.api.scripts.ScriptRunner") as mock_runner_cls,
-            patch.object(
-                asyncio.BaseEventLoop,
-                "run_in_executor",
-                side_effect=mock_run_in_executor,
-            ),
-        ):
-            mock_runner = MagicMock()
-            mock_runner_cls.return_value = mock_runner
-            result = await run_script("test_task", mock_task_mgr, mock_config_svc)
-
-        assert result.success is True
-        executor = captured_executor.get("executor")
-        assert executor is not None
-        assert isinstance(executor, ThreadPoolExecutor)
-        assert executor._thread_name_prefix == "script_api"
-
-    @pytest.mark.asyncio
-    async def test_executor_is_reused(self):
-        """模块级 executor 应存在并可复用。"""
-        from app.api.scripts import _script_executor
-
-        assert _script_executor is not None
-        assert isinstance(_script_executor, ThreadPoolExecutor)
-        assert _script_executor._thread_name_prefix == "script_api"
+        resp = test_client.post("/api/scripts/task1/run")
+        assert resp.status_code == 404
+        mock_services.task_executor.run_script_on_demand.assert_not_called()

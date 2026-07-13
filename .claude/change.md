@@ -5073,3 +5073,25 @@
 
 ### 范围
 - code quality review 的 MINOR + 2 个 SUGGESTION 修复
+
+## Task 4.2: api/scripts.py 删除模块级线程池 (2026-07-13)
+
+### 变更
+- `app/api/scripts.py`：
+  - 删除模块级 `_script_executor` 线程池和 `shutdown_script_executor` 函数
+  - `run_script` 端点改用 `TaskExecutorDep` + `asyncio.to_thread(task_executor.run_script_on_demand, task_id)`
+  - 移除 ScriptRunner 构造和 ConfigServiceDep 依赖（超时读取已迁入 run_script_on_demand）
+  - 保留 TaskManagerDep 仅用于 404 验证
+- `app/container.py`：删除 `shutdown_script_executor()` 调用
+
+### 测试
+- 删除 `tests/test_api/test_scripts.py`（模块级 executor 已消失，测试目标不存在）
+- `tests/test_api/test_api_scripts_routes.py`：
+  - 删除 `TestScriptThreadPool` 类
+  - `TestRunScript` 类 mock 改为 `task_executor.run_script_on_demand`
+  - 新增 `test_run_script_wrong_type` 浏览器任务类型 404 用例
+- 全量测试：2435 passed
+
+### 范围
+- 依赖 Task 4.1 的 `run_script_on_demand` 方法
+- 消除 API 层模块级线程池，统一由 TaskExecutor 管理脚本执行
