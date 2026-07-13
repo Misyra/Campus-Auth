@@ -148,18 +148,18 @@ class LoginOrchestrator:
     def __init__(
         self,
         worker_getter: Callable,
+        get_runtime_config: Callable[[], RuntimeConfig],
+        executor=None,
         login_history: LoginHistoryService | None = None,
         profile_service: ProfileService | None = None,
-        get_runtime_config: Callable[[], RuntimeConfig] | None = None,
-        executor=None,
     ) -> None:
         if executor is None:
             raise TypeError("executor 必传，不再支持自建 fallback pool")
         self._worker_getter = worker_getter
-        self._login_history = login_history
-        self._profile_service = profile_service
         self._get_runtime_config = get_runtime_config
         self._executor = executor
+        self._login_history = login_history
+        self._profile_service = profile_service
 
         # 去重槽（替代 task_executor._login_future + _login_cancel_event）
         self._slot_lock = threading.Condition(threading.Lock())
@@ -167,10 +167,6 @@ class LoginOrchestrator:
 
         # 网卡绑定代理 URL（由引擎在监控启动时通过 set_bind_proxy 设置）
         self._bind_proxy_url: str | None = None
-
-    def bind_runtime_config(self, getter: Callable[[], RuntimeConfig]) -> None:
-        """延迟绑定运行时配置获取器（用于解决 Engine 循环依赖）。"""
-        self._get_runtime_config = getter
 
     def set_bind_proxy(self, bind_proxy_url: str | None) -> None:
         """设置网卡绑定代理 URL（由引擎在监控启动时调用）。"""

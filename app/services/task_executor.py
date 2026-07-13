@@ -106,10 +106,10 @@ class TaskExecutor:
         registry: TaskRegistry,
         history_store: TaskHistoryStore,
         worker_getter: Callable,
+        get_runtime_config: Callable[[], RuntimeConfig],
         login_orchestrator: LoginOrchestrator | None = None,
         task_manager: TaskManager | None = None,
         browser_task_service: BrowserTaskService | None = None,
-        get_runtime_config: Callable[[], RuntimeConfig] | None = None,
     ) -> None:
         self._registry = registry
         self._history_store = history_store
@@ -146,10 +146,6 @@ class TaskExecutor:
     def login_executor(self) -> BoundedExecutor:
         """登录专用 BoundedExecutor（只读，供 container 注入 LoginOrchestrator）。"""
         return self._login_executor
-
-    def bind_runtime_config(self, getter: Callable[[], RuntimeConfig]) -> None:
-        """延迟绑定运行时配置获取器（用于解决 Engine 循环依赖）。"""
-        self._get_runtime_config = getter
 
     def bind_login_orchestrator(self, orchestrator: Any) -> None:
         """延迟绑定登录编排器（用于解决与 LoginOrchestrator 的循环依赖）。"""

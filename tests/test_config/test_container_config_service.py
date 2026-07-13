@@ -3,8 +3,8 @@
 覆盖：
 - Container 创建 ConfigService 实例
 - Container 将 config_service 注入 ScheduleEngine
-- login_orchestrator 绑定 config_service.get_runtime_config
-- task_executor 绑定 config_service.get_runtime_config
+- login_orchestrator 构造时注入 config_service.get_runtime_config
+- task_executor 构造时注入 config_service.get_runtime_config
 """
 
 from __future__ import annotations
@@ -39,7 +39,7 @@ def _patch_container_externals() -> Iterator[dict[str, MagicMock]]:
     """patch Container 的外部依赖（避免启动真实服务）。
 
     保留 ConfigService、LoginOrchestrator、TaskExecutor、ScheduleEngine 为真实实例，
-    以验证 bind_runtime_config 与 _config_service 注入行为。
+    以验证构造时注入 get_runtime_config 与 _config_service 注入行为。
 
     真实实例依赖：
     - ConfigService 需要 profile_service.load() / build_runtime_config() → mock 配置好返回值
@@ -111,19 +111,19 @@ class TestContainerConfigService:
             assert container.engine._config_service is container.config_service
 
     def test_login_orchestrator_binds_config_service(self, tmp_path: Path):
-        """login_orchestrator 应绑定 config_service.get_runtime_config。"""
+        """login_orchestrator 应在构造时注入 config_service.get_runtime_config。"""
         with _patch_container_externals():
             from app.container import ServiceContainer
 
             container = ServiceContainer(tmp_path)
-            # 绑定的 getter 应是 config_service.get_runtime_config（同一绑方法对象）
+            # 注入的 getter 应是 config_service.get_runtime_config（同一绑方法对象）
             assert (
                 container.login_orchestrator._get_runtime_config
                 == container.config_service.get_runtime_config
             )
 
     def test_task_executor_binds_config_service(self, tmp_path: Path):
-        """task_executor 应绑定 config_service.get_runtime_config。"""
+        """task_executor 应在构造时注入 config_service.get_runtime_config。"""
         with _patch_container_externals():
             from app.container import ServiceContainer
 
@@ -136,13 +136,24 @@ class TestContainerConfigService:
     def test_login_orchestrator_not_binds_engine_get_runtime_config(
         self, tmp_path: Path
     ):
-        """login_orchestrator 不应再绑定 engine.get_runtime_config（回归保护）。"""
+        """login_orchestrator 不应绑定 engine.get_runtime_config（回归保护）。"""
         with _patch_container_externals():
             from app.container import ServiceContainer
 
             container = ServiceContainer(tmp_path)
-            # engine.get_runtime_config 仍存在（向后兼容），但不应是 orchestrator 的绑定源
+            # engine.get_runtime_config 仍存在（向后兼容），但不应是 orchestrator 的注入源
             assert (
                 container.login_orchestrator._get_runtime_config
+                != container.engine.get_runtime_config
+            )
+
+    def test_task_executor_not_binds_engine_get_runtime_config(self, tmp_path: Path):
+        """task_executor 不应绑定 engine.get_runtime_config（回归保护，对称保护）。"""
+        with _patch_container_externals():
+            from app.container import ServiceContainer
+
+            container = ServiceContainer(tmp_path)
+            assert (
+                container.task_executor._get_runtime_config
                 != container.engine.get_runtime_config
             )

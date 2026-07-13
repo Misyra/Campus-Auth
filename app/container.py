@@ -64,11 +64,12 @@ class ServiceContainer:
             executor=self._browser_task_executor,
         )
 
-        # --- 创建 TaskExecutor（login_orchestrator 延迟绑定，打破循环依赖） ---
+        # --- 创建 TaskExecutor（get_runtime_config 构造时注入） ---
         self.task_executor = TaskExecutor(
             registry=self.task_registry,
             history_store=self.task_history_store,
             worker_getter=_get_worker,
+            get_runtime_config=self.config_service.get_runtime_config,
             task_manager=self.task_manager,
             browser_task_service=self.browser_task_service,
         )
@@ -78,6 +79,7 @@ class ServiceContainer:
 
         self.login_orchestrator = LoginOrchestrator(
             worker_getter=_get_worker,
+            get_runtime_config=self.config_service.get_runtime_config,
             executor=self.task_executor.login_executor,
             login_history=self.login_history_service,
             profile_service=self.profile_service,
@@ -106,12 +108,6 @@ class ServiceContainer:
             browser_task_service=self.browser_task_service,
             config_service=self.config_service,
         )
-
-        # --- 延迟绑定 get_runtime_config（config_service 现在存在） ---
-        self.login_orchestrator.bind_runtime_config(
-            self.config_service.get_runtime_config
-        )
-        self.task_executor.bind_runtime_config(self.config_service.get_runtime_config)
 
         self._ws_drain_task: asyncio.Task | None = None
         self._log_handler_id: int | None = None

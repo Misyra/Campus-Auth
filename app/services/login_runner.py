@@ -41,6 +41,7 @@ def execute_login_with_retries(runtime_config: RuntimeConfig, logger) -> LoginRe
     )
     orchestrator = LoginOrchestrator(
         worker_getter=get_worker,
+        get_runtime_config=profile_service.get_runtime_config,
         executor=one_shot_executor,
         login_history=history,
         profile_service=profile_service,

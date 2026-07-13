@@ -98,10 +98,12 @@ def integration_stack(tmp_path, mock_worker):
         registry=task_registry,
         history_store=task_history_store,
         worker_getter=lambda: mock_worker,
+        get_runtime_config=engine.get_runtime_config,
     )
 
     orchestrator = LoginOrchestrator(
         worker_getter=lambda: mock_worker,
+        get_runtime_config=engine.get_runtime_config,
         executor=task_executor.login_executor,
         login_history=login_history,
         profile_service=profile_service,
@@ -110,8 +112,6 @@ def integration_stack(tmp_path, mock_worker):
     # 构造器注入后绑定
     engine._orchestrator = orchestrator
     engine._task_executor = task_executor
-    orchestrator.bind_runtime_config(engine.get_runtime_config)
-    task_executor.bind_runtime_config(engine.get_runtime_config)
 
     # 启动引擎线程
     engine.boot()

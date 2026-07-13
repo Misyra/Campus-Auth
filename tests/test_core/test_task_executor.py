@@ -343,11 +343,18 @@ class TestStepHandlerBase:
 
     def test_parse_selectors(self):
         """逗号分隔选择器解析。"""
-        assert [s.strip() for s in "#a, #b, #c".split(",") if s.strip()] == ["#a", "#b", "#c"]
+        assert [s.strip() for s in "#a, #b, #c".split(",") if s.strip()] == [
+            "#a",
+            "#b",
+            "#c",
+        ]
 
     def test_parse_selectors_with_spaces(self):
         """逗号分隔选择器解析 — 去除空格。"""
-        assert [s.strip() for s in "  #a  ,  #b  ".split(",") if s.strip()] == ["#a", "#b"]
+        assert [s.strip() for s in "  #a  ,  #b  ".split(",") if s.strip()] == [
+            "#a",
+            "#b",
+        ]
 
     def test_parse_selectors_empty(self):
         """逗号分隔选择器解析 — 空字符串。"""
@@ -1023,6 +1030,7 @@ def test_execute_browser_uses_browser_task_service():
         registry=MagicMock(),
         history_store=MagicMock(),
         worker_getter=MagicMock(),
+        get_runtime_config=MagicMock(),
         task_manager=MagicMock(),
         browser_task_service=browser_svc,
     )

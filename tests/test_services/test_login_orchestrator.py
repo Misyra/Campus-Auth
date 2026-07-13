@@ -185,6 +185,7 @@ def orchestrator():
     worker = _make_slow_worker()
     return LoginOrchestrator(
         worker_getter=lambda: worker,
+        get_runtime_config=lambda: VALID_CONFIG,
         login_history=MagicMock(),
         profile_service=MagicMock(),
         executor=_make_mock_executor(),
@@ -315,6 +316,7 @@ class TestDispatchClearsCancelSources:
         worker = _make_mock_worker()
         orch = LoginOrchestrator(
             worker_getter=lambda: worker,
+            get_runtime_config=lambda: VALID_CONFIG,
             login_history=MagicMock(),
             profile_service=MagicMock(),
             executor=_make_mock_executor(),
@@ -459,6 +461,7 @@ class TestTimeoutCancelsEvent:
 
         orch = LoginOrchestrator(
             worker_getter=lambda: worker,
+            get_runtime_config=lambda: VALID_CONFIG,
             login_history=MagicMock(),
             profile_service=MagicMock(),
             executor=_make_mock_executor(),
@@ -477,6 +480,7 @@ class TestTimeoutCancelsEvent:
 
         orch = LoginOrchestrator(
             worker_getter=lambda: worker,
+            get_runtime_config=lambda: VALID_CONFIG,
             login_history=MagicMock(),
             profile_service=MagicMock(),
             executor=_make_mock_executor(),
@@ -494,6 +498,7 @@ class TestTimeoutCancelsEvent:
 
         orch = LoginOrchestrator(
             worker_getter=lambda: worker,
+            get_runtime_config=lambda: VALID_CONFIG,
             login_history=MagicMock(),
             profile_service=MagicMock(),
             executor=_make_mock_executor(),
@@ -517,6 +522,7 @@ class TestTaskExecutorLoginExecutor:
             registry=MagicMock(),
             history_store=MagicMock(),
             worker_getter=lambda: None,
+            get_runtime_config=MagicMock(),
             login_orchestrator=MagicMock(),
         )
         # login_executor 应返回 BoundedExecutor 实例
@@ -531,28 +537,46 @@ class TestExecutorRequired:
     def test_no_executor_raises(self):
         """未传 executor 时应直接报错，不再静默自建 pool。"""
         with pytest.raises(TypeError, match="executor"):
-            LoginOrchestrator(worker_getter=lambda: None)
+            LoginOrchestrator(
+                worker_getter=lambda: None, get_runtime_config=lambda: VALID_CONFIG
+            )
 
     def test_executor_stored(self):
         """传入的 executor 应被保存为 _executor。"""
         mock_exec = MagicMock()
-        orch = LoginOrchestrator(worker_getter=lambda: None, executor=mock_exec)
+        orch = LoginOrchestrator(
+            worker_getter=lambda: None,
+            get_runtime_config=lambda: VALID_CONFIG,
+            executor=mock_exec,
+        )
         assert orch._executor is mock_exec
 
     def test_no_set_executor_method(self):
         """set_executor 应已被移除。"""
-        orch = LoginOrchestrator(worker_getter=lambda: None, executor=MagicMock())
+        orch = LoginOrchestrator(
+            worker_getter=lambda: None,
+            get_runtime_config=lambda: VALID_CONFIG,
+            executor=MagicMock(),
+        )
         assert not hasattr(orch, "set_executor")
 
     def test_no_pool_attribute(self):
         """_pool 字段应已移除。"""
-        orch = LoginOrchestrator(worker_getter=lambda: None, executor=MagicMock())
+        orch = LoginOrchestrator(
+            worker_getter=lambda: None,
+            get_runtime_config=lambda: VALID_CONFIG,
+            executor=MagicMock(),
+        )
         assert not hasattr(orch, "_pool")
 
     def test_shutdown_does_not_close_external_executor(self):
         """shutdown 不应关闭外部 executor（由调用方管理）。"""
         mock_exec = MagicMock()
-        orch = LoginOrchestrator(worker_getter=lambda: None, executor=mock_exec)
+        orch = LoginOrchestrator(
+            worker_getter=lambda: None,
+            get_runtime_config=lambda: VALID_CONFIG,
+            executor=mock_exec,
+        )
         orch.shutdown(wait=False)
         mock_exec.shutdown.assert_not_called()
 

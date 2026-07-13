@@ -59,6 +59,7 @@ class TestBrowserTaskIdInjection:
             registry=registry,
             history_store=history_store,
             worker_getter=lambda: None,
+            get_runtime_config=lambda: RuntimeConfig(),
             login_orchestrator=MagicMock(),
             task_manager=mock_task_manager,
             browser_task_service=mock_browser_svc,
@@ -72,7 +73,7 @@ class TestBrowserTaskIdInjection:
 
         # 模拟全局配置的 active_task 是 "default"
         mock_config = RuntimeConfig()
-        executor.bind_runtime_config(lambda: mock_config)
+        executor._get_runtime_config = lambda: mock_config
 
         # 执行浏览器定时任务
         executor._execute_browser("test_browser_task", timeout=60)
@@ -92,7 +93,7 @@ class TestBrowserTaskIdInjection:
 
         # 模拟全局配置的 active_task 已经是目标任务
         mock_config = RuntimeConfig(active_task="test_browser_task")
-        executor.bind_runtime_config(lambda: mock_config)
+        executor._get_runtime_config = lambda: mock_config
 
         executor._execute_browser("test_browser_task", timeout=60)
 

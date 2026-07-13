@@ -4988,3 +4988,13 @@
 - ConfigService 为运行时配置的唯一持有者，login_orchestrator 与 task_executor 不再经 Engine 间接读取配置
 - API 改用 ConfigServiceDep 在 Task 3.4 完成
 - 全量测试 2430 passed（2424 既有 + 6 新增），0 failed
+
+### Code Quality Review 修复 (M1)
+- 彻底删除 login_orchestrator 和 task_executor 的 `bind_runtime_config` 延迟绑定方法
+- `get_runtime_config` 参数改为必传，在构造时直接注入（移除 `| None = None` 默认值）
+- 更新 docstring（移除"用于解决 Engine 循环依赖"的过时说明）
+- `app/container.py`：TaskExecutor 和 LoginOrchestrator 构造时直接传入 `get_runtime_config=self.config_service.get_runtime_config`，删除延迟绑定调用与"延迟绑定"注释
+- `app/services/login_runner.py`：LoginOrchestrator 构造时传入 `get_runtime_config=profile_service.get_runtime_config`
+- 补充 `test_task_executor_not_binds_engine_get_runtime_config` 回归保护测试（对称保护）
+- 将 `test_bind_runtime_config` 测试替换为 `test_constructor_injects_get_runtime_config`
+- 全量测试 2431 passed（2430 既有 + 1 新增），0 failed

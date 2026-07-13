@@ -36,6 +36,7 @@ class TestTaskPoolLazyInit:
             registry=registry,
             history_store=history_store,
             worker_getter=MagicMock(),
+            get_runtime_config=MagicMock(),
             login_orchestrator=MagicMock(),
         )
         assert executor._task_pool is None
@@ -55,6 +56,7 @@ class TestTaskPoolLazyInit:
             registry=registry,
             history_store=history_store,
             worker_getter=MagicMock(),
+            get_runtime_config=MagicMock(),
             login_orchestrator=MagicMock(),
         )
         assert executor._task_pool is None
@@ -76,6 +78,7 @@ class TestTaskPoolLazyInit:
             registry=registry,
             history_store=history_store,
             worker_getter=MagicMock(),
+            get_runtime_config=MagicMock(),
             login_orchestrator=MagicMock(),
         )
         assert executor._task_pool is None
@@ -93,6 +96,7 @@ class TestTaskPoolLazyInit:
             registry=registry,
             history_store=history_store,
             worker_getter=MagicMock(),
+            get_runtime_config=MagicMock(),
             login_orchestrator=mock_orchestrator,
         )
         # 手动触发 _task_pool 创建
@@ -114,6 +118,7 @@ class TestTaskPoolLazyInit:
             registry=MagicMock(),
             history_store=MagicMock(),
             worker_getter=MagicMock(),
+            get_runtime_config=MagicMock(),
             login_orchestrator=MagicMock(),
         )
         pool1 = executor._ensure_task_pool()
@@ -128,6 +133,7 @@ class TestTaskPoolLazyInit:
             registry=MagicMock(),
             history_store=MagicMock(),
             worker_getter=MagicMock(),
+            get_runtime_config=MagicMock(),
             login_orchestrator=MagicMock(),
         )
 
@@ -245,6 +251,7 @@ class TestTaskExecutorCRUD:
             registry=MagicMock(),
             history_store=MagicMock(),
             worker_getter=MagicMock(),
+            get_runtime_config=MagicMock(),
             login_orchestrator=MagicMock(),
         )
         defaults.update(kwargs)
@@ -277,13 +284,14 @@ class TestTaskExecutorCRUD:
         assert success is False
         executor._history_store.delete_history.assert_not_called()
 
-    def test_bind_runtime_config(self):
+    def test_constructor_injects_get_runtime_config(self):
+        """get_runtime_config 应通过构造器注入（不再支持延迟绑定）。"""
         executor = self._make_executor()
 
         def getter():
             return {"key": "value"}
 
-        executor.bind_runtime_config(getter)
+        executor = self._make_executor(get_runtime_config=getter)
         assert executor._get_runtime_config is getter
 
 
@@ -302,6 +310,7 @@ class TestTaskExecutorExecuteTask:
             registry=MagicMock(),
             history_store=MagicMock(),
             worker_getter=MagicMock(),
+            get_runtime_config=MagicMock(),
             login_orchestrator=MagicMock(),
         )
         defaults.update(kwargs)
@@ -351,7 +360,6 @@ class TestTaskExecutorExecuteTask:
         success, msg = executor.execute_task("t1")
         assert success is True
         executor._execute_browser.assert_called_once_with("b1", 60, None)
-
 
     def test_exception_during_execution(self):
         """执行异常应被捕获并记录。"""
@@ -414,6 +422,7 @@ class TestTaskExecutorExecuteScript:
             registry=MagicMock(),
             history_store=MagicMock(),
             worker_getter=MagicMock(),
+            get_runtime_config=MagicMock(),
             login_orchestrator=MagicMock(),
             task_manager=mock_tm,
         )
@@ -460,6 +469,7 @@ class TestTaskExecutorExecuteBrowser:
             registry=MagicMock(),
             history_store=MagicMock(),
             worker_getter=MagicMock(),
+            get_runtime_config=MagicMock(),
             login_orchestrator=MagicMock(),
             task_manager=MagicMock(),
             browser_task_service=MagicMock(),
@@ -616,6 +626,7 @@ class TestIsLoginRunning:
             registry=MagicMock(),
             history_store=MagicMock(),
             worker_getter=MagicMock(),
+            get_runtime_config=MagicMock(),
             login_orchestrator=mock_orchestrator,
         )
         assert executor.is_login_running() is False
@@ -632,6 +643,7 @@ class TestIsLoginRunning:
             registry=MagicMock(),
             history_store=MagicMock(),
             worker_getter=MagicMock(),
+            get_runtime_config=MagicMock(),
             login_orchestrator=mock_orchestrator,
         )
         assert executor.is_login_running() is True
@@ -652,6 +664,7 @@ class TestTaskExecutorTaskAsync:
             registry=MagicMock(),
             history_store=MagicMock(),
             worker_getter=MagicMock(),
+            get_runtime_config=MagicMock(),
             login_orchestrator=MagicMock(),
         )
         executor.execute_task = lambda task_id, cancel_event=None: (True, "ok")
@@ -669,6 +682,7 @@ class TestTaskExecutorTaskAsync:
             registry=MagicMock(),
             history_store=MagicMock(),
             worker_getter=MagicMock(),
+            get_runtime_config=MagicMock(),
             login_orchestrator=MagicMock(),
         )
         assert executor._task_pool is None
@@ -691,6 +705,7 @@ class TestTaskExecutorTaskAsync:
             registry=MagicMock(),
             history_store=MagicMock(),
             worker_getter=MagicMock(),
+            get_runtime_config=MagicMock(),
             login_orchestrator=MagicMock(),
         )
         executor.execute_task = slow_task
@@ -717,6 +732,7 @@ class TestTaskExecutorTaskAsync:
             registry=MagicMock(),
             history_store=MagicMock(),
             worker_getter=MagicMock(),
+            get_runtime_config=MagicMock(),
             login_orchestrator=MagicMock(),
         )
         executor.execute_task = counting_task
@@ -744,6 +760,7 @@ class TestTaskExecutorTaskAsync:
             registry=MagicMock(),
             history_store=MagicMock(),
             worker_getter=MagicMock(),
+            get_runtime_config=MagicMock(),
             login_orchestrator=MagicMock(),
         )
         executor.execute_task = slow_task
@@ -771,6 +788,7 @@ class TestTaskExecutorTaskAsync:
             registry=MagicMock(),
             history_store=MagicMock(),
             worker_getter=MagicMock(),
+            get_runtime_config=MagicMock(),
             login_orchestrator=MagicMock(),
         )
         executor.execute_task = slow_task
@@ -793,6 +811,7 @@ class TestTaskExecutorTaskAsync:
             registry=MagicMock(),
             history_store=MagicMock(),
             worker_getter=MagicMock(),
+            get_runtime_config=MagicMock(),
             login_orchestrator=MagicMock(),
         )
         executor.execute_task = lambda task_id: (True, "ok")
