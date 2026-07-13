@@ -3,6 +3,16 @@
 
 ## 2026-07-13
 
+### test: 阶段 1 集成验证
+
+- 完整测试套件通过：2389 passed, 0 failed
+- 集成测试子集通过：browser_task_service / login_orchestrator / task_executor_lifecycle / playwright_worker / test_integration（229 passed）
+- 死代码扫描：app/ 目录下无 `source="browser"` 调用、`source != "browser"` 分支、`source == "browser"` 分支残留
+- 端到端委托链路验证：_execute_browser → BrowserTaskService.submit_task → Worker CMD_BROWSER → _handle_browser_task → BrowserTaskRunner.execute → finally close_browser
+- LoginSource Literal 仅含 "auto" | "manual" | "login_once"
+- Ruff 检查全部通过
+- 阶段 1 交付物：BrowserTaskService 独立服务、LoginOrchestrator 移除死代码、Container 完整注入
+
 ### refactor: LoginOrchestrator 移除 source=browser 死代码分支
 
 - `app/services/login_orchestrator.py`：
