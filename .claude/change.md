@@ -5095,3 +5095,25 @@
 ### 范围
 - 依赖 Task 4.1 的 `run_script_on_demand` 方法
 - 消除 API 层模块级线程池，统一由 TaskExecutor 管理脚本执行
+
+## Task 4.3: login_runner 改用 Container (2026-07-13)
+
+### 变更
+- `app/services/login_runner.py`：
+  - `execute_login_with_retries` 和 `run_login_then_exit` 新增 container 参数
+  - 移除自建 LoginOrchestrator + LoginHistoryService + ThreadPoolExecutor
+  - 改用 container.login_orchestrator 和 container.config_service
+  - 删除 finally 中的 shutdown（交给 Container）
+- `app/services/launcher.py`：
+  - launch_server 提前创建 Container 并透传
+  - handle_startup_action、launch_lightweight、launch_full 接受 container 参数
+  - login_once 退出时调用 shutdown_container
+
+### 测试
+- 修改 test_login_once_mode.py、test_main.py、test_login_integration_extended.py、test_boot_engine_flag.py
+- mock 模式从 patch 全局工厂改为注入 container
+- 全量测试：2435 passed
+
+### 范围
+- 消除 login_runner 的自建组件，统一由 Container 管理服务生命周期
+- 调整启动时序，Container 在 handle_startup_action 之前创建

@@ -9,14 +9,37 @@ import os
 import signal
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from app.schemas import LoginCredentials, LoginResult, RetrySettings, RuntimeConfig
+from app.services.login_orchestrator import LoginOrchestrator
+from app.services.worker_port import WorkerResponse
 
 _TEST_CREDS = LoginCredentials(username="u", password="p", auth_url="http://x")
+
+
+def _build_login_container(runtime_config: RuntimeConfig, mock_worker):
+    """构造测试 container，注入真实 LoginOrchestrator + mock worker。
+
+    返回 (container, executor)，调用方负责 executor.shutdown。
+    """
+    executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="test-login")
+    orchestrator = LoginOrchestrator(
+        worker_getter=lambda: mock_worker,
+        get_runtime_config=lambda: runtime_config,
+        executor=executor,
+        login_history=None,
+        profile_service=MagicMock(),
+    )
+    container = MagicMock()
+    container.config_service.get_runtime_config.return_value = runtime_config
+    container.login_orchestrator = orchestrator
+    return container, executor
+
 
 # ══════════════════════════════════════════════════════════════════════
 #  辅助工具
@@ -449,41 +472,25 @@ class TestCmdAutostart:
 class TestRunLoginThenExit:
     """_run_login_then_exit — 成功/重试/耗尽。"""
 
-    def _make_mocks(self):
-        """创建通用 mock 对象。"""
-        mock_worker = MagicMock()
-        mock_ps = MagicMock()
-        mock_data = MagicMock()
-        mock_data.system = MagicMock()
-        return mock_worker, mock_ps, mock_data
-
     def test_success_first_try(self, tmp_pid_dir):
         """首次登录成功应返回 SUCCESS。"""
         from app.services.login_runner import (
             run_login_then_exit as _run_login_then_exit,
         )
 
-        mock_worker, mock_ps, mock_data = self._make_mocks()
-        success_result = MagicMock(success=True, data="ok")
-        mock_worker.submit.return_value = success_result
-
-        # 所有 local import 需要 patch 到源模块
-        mock_ps.get_runtime_config.return_value = RuntimeConfig(
+        mock_worker = MagicMock()
+        mock_worker.submit.return_value = WorkerResponse(success=True, data="ok")
+        runtime_config = RuntimeConfig(
             credentials=_TEST_CREDS, retry=RetrySettings(max_retries=3)
         )
-        with (
-            patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
-            patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
-            patch(
-                "app.services.profile_service.get_profile_service",
-                return_value=mock_ps,
-            ),
-            patch("app.workers.playwright_worker.cleanup_orphan_browsers"),
-        ):
-            mock_ps.load.return_value = mock_data
-            mock_ctx = MagicMock()
-            result = _run_login_then_exit(mock_ctx, MagicMock())
-            assert result == LoginResult.SUCCESS
+        container, executor = _build_login_container(runtime_config, mock_worker)
+        try:
+            with patch("app.services.worker_port.cleanup_orphan_browsers"):
+                mock_ctx = MagicMock()
+                result = _run_login_then_exit(mock_ctx, container, MagicMock())
+                assert result == LoginResult.SUCCESS
+        finally:
+            executor.shutdown(wait=True)
 
     def test_retries_exhausted(self, tmp_pid_dir):
         """单次提交失败，返回 TEMPORARY_FAILURE。"""
@@ -491,36 +498,31 @@ class TestRunLoginThenExit:
             run_login_then_exit as _run_login_then_exit,
         )
 
-        mock_worker, mock_ps, mock_data = self._make_mocks()
-        fail_result = MagicMock(success=False, error="timeout")
-        mock_worker.submit.return_value = fail_result
-
-        mock_ps.get_runtime_config.return_value = RuntimeConfig(
+        mock_worker = MagicMock()
+        mock_worker.submit.return_value = WorkerResponse(success=False, error="timeout")
+        runtime_config = RuntimeConfig(
             credentials=_TEST_CREDS,
             retry=RetrySettings(max_retries=2, retry_interval=1),
         )
-        with (
-            patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
-            patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
-            patch(
-                "app.services.profile_service.get_profile_service",
-                return_value=mock_ps,
-            ),
-            patch(
-                "app.network.decision.check_network_status",
-                new=AsyncMock(return_value=(False, "network_down", "none")),
-            ),
-            patch("app.workers.playwright_worker.cleanup_orphan_browsers"),
-        ):
-            mock_ps.load.return_value = mock_data
-            mock_ctx = MagicMock()
-            mock_logger = MagicMock()
-            result = _run_login_then_exit(mock_ctx, mock_logger)
-            assert result == LoginResult.TEMPORARY_FAILURE
-            # 单次失败记一次 warning
-            mock_logger.warning.assert_called()
-            last_call = mock_logger.warning.call_args
-            assert "登录失败" in last_call.args[0]
+        container, executor = _build_login_container(runtime_config, mock_worker)
+        try:
+            with (
+                patch(
+                    "app.network.decision.check_network_status",
+                    new=AsyncMock(return_value=(False, "network_down", "none")),
+                ),
+                patch("app.services.worker_port.cleanup_orphan_browsers"),
+            ):
+                mock_ctx = MagicMock()
+                mock_logger = MagicMock()
+                result = _run_login_then_exit(mock_ctx, container, mock_logger)
+                assert result == LoginResult.TEMPORARY_FAILURE
+                # 单次失败记一次 warning
+                mock_logger.warning.assert_called()
+                last_call = mock_logger.warning.call_args
+                assert "登录失败" in last_call.args[0]
+        finally:
+            executor.shutdown(wait=True)
 
     def test_network_already_connected_exits(self, tmp_pid_dir):
         """网络已连接时应返回 SUCCESS，不启动浏览器登录。"""
@@ -528,29 +530,24 @@ class TestRunLoginThenExit:
             run_login_then_exit as _run_login_then_exit,
         )
 
-        mock_worker, mock_ps, mock_data = self._make_mocks()
-
-        mock_ps.get_runtime_config.return_value = RuntimeConfig(
+        mock_worker = MagicMock()
+        mock_worker.submit.return_value = WorkerResponse(success=True, data="ok")
+        runtime_config = RuntimeConfig(
             credentials=_TEST_CREDS, retry=RetrySettings(max_retries=3)
         )
-        with (
-            patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
-            patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
-            patch(
-                "app.services.profile_service.get_profile_service",
-                return_value=mock_ps,
-            ),
-            patch(
+        container, executor = _build_login_container(runtime_config, mock_worker)
+        try:
+            with patch(
                 "app.network.decision.check_network_status",
                 new=AsyncMock(return_value=(True, "network_ok", "tcp")),
-            ),
-        ):
-            mock_ps.load.return_value = mock_data
-            mock_ctx = MagicMock()
-            result = _run_login_then_exit(mock_ctx, MagicMock())
-            assert result == LoginResult.SUCCESS
-            # 不应调用登录
-            mock_worker.submit.assert_not_called()
+            ):
+                mock_ctx = MagicMock()
+                result = _run_login_then_exit(mock_ctx, container, MagicMock())
+                assert result == LoginResult.SUCCESS
+                # 不应调用登录
+                mock_worker.submit.assert_not_called()
+        finally:
+            executor.shutdown(wait=True)
 
     def test_network_down_proceeds_with_login(self, tmp_pid_dir):
         """网络未连接时应继续尝试登录，返回 SUCCESS。"""
@@ -558,31 +555,26 @@ class TestRunLoginThenExit:
             run_login_then_exit as _run_login_then_exit,
         )
 
-        mock_worker, mock_ps, mock_data = self._make_mocks()
-        success_result = MagicMock(success=True, data="ok")
-        mock_worker.submit.return_value = success_result
-
-        mock_ps.get_runtime_config.return_value = RuntimeConfig(
+        mock_worker = MagicMock()
+        mock_worker.submit.return_value = WorkerResponse(success=True, data="ok")
+        runtime_config = RuntimeConfig(
             credentials=_TEST_CREDS, retry=RetrySettings(max_retries=3)
         )
-        with (
-            patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
-            patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
-            patch(
-                "app.services.profile_service.get_profile_service",
-                return_value=mock_ps,
-            ),
-            patch(
-                "app.network.decision.check_network_status",
-                new=AsyncMock(return_value=(False, "network_down", "none")),
-            ),
-            patch("app.workers.playwright_worker.cleanup_orphan_browsers"),
-        ):
-            mock_ps.load.return_value = mock_data
-            mock_ctx = MagicMock()
-            result = _run_login_then_exit(mock_ctx, MagicMock())
-            assert result == LoginResult.SUCCESS
-            mock_worker.submit.assert_called_once()
+        container, executor = _build_login_container(runtime_config, mock_worker)
+        try:
+            with (
+                patch(
+                    "app.network.decision.check_network_status",
+                    new=AsyncMock(return_value=(False, "network_down", "none")),
+                ),
+                patch("app.services.worker_port.cleanup_orphan_browsers"),
+            ):
+                mock_ctx = MagicMock()
+                result = _run_login_then_exit(mock_ctx, container, MagicMock())
+                assert result == LoginResult.SUCCESS
+                mock_worker.submit.assert_called_once()
+        finally:
+            executor.shutdown(wait=True)
 
     def test_network_check_exception_proceeds(self, tmp_pid_dir):
         """网络检测异常时应降级继续尝试登录，返回 SUCCESS。"""
@@ -590,31 +582,26 @@ class TestRunLoginThenExit:
             run_login_then_exit as _run_login_then_exit,
         )
 
-        mock_worker, mock_ps, mock_data = self._make_mocks()
-        success_result = MagicMock(success=True, data="ok")
-        mock_worker.submit.return_value = success_result
-
-        mock_ps.get_runtime_config.return_value = RuntimeConfig(
+        mock_worker = MagicMock()
+        mock_worker.submit.return_value = WorkerResponse(success=True, data="ok")
+        runtime_config = RuntimeConfig(
             credentials=_TEST_CREDS, retry=RetrySettings(max_retries=3)
         )
-        with (
-            patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
-            patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
-            patch(
-                "app.services.profile_service.get_profile_service",
-                return_value=mock_ps,
-            ),
-            patch(
-                "app.network.decision.check_network_status",
-                side_effect=RuntimeError("probe failed"),
-            ),
-            patch("app.workers.playwright_worker.cleanup_orphan_browsers"),
-        ):
-            mock_ps.load.return_value = mock_data
-            mock_ctx = MagicMock()
-            result = _run_login_then_exit(mock_ctx, MagicMock())
-            assert result == LoginResult.SUCCESS
-            mock_worker.submit.assert_called_once()
+        container, executor = _build_login_container(runtime_config, mock_worker)
+        try:
+            with (
+                patch(
+                    "app.network.decision.check_network_status",
+                    side_effect=RuntimeError("probe failed"),
+                ),
+                patch("app.services.worker_port.cleanup_orphan_browsers"),
+            ):
+                mock_ctx = MagicMock()
+                result = _run_login_then_exit(mock_ctx, container, MagicMock())
+                assert result == LoginResult.SUCCESS
+                mock_worker.submit.assert_called_once()
+        finally:
+            executor.shutdown(wait=True)
 
 
 class TestLoginOnceRetryInterval:
@@ -627,8 +614,7 @@ class TestLoginOnceRetryInterval:
         )
 
         mock_worker = MagicMock()
-        success_result = MagicMock(success=True, data="ok")
-        mock_worker.submit.return_value = success_result
+        mock_worker.submit.return_value = WorkerResponse(success=True, data="ok")
 
         from app.schemas import BrowserSettings
 
@@ -638,18 +624,15 @@ class TestLoginOnceRetryInterval:
             browser=BrowserSettings(login_timeout=200),
         )
 
-        with (
-            patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
-            patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
-            patch("app.services.profile_service.ProfileService"),
-            patch("app.services.login_history_service.LoginHistoryService"),
-            patch("app.constants.AUTH_DATA_DIR", tmp_pid_dir),
-            patch("app.workers.playwright_worker.cleanup_orphan_browsers"),
-        ):
-            _execute_login_with_retries(runtime_config, MagicMock())
-            mock_worker.submit.assert_called_once()
-            call_kwargs = mock_worker.submit.call_args
-            assert call_kwargs.kwargs["timeout"] == 200
+        container, executor = _build_login_container(runtime_config, mock_worker)
+        try:
+            with patch("app.services.worker_port.cleanup_orphan_browsers"):
+                _execute_login_with_retries(runtime_config, container, MagicMock())
+                mock_worker.submit.assert_called_once()
+                call_kwargs = mock_worker.submit.call_args
+                assert call_kwargs.kwargs["timeout"] == 200
+        finally:
+            executor.shutdown(wait=True)
 
     def test_login_timeout_default(self, tmp_pid_dir):
         """配置中无 login_timeout 时由 Orchestrator 兜底（resolve_worker_timeout fallback=300）。"""
@@ -658,23 +641,21 @@ class TestLoginOnceRetryInterval:
         )
 
         mock_worker = MagicMock()
-        success_result = MagicMock(success=True, data="ok")
-        mock_worker.submit.return_value = success_result
+        mock_worker.submit.return_value = WorkerResponse(success=True, data="ok")
 
         runtime_config = RuntimeConfig(
             credentials=_TEST_CREDS, retry=RetrySettings(max_retries=1)
         )
 
-        with (
-            patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
-            patch("app.workers.playwright_worker.CMD_LOGIN", "login"),
-            patch("app.services.profile_service.ProfileService"),
-            patch("app.services.login_history_service.LoginHistoryService"),
-            patch("app.constants.AUTH_DATA_DIR", tmp_pid_dir),
-            patch("app.workers.playwright_worker.cleanup_orphan_browsers"),
-        ):
-            result = _execute_login_with_retries(runtime_config, MagicMock())
-            assert result == LoginResult.SUCCESS
+        container, executor = _build_login_container(runtime_config, mock_worker)
+        try:
+            with patch("app.services.worker_port.cleanup_orphan_browsers"):
+                result = _execute_login_with_retries(
+                    runtime_config, container, MagicMock()
+                )
+                assert result == LoginResult.SUCCESS
+        finally:
+            executor.shutdown(wait=True)
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -1218,14 +1199,10 @@ class TestLoginOnceAllDisabled:
             run_login_then_exit as _run_login_then_exit,
         )
 
-        mock_ps = MagicMock()
-        mock_ps.get_runtime_config.return_value = RuntimeConfig()
+        container = MagicMock()
+        container.config_service.get_runtime_config.return_value = RuntimeConfig()
 
         with (
-            patch(
-                "app.services.profile_service.get_profile_service",
-                return_value=mock_ps,
-            ),
             patch(
                 "app.network.decision.check_network_status", new_callable=AsyncMock
             ) as mock_check,
@@ -1233,7 +1210,7 @@ class TestLoginOnceAllDisabled:
         ):
             mock_check.return_value = (False, "all_disabled", "none")
 
-            result = _run_login_then_exit(None, MagicMock())
+            result = _run_login_then_exit(None, container, MagicMock())
             assert result == LoginResult.SUCCESS
             mock_exec.assert_not_called()
 

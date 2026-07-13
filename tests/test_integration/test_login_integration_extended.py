@@ -338,9 +338,8 @@ class TestLoginOnceRetry:
     """LOGIN_ONCE 模式重试逻辑：_execute_login_with_retries 直接测试。"""
 
     def test_execute_login_with_retries_success(self, integration_stack):
-        engine, _, _, _, _ = integration_stack
+        engine, _, _, _, mock_worker = integration_stack
         _ensure_login_config(engine)
-        mock_worker = MagicMock()
         mock_worker.submit.return_value = WorkerResponse(success=True, data="登录成功")
         from app.schemas import RetrySettings
 
@@ -348,24 +347,23 @@ class TestLoginOnceRetry:
             update={"retry": RetrySettings(max_retries=3, retry_interval=1)}
         )
 
-        with (
-            patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
-            patch("app.workers.playwright_worker.cleanup_orphan_browsers"),
-        ):
+        container = MagicMock()
+        container.login_orchestrator = engine._orchestrator
+
+        with patch("app.services.worker_port.cleanup_orphan_browsers"):
             from app.schemas import LoginResult
             from app.services.login_runner import (
                 execute_login_with_retries as _execute_login_with_retries,
             )
 
-            result = _execute_login_with_retries(runtime_config, MagicMock())
+            result = _execute_login_with_retries(runtime_config, container, MagicMock())
 
         assert result == LoginResult.SUCCESS
         mock_worker.submit.assert_called_once()
 
     def test_execute_login_with_retries_exhausted(self, integration_stack):
-        engine, _, _, _, _ = integration_stack
+        engine, _, _, _, mock_worker = integration_stack
         _ensure_login_config(engine)
-        mock_worker = MagicMock()
         mock_worker.submit.return_value = WorkerResponse(success=False, error="超时")
         from app.schemas import RetrySettings
 
@@ -373,16 +371,16 @@ class TestLoginOnceRetry:
             update={"retry": RetrySettings(max_retries=2, retry_interval=1)}
         )
 
-        with (
-            patch("app.workers.playwright_worker.get_worker", return_value=mock_worker),
-            patch("app.workers.playwright_worker.cleanup_orphan_browsers"),
-        ):
+        container = MagicMock()
+        container.login_orchestrator = engine._orchestrator
+
+        with patch("app.services.worker_port.cleanup_orphan_browsers"):
             from app.schemas import LoginResult
             from app.services.login_runner import (
                 execute_login_with_retries as _execute_login_with_retries,
             )
 
-            result = _execute_login_with_retries(runtime_config, MagicMock())
+            result = _execute_login_with_retries(runtime_config, container, MagicMock())
 
         assert result == LoginResult.TEMPORARY_FAILURE
         # 单次 submit（重试由 LoginSession 内部负责）
