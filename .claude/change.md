@@ -4916,3 +4916,20 @@
 
 - `app/container.py`：`stop_web_services()` 中 await `_ws_drain_task` 前检查 `task.get_loop() is asyncio.get_running_loop()`，不同循环时跳过 await 仅置空引用，避免 Python 3.12+ 跨循环 await 抛 RuntimeError
 - `tests/test_config/test_container.py`：新增 `test_shutdown_handles_cross_loop_ws_drain_task` 测试（独立线程创建事件循环和 task，从当前循环调用 shutdown 验证无 RuntimeError）
+
+## Task 3.1: 新建 ConfigService (2026-07-13)
+
+### 变更
+- 新增 `app/services/config_service.py`：ConfigService 类，承担 Engine 的配置管理职责
+  - 持有 frozen RuntimeConfig 引用，原子替换（_swap）
+  - pure_mode 状态管理（property + toggle_pure_mode）
+  - update_log_level 原子更新日志级别
+  - reload 从 profile_service.load() 重建配置
+- 新增 `tests/test_services/test_config_service.py`：17 个测试覆盖初始化、获取配置、纯净模式、日志级别、重载、线程安全
+  - 覆盖原命名不一致的旧文件（原文件测试 build_runtime_config，与 test_config_builder.py 重复）
+
+### 范围
+- 仅创建 ConfigService 和测试，不修改 Engine/Container/API
+- Engine 的配置管理职责将在 Task 3.2 移除
+- Container 注入将在 Task 3.3 完成
+- API 改用 ConfigServiceDep 在 Task 3.4 完成
