@@ -18,6 +18,7 @@ from concurrent.futures import CancelledError, Future
 from dataclasses import dataclass
 from typing import Any
 
+from app.constants import WORKER_SUBMIT_TIMEOUT
 from app.utils.cancel_token import CompositeCancelEvent
 from app.utils.logging import get_logger
 
@@ -52,6 +53,18 @@ class BrowserTaskHandle:
         self.cancel_event.set()
 
 
+# ── 哨兵 ──
+
+# submit_task() 锁外 dispatch 时的占位哨兵，防止并发重复提交。
+# future=None 不代表"无任务"，而是标记此句柄为占位符（非真实 Future），
+# 通过 `is _DISPATCHING` 身份检查区分，不依赖 None 语义。
+_DISPATCHING = BrowserTaskHandle(
+    future=None,
+    cancel_event=CompositeCancelEvent(),
+    rejected_reason="__dispatching__",
+)
+
+
 class BrowserTaskService:
     """通用浏览器自动化服务 — 签到/打卡等非登录浏览器任务。
 
@@ -81,7 +94,7 @@ class BrowserTaskService:
         *,
         task_config: dict[str, Any],
         cancel_event: threading.Event | None = None,
-        timeout: int = 300,
+        timeout: int = WORKER_SUBMIT_TIMEOUT,
     ) -> BrowserTaskHandle:
         """提交一次浏览器任务。
 
@@ -100,20 +113,25 @@ class BrowserTaskService:
             wrapper.add_source(cancel_event)
             cancel_event = wrapper
 
+        # 去重与抢占（Condition 保护）
         with self._slot_lock:
+            # 等待 dispatch 完成（_slot 不再是 _DISPATCHING）
+            while self._slot is _DISPATCHING:
+                self._slot_lock.wait()
+
             existing = self._slot
             if existing is not None and not existing.done():
                 # 复用进行中的任务
                 existing.cancel_event.add_source(cancel_event)
                 return existing
-            self._slot = BrowserTaskHandle(
-                future=None, cancel_event=cancel_event, rejected_reason=None
-            )
-            # 临时占位，锁外提交
+            # 哨兵占位，锁外提交
+            self._slot = _DISPATCHING
 
+        # 锁外提交新任务
         try:
             handle = self._dispatch(task_config, cancel_event, timeout=timeout)
         except Exception:
+            # dispatch 失败，清除哨兵并唤醒等待者
             with self._slot_lock:
                 self._slot = None
                 self._slot_lock.notify_all()
@@ -139,7 +157,7 @@ class BrowserTaskService:
         self,
         task_config: dict[str, Any],
         cancel_event: threading.Event,
-        timeout: int = 300,
+        timeout: int = WORKER_SUBMIT_TIMEOUT,
     ) -> BrowserTaskHandle:
         """提交到 Worker。"""
         # 延迟导入：避免模块级导入导致循环依赖

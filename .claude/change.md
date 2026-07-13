@@ -3,6 +3,12 @@
 
 ## 2026-07-13
 
+### fix: 修复 BrowserTaskService 线程安全与测试覆盖问题
+
+- **Critical #1 线程安全**：`submit_task` 锁外 dispatch 前用 `future=None` 占位 handle 写入 `_slot`，而 `BrowserTaskHandle.done()` 对 `future is None` 返回 `True`，导致并发调用方跳过去重重复 dispatch。引入模块级 `_DISPATCHING` 哨兵对象（参考 LoginOrchestrator 模式），用 `is _DISPATCHING` 身份检查区分"正在 dispatch"与"已完成"，dispatch 期间用 `while self._slot is _DISPATCHING: wait()` 等待
+- **Important #3 魔法数字**：`submit_task` 与 `_dispatch` 的 `timeout: int = 300` 改为复用 `app/constants.py` 中的 `WORKER_SUBMIT_TIMEOUT` 常量
+- **Important #2 测试覆盖**：补充 5 个测试用例（运行与完成、并发去重、cancel_running 触发 cancel_event、executor 满时 rejected、rejected handle 的 result()），使用真实 `ThreadPoolExecutor(max_workers=1)` 包裹 mock，确保 `_run` 闭包真实执行
+
 ### feat: 新增 BrowserTaskService 通用浏览器自动化服务
 
 - 新建 `app/services/browser_task_service.py`：BrowserTaskService 骨架，与 LoginOrchestrator 平级，独立去重槽，共享 Playwright Worker
