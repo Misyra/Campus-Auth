@@ -54,6 +54,7 @@ class StepType(str, Enum):
     SLEEP = "sleep"
     OCR = "ocr"
     CLICK_SELECT = "click_select"
+    ASSERT_TEXT = "assert_text"
 
 
 @dataclass

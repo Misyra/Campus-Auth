@@ -3,7 +3,7 @@
 合并 MonitorService（网络监控）和 SchedulerService（定时任务调度）的全部功能，
 使用 Actor 模型（asyncio loop 线程 + asyncio.Queue）进行命令派发。
 
-职责边界：命令队列、监控循环、重试逻辑、调度器、手动网络测试。
+职责边界：命令队列、监控循环、调度器、手动网络测试。
 WS 广播委托给 WebSocketManager。
 """
 
@@ -33,7 +33,6 @@ from app.utils import validate_env_config
 from app.utils.logging import get_logger
 
 from .profile_service import ProfileService
-from .retry_policy import MonitoredPolicy
 
 # ── Actor 模型：类型化命令派发 ──
 
@@ -180,25 +179,15 @@ class LoginBridge:
         self,
         get_orchestrator: Callable[[], LoginOrchestrator | None],
         get_runtime_config: Callable[[], RuntimeConfig],
-        retry_policy: MonitoredPolicy,
         status_update_callback: Callable[[], None],
         logger,
-        get_monitor_check_interval: Callable[[], int],
-        on_retry_scheduled: Callable[[float], None] | None = None,
-        on_login_success: Callable[[], None] | None = None,
-        on_retry_exhausted: Callable[[], None] | None = None,
     ) -> None:
         self._get_orchestrator = get_orchestrator
         self._get_runtime_config = get_runtime_config
-        self._retry_policy = retry_policy
         self._status_update_callback = status_update_callback
         self._logger = logger
-        self._get_monitor_check_interval = get_monitor_check_interval
         self._registered_futures: set[Future] = set()
         self._futures_lock = threading.Lock()
-        self._on_retry_scheduled = on_retry_scheduled or (lambda delay: None)
-        self._on_login_success = on_login_success or (lambda: None)
-        self._on_retry_exhausted = on_retry_exhausted or (lambda: None)
 
     async def submit_login(
         self,
@@ -210,8 +199,7 @@ class LoginBridge:
 
         Args:
             on_complete: 登录完成回调（含被拒、取消、异常所有终态）。
-                None 时走 auto 路径的 retry_policy 逻辑；非 None 时走 manual 路径，
-                由调用方自行处理重试（manual 不参与 retry_policy）。
+                None 时仅更新状态。
         """
         # 清理已完成的 Future 引用，防止极端情况下残留
         with self._futures_lock:
@@ -283,38 +271,9 @@ class LoginBridge:
             try:
                 ok, msg = f.result()
                 if on_complete is not None:
-                    # manual 路径：直接回调，不参与 retry_policy
                     on_complete(ok, msg)
-                elif not is_manual:
-                    # auto 路径：维护 retry_policy 状态
-                    if ok:
-                        self._retry_policy.on_login_done(success=True)
-                        self._on_login_success()
-                    else:
-                        delay = self._retry_policy.on_login_done(success=False)
-                        if delay is None:
-                            self._on_retry_exhausted()
-                            logger.warning(
-                                "登录重试次数已用尽（{}/{}），等待网络恢复（下次检测 {}s 后）",
-                                self._retry_policy.attempt,
-                                self._retry_policy.max_retries,
-                                self._get_monitor_check_interval(),
-                            )
-                        else:
-                            from datetime import datetime as _dt
-
-                            next_time = _dt.fromtimestamp(time.time() + delay).strftime(
-                                "%H:%M:%S"
-                            )
-                            logger.debug(
-                                "重试 {}/{}, 下次重试: {}s 后 ({})",
-                                self._retry_policy.attempt,
-                                self._retry_policy.max_retries,
-                                int(delay),
-                                next_time,
-                            )
-                            self._on_retry_scheduled(delay)
-                # is_manual=True 且无 on_complete：仅更新状态，不动 retry_policy
+                elif not ok:
+                    self._logger.warning("自动登录失败: {}", msg)
             except CancelledError:
                 logger.warning("登录任务已取消 (source={})", source)
                 if on_complete is not None:
@@ -323,7 +282,6 @@ class LoginBridge:
                 logger.exception("登录任务异常")
                 if on_complete is not None:
                     on_complete(False, f"登录内部错误: {e}")
-
         with self._futures_lock:
             self._registered_futures.add(handle.future)
         handle.future.add_done_callback(_on_done)
@@ -379,7 +337,6 @@ class ScheduleEngine:
         self._reload_lock: threading.Lock = threading.Lock()
         self._pure_mode: bool = False
         self._start_stop_lock: threading.Lock = threading.Lock()
-        self._retry_time_lock: threading.Lock = threading.Lock()
 
         # 配置对象（由 _reload_config_internal 初始化）
         self._runtime_config: RuntimeConfig = RuntimeConfig()
@@ -410,40 +367,13 @@ class ScheduleEngine:
         self._monitor_check_interval: int = 300
         self._orchestrator = orchestrator  # LoginOrchestrator
         self._logger = get_logger("engine", source="backend")
-        self._retry_policy = MonitoredPolicy()
-        self._next_retry_time: float = 0  # 下次重试时间（独立于网络检测）
 
         # LoginBridge — 登录委托
-        def _bridge_retry_scheduled(delay: float) -> None:
-            with self._retry_time_lock:
-                self._next_retry_time = time.time() + delay
-            # 投 noop 命令唤醒 engine loop（不等 asyncio.wait_for timeout）
-            loop = self._engine_loop
-            if loop is not None and loop.is_running():
-                with contextlib.suppress(RuntimeError):
-                    loop.call_soon_threadsafe(
-                        self._cmd_queue.put_nowait,
-                        EngineCommand(type=EngineCmdType.NOOP),
-                    )
-
-        def _bridge_login_success() -> None:
-            with self._retry_time_lock:
-                self._next_retry_time = 0
-
-        def _bridge_retry_exhausted() -> None:
-            with self._retry_time_lock:
-                self._next_retry_time = 0
-
         self._login_bridge = LoginBridge(
             get_orchestrator=lambda: self._orchestrator,
             get_runtime_config=self.get_runtime_config,
-            retry_policy=self._retry_policy,
             status_update_callback=self._update_status_snapshot,
             logger=self._logger,
-            get_monitor_check_interval=lambda: self._monitor_check_interval,
-            on_retry_scheduled=_bridge_retry_scheduled,
-            on_login_success=_bridge_login_success,
-            on_retry_exhausted=_bridge_retry_exhausted,
         )
 
     # ── Engine loop 线程入口 ──
@@ -489,18 +419,6 @@ class ScheduleEngine:
 
                 now = time.time()
 
-                # 重试（独立于网络检测，延迟后直接登录）
-                if self.is_monitoring:
-                    with self._retry_time_lock:
-                        retry_time = self._next_retry_time
-                        if retry_time > 0 and now >= retry_time:
-                            self._next_retry_time = 0
-                            retry_fired = True
-                        else:
-                            retry_fired = False
-                    if retry_fired:
-                        await self._do_async_login()
-
                 # 网络检测
                 if self.is_monitoring and now >= self._next_network_check:
                     await self._do_network_check_async()
@@ -525,9 +443,6 @@ class ScheduleEngine:
 
         if self.is_monitoring:
             candidates.append(float(self._next_network_check))
-            with self._retry_time_lock:
-                if self._next_retry_time > 0:
-                    candidates.append(self._next_retry_time)
 
         if self._scheduler and self._scheduler.running:
             candidates.append(self._scheduler.next_tick_time)
@@ -573,25 +488,8 @@ class ScheduleEngine:
             result = await core.check_once()
             self._monitor_check_interval = result.interval
 
-            # 网络检测前清除重试定时（避免重复触发）
-            with self._retry_time_lock:
-                self._next_retry_time = 0
-
             if result.need_login:
-                self._retry_policy.on_network_check(True)
-                if self._retry_policy.retries_exhausted:
-                    # 重试用尽，重置计数，由下次网络检测触发新一轮重试
-                    self._retry_policy.reset()
-                    self._logger.warning(
-                        "重试已用尽 ({}/{})，等待下次网络检测 ({}s 后)",
-                        self._retry_policy.max_retries,
-                        self._retry_policy.max_retries,
-                        self._monitor_check_interval,
-                    )
-                else:
-                    await self._do_async_login()
-            else:
-                self._retry_policy.on_network_check(False)
+                await self._do_async_login()
 
             self._next_network_check = time.time() + result.interval
             self._update_status_snapshot(force=True)
@@ -692,8 +590,6 @@ class ScheduleEngine:
         core.stop_monitoring()
         self._monitor_core = None
         self._next_network_check = 0
-        with self._retry_time_lock:
-            self._next_retry_time = 0
 
         self._logger.info("监控已停止")
         self._update_status_snapshot(force=True)

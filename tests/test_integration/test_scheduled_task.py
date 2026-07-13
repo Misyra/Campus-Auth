@@ -365,8 +365,13 @@ class TestTaskExecutionWithVariableResolution:
         mock_handle.rejected_reason = None
         mock_orchestrator.submit.return_value = mock_handle
 
+        mock_task_manager = MagicMock()
+        mock_task_manager.get_task_detail.return_value = {"type": "browser"}
+
         executor = _make_executor(
-            registry=registry, login_orchestrator=mock_orchestrator
+            registry=registry,
+            login_orchestrator=mock_orchestrator,
+            task_manager=mock_task_manager,
         )
 
         success, message = executor._execute_browser("test_task", 30)
@@ -436,9 +441,9 @@ class TestTaskFailureHandling:
 
     def test_execute_browser_nonexistent(self):
         """执行不存在的浏览器任务返回失败。"""
-        registry = MagicMock()
-        registry.get_task.return_value = None
-        executor = _make_executor(registry=registry)
+        mock_tm = MagicMock()
+        mock_tm.get_task_detail.return_value = None
+        executor = _make_executor(task_manager=mock_tm)
 
         success, message = executor._execute_browser("no_browser", 30)
 

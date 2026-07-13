@@ -461,20 +461,21 @@ class TestTaskExecutorExecuteBrowser:
             history_store=MagicMock(),
             worker_getter=MagicMock(),
             login_orchestrator=MagicMock(),
+            task_manager=MagicMock(),
         )
         defaults.update(kwargs)
         return TaskExecutor(**defaults)
 
     def test_task_not_found(self):
         executor = self._make_executor()
-        executor._registry.get_task.return_value = None
+        executor._task_manager.get_task_detail.return_value = None
         success, msg = executor._execute_browser("b1", 60)
         assert success is False
         assert "不存在" in msg
 
     def test_task_wrong_type(self):
         executor = self._make_executor()
-        executor._registry.get_task.return_value = {"type": "script"}
+        executor._task_manager.get_task_detail.return_value = {"type": "script"}
         success, msg = executor._execute_browser("b1", 60)
         assert success is False
         assert "不存在" in msg
@@ -484,7 +485,7 @@ class TestTaskExecutorExecuteBrowser:
         from app.utils.cancel_token import CompositeCancelEvent
 
         executor = self._make_executor()
-        executor._registry.get_task.return_value = {"type": "browser"}
+        executor._task_manager.get_task_detail.return_value = {"type": "browser"}
         executor._get_runtime_config = lambda: RuntimeConfig()
 
         mock_handle = LoginHandle(
@@ -504,7 +505,7 @@ class TestTaskExecutorExecuteBrowser:
         from app.utils.cancel_token import CompositeCancelEvent
 
         executor = self._make_executor()
-        executor._registry.get_task.return_value = {"type": "browser"}
+        executor._task_manager.get_task_detail.return_value = {"type": "browser"}
         executor._get_runtime_config = None
 
         mock_handle = LoginHandle(
@@ -524,7 +525,7 @@ class TestTaskExecutorExecuteBrowser:
         from app.utils.cancel_token import CompositeCancelEvent
 
         executor = self._make_executor()
-        executor._registry.get_task.return_value = {"type": "browser"}
+        executor._task_manager.get_task_detail.return_value = {"type": "browser"}
         executor._get_runtime_config = None
 
         mock_handle = LoginHandle(
@@ -547,7 +548,7 @@ class TestTaskExecutorExecuteBrowser:
         from app.utils.cancel_token import CompositeCancelEvent
 
         executor = self._make_executor()
-        executor._registry.get_task.return_value = {"type": "browser"}
+        executor._task_manager.get_task_detail.return_value = {"type": "browser"}
         executor._get_runtime_config = lambda: RuntimeConfig()
 
         mock_handle = LoginHandle(
@@ -568,7 +569,7 @@ class TestTaskExecutorExecuteBrowser:
         from app.utils.cancel_token import CompositeCancelEvent
 
         executor = self._make_executor()
-        executor._registry.get_task.return_value = {"type": "browser"}
+        executor._task_manager.get_task_detail.return_value = {"type": "browser"}
         executor._get_runtime_config = lambda: RuntimeConfig()
 
         mock_handle = LoginHandle(
@@ -589,7 +590,7 @@ class TestTaskExecutorExecuteBrowser:
         from app.utils.cancel_token import CompositeCancelEvent
 
         executor = self._make_executor()
-        executor._registry.get_task.return_value = {"type": "browser"}
+        executor._task_manager.get_task_detail.return_value = {"type": "browser"}
         executor._get_runtime_config = lambda: RuntimeConfig()
 
         mock_handle = LoginHandle(
@@ -610,7 +611,7 @@ class TestTaskExecutorExecuteBrowser:
         from app.utils.cancel_token import CompositeCancelEvent
 
         executor = self._make_executor()
-        executor._registry.get_task.return_value = {"type": "browser"}
+        executor._task_manager.get_task_detail.return_value = {"type": "browser"}
         executor._get_runtime_config = lambda: RuntimeConfig()
 
         mock_handle = LoginHandle(
@@ -631,7 +632,7 @@ class TestTaskExecutorExecuteBrowser:
         from app.utils.cancel_token import CompositeCancelEvent
 
         executor = self._make_executor()
-        executor._registry.get_task.return_value = {"type": "browser"}
+        executor._task_manager.get_task_detail.return_value = {"type": "browser"}
         executor._get_runtime_config = lambda: RuntimeConfig()
 
         mock_handle = LoginHandle(

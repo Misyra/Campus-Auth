@@ -52,18 +52,22 @@ class TestBrowserTaskIdInjection:
         mock_handle.result.return_value = (True, "成功")
         mock_orchestrator.submit.return_value = mock_handle
 
+        mock_task_manager = MagicMock()
+        mock_task_manager.get_task_detail.return_value = {"type": "browser"}
+
         executor = TaskExecutor(
             registry=registry,
             history_store=history_store,
             worker_getter=lambda: None,
             login_orchestrator=mock_orchestrator,
+            task_manager=mock_task_manager,
         )
 
-        return executor, mock_orchestrator
+        return executor, mock_orchestrator, mock_task_manager
 
     def test_browser_task_injects_task_id(self, setup):
         """浏览器定时任务应将 task_id 注入到 config.active_task。"""
-        executor, mock_orchestrator = setup
+        executor, mock_orchestrator, mock_task_manager = setup
 
         # 模拟全局配置的 active_task 是 "default"
         mock_config = RuntimeConfig()
@@ -83,7 +87,7 @@ class TestBrowserTaskIdInjection:
 
     def test_browser_task_no_inject_when_same(self, setup):
         """当 task_id 与 config.active_task 相同时，不应创建新 config。"""
-        executor, mock_orchestrator = setup
+        executor, mock_orchestrator, mock_task_manager = setup
 
         # 模拟全局配置的 active_task 已经是目标任务
         mock_config = RuntimeConfig(active_task="test_browser_task")
@@ -100,7 +104,8 @@ class TestBrowserTaskIdInjection:
 
     def test_browser_task_nonexistent_returns_failure(self, setup):
         """不存在的任务应返回失败。"""
-        executor, mock_orchestrator = setup
+        executor, mock_orchestrator, mock_task_manager = setup
+        mock_task_manager.get_task_detail.return_value = None
 
         success, msg = executor._execute_browser("nonexistent_task", timeout=60)
         assert success is False
@@ -108,23 +113,8 @@ class TestBrowserTaskIdInjection:
 
     def test_non_browser_task_returns_failure(self, setup):
         """非浏览器类型任务应返回失败。"""
-        executor, mock_orchestrator = setup
-        tasks_dir = executor._registry._tasks_dir
-
-        # 创建一个脚本类型任务
-        script_task = {
-            "name": "测试脚本任务",
-            "type": "script",
-            "enabled": True,
-            "schedule": {"hour": 12, "minute": 0},
-            "script_path": "test.py",
-        }
-        (tasks_dir / "test_script_task.json").write_text(
-            json.dumps(script_task), encoding="utf-8"
-        )
-
-        # 重新加载 registry
-        executor._registry = TaskRegistry(tasks_dir)
+        executor, mock_orchestrator, mock_task_manager = setup
+        mock_task_manager.get_task_detail.return_value = {"type": "script"}
 
         success, msg = executor._execute_browser("test_script_task", timeout=60)
         assert success is False

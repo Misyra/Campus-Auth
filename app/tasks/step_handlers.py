@@ -904,6 +904,39 @@ class OcrHandler(StepHandler):
             self.schedule_cleanup(old)
 
 
+class AssertTextHandler(StepHandler):
+    """断言文本步骤 — 等待页面出现指定文本。成功由 runner 根据返回值判定。"""
+
+    @property
+    def step_type(self) -> str:
+        return "assert_text"
+
+    async def execute(
+        self, page, step: StepConfig, resolver: VariableResolver
+    ) -> tuple[bool, str]:
+        params = self.resolve_params(step, resolver)
+        value = params.get("value", "")
+        timeout = step.timeout or DEFAULT_STEP_TIMEOUT_MS
+
+        if not value:
+            return False, "assert_text 步骤需要 value"
+
+        logger.debug("[assert_text] 等待文本: '{}', timeout={}ms", value, timeout)
+        try:
+            escaped = value.replace("\\", "\\\\").replace("'", "\\'")
+            await page.wait_for_function(
+                f"() => document.body.innerText.includes('{escaped}')",
+                timeout=timeout,
+            )
+        except (PlaywrightTimeoutError, TimeoutError):
+            return False, f"等待文本超时 ({timeout}ms): {value}"
+        except Exception as e:
+            return False, f"等待文本失败: {value}, 错误: {e}"
+
+        logger.info("[assert_text] 检测到文本: '{}'", value)
+        return True, f"检测到文本: {value}"
+
+
 # ── 模块级常量：默认处理器映射（所有 handler 无状态，安全共享）──
 
 DEFAULT_HANDLERS: dict[str, StepHandler] = {
@@ -918,6 +951,7 @@ DEFAULT_HANDLERS: dict[str, StepHandler] = {
         EvalHandler(),
         ScreenshotHandler(),
         SleepHandler(),
+        AssertTextHandler(),
         OcrHandler(),
     ]
 }

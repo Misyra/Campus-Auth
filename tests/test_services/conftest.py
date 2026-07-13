@@ -11,7 +11,6 @@ import pytest
 
 from app.schemas import RuntimeConfig
 from app.services.engine import ScheduleEngine, StatusManager
-from app.services.retry_policy import MonitoredPolicy
 
 
 @pytest.fixture
@@ -68,7 +67,6 @@ def engine_factory():
         svc._engine_running = False
         svc._engine_ready = threading.Event()
         svc._monitor_core = None
-        svc._retry_policy = MonitoredPolicy()
         svc._runtime_config = RuntimeConfig()
         svc._monitor_check_interval = 300
         svc._next_network_check = 0
@@ -82,7 +80,6 @@ def engine_factory():
         svc._manual_login_lock = threading.Lock()
         svc._reload_lock = threading.Lock()
         svc._start_stop_lock = threading.Lock()
-        svc._retry_time_lock = threading.Lock()
         svc._pure_mode = False
         svc._ws_manager = MagicMock()
         svc._orchestrator = MagicMock()
@@ -129,25 +126,12 @@ def engine_factory():
                     ok, msg = False, str(exc)
                 if on_complete is not None:
                     on_complete(ok, msg)
-                elif not is_manual:
-                    # auto 路径：维护 retry_policy 状态（与 LoginBridge 一致）
-                    if ok:
-                        svc._retry_policy.on_login_done(success=True)
-                    else:
-                        delay = svc._retry_policy.on_login_done(success=False)
-                        if delay is None:
-                            with svc._retry_time_lock:
-                                svc._next_retry_time = 0
-                        else:
-                            with svc._retry_time_lock:
-                                svc._next_retry_time = time.time() + delay
 
             handle.future.add_done_callback(_on_done)
             return True
 
         svc._login_bridge.submit_login.side_effect = _fake_submit_login
         svc._login_bridge.cancel_login.return_value = (True, "登录已取消")
-        svc._next_retry_time = 0
 
         return svc
 

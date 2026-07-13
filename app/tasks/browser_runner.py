@@ -52,6 +52,7 @@ class BrowserTaskRunner:
         self._step_results: list[dict[str, Any]] = []
         self._screenshot_dir = Path(screenshot_dir) if screenshot_dir else None
         self.monitor_config = monitor_config
+        self._asserted = False
         self.cancel_event = cancel_event
 
     async def execute(self, page) -> tuple[bool, str]:
@@ -137,12 +138,13 @@ class BrowserTaskRunner:
                     }
                 )
 
+                if success and step.type == StepType.ASSERT_TEXT:
+                    self._asserted = True
+
                 if not success:
                     return await self._handle_failure(page, step, message)
-
             if not await self._check_success(page):
-                return await self._handle_failure(page, None, "网络验证未通过")
-
+                return await self._handle_failure(page, None, "成功条件验证未通过")
             total_elapsed = (time.perf_counter() - task_start) * 1000
             logger.info(
                 "任务执行成功: {} (耗时 {:.0f}ms)", self.config.name, total_elapsed
@@ -273,7 +275,6 @@ class BrowserTaskRunner:
                 overrides["duration"] = remaining_ms
             if overrides:
                 effective_step = replace(step, **overrides)
-
         try:
             return await handler.execute(page, effective_step, self.resolver)
         except Exception as e:
@@ -306,7 +307,15 @@ class BrowserTaskRunner:
         self._step_results.append(result)
         return result
 
-    async def _check_success(self, _page) -> bool:
+    async def _check_success(self, page) -> bool:
+        """成功条件判断。
+
+        1. assert_text 步骤检测成功 → 直接通过
+        2. 有 monitor_config → 网络检测（校园网登录）
+        3. 都没有 → 信任步骤结果
+        """
+        if self._asserted:
+            return True
         if self.monitor_config:
             return await self._network_detection_check()
         return True
@@ -318,7 +327,6 @@ class BrowserTaskRunner:
             from app.schemas import MonitorSettings
 
             cfg = self.monitor_config
-            # 过滤逻辑：仅保留 MonitorSettings 认可的字段，排除 None 和空集合（空 list/str/dict）
             monitor = MonitorSettings(
                 **{
                     k: v
@@ -329,7 +337,6 @@ class BrowserTaskRunner:
                 }
             )
 
-            # 等待网址响应处理认证请求
             delay = cfg.get("post_login_delay")
             await asyncio.sleep(delay if delay is not None else 5)
 

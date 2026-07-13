@@ -27,33 +27,7 @@ from app.services.engine import (
     StatusSnapshot,
 )
 from app.services.monitor_service import CheckOnceResult
-from app.services.retry_policy import MonitoredPolicy
 from app.services.scheduler_service import SchedulerService
-
-
-def _make_future_with_callback(result):
-    """创建 Future + callback_done 辅助：包装 add_done_callback 以触发事件。
-
-    Returns:
-        (future, callback_done, handle) — 测试设置 submit 返回值后调用，
-        set_result 触发回调，callback_done.wait() 等待完成。
-    """
-    callback_done = threading.Event()
-    future = Future()
-    _orig_adc = future.add_done_callback
-
-    def _wrapping_adc(cb):
-        def _wrapped(f):
-            cb(f)
-            callback_done.set()
-
-        _orig_adc(_wrapped)
-
-    future.add_done_callback = _wrapping_adc
-    handle = MagicMock()
-    handle.rejected_reason = None
-    handle.future = future
-    return future, callback_done, handle
 
 
 # =====================================================================
@@ -740,7 +714,6 @@ class TestDoNetworkCheck:
         mock_core.consume_profile_switch_flag.return_value = False
         svc._monitor_core = mock_core
         await svc._do_network_check_async()
-        assert svc._retry_policy._attempt == 0
 
     async def test_do_network_check_runs_without_runtime_profile_switch(
         self, engine_factory
@@ -812,132 +785,6 @@ class TestNetworkCheckBackoff:
         await svc._do_network_check_async()
         svc._do_async_login.assert_called_once()
 
-    async def test_no_login_needed_resets_failure_counters(self, engine_factory):
-        """need_login=False 应通过 _retry_policy.on_network_check 重置退避。"""
-        svc = engine_factory(raw=True)
-        mock_core = MagicMock()
-        mock_core.check_once = AsyncMock(
-            return_value=CheckOnceResult(
-                paused=False,
-                net_ok=True,
-                net_reason="",
-                need_login=False,
-                check_num=1,
-                interval=600,
-                result=NetworkCheckResult(
-                    available=True, method="tcp", latency_ms=0, detail=""
-                ),
-            )
-        )
-        mock_core.consume_profile_switch_flag.return_value = False
-        svc._monitor_core = mock_core
-        svc._retry_policy._attempt = 5
-        svc._retry_policy._prev_network_ok = False  # 模拟之前断开
-        await svc._do_network_check_async()
-        assert svc._retry_policy._attempt == 0
-
-    async def test_on_done_auto_success_clears_failure_count(self, engine_factory):
-        """自动登录成功应通过 _retry_policy.on_login_done 重置退避。"""
-        svc = engine_factory(raw=True)
-        svc._runtime_config = RuntimeConfig(
-            credentials=LoginCredentials(
-                username="u",
-                password="p",
-                auth_url="http://x",
-            ),
-        )
-        svc._retry_policy._attempt = 3
-        future, callback_done, handle = _make_future_with_callback((True, "登录成功"))
-        svc._orchestrator.submit.return_value = handle
-        await svc._do_async_login()
-        future.set_result((True, "登录成功"))
-        callback_done.wait(timeout=2)
-        assert svc._retry_policy._attempt == 0
-
-    async def test_on_done_auto_failure_increments_count(self, engine_factory):
-        """自动登录失败应通过 _retry_policy.on_login_done 递增退避计数。"""
-        svc = engine_factory(raw=True)
-        svc._runtime_config = RuntimeConfig(
-            credentials=LoginCredentials(
-                username="u",
-                password="p",
-                auth_url="http://x",
-            ),
-        )
-        svc._retry_policy._attempt = 0
-        future, callback_done, handle = _make_future_with_callback((False, "登录失败"))
-        svc._orchestrator.submit.return_value = handle
-        await svc._do_async_login()
-        future.set_result((False, "登录失败"))
-        callback_done.wait(timeout=2)
-        assert svc._retry_policy._attempt == 1
-
-    async def test_on_done_auto_failure_triggers_backoff(self, engine_factory):
-        """连续失败后 _retry_policy 应返回退避延迟。"""
-        svc = engine_factory(raw=True)
-        svc._runtime_config = RuntimeConfig(
-            credentials=LoginCredentials(
-                username="u",
-                password="p",
-                auth_url="http://x",
-            ),
-        )
-        svc._retry_policy._attempt = 2  # 再失败一次就到 attempt=3，delay=20
-        future, callback_done, handle = _make_future_with_callback((False, "登录失败"))
-        svc._orchestrator.submit.return_value = handle
-        await svc._do_async_login()
-        future.set_result((False, "登录失败"))
-        callback_done.wait(timeout=2)
-        assert svc._retry_policy._attempt == 3
-        # attempt=3 → delay_before(3)=20.0 → 设置到 _next_retry_time
-        assert svc._next_retry_time > time.time() + 19
-
-    async def test_on_done_manual_login_does_not_affect_failure_count(
-        self, engine_factory
-    ):
-        """手动登录结果不应影响自动登录的退避计数。"""
-        svc = engine_factory(raw=True)
-        svc._runtime_config = RuntimeConfig(
-            credentials=LoginCredentials(
-                username="u",
-                password="p",
-                auth_url="http://x",
-            ),
-        )
-        svc._retry_policy._attempt = 2
-        future, callback_done, handle = _make_future_with_callback((False, "登录失败"))
-        svc._orchestrator.submit.return_value = handle
-        await svc._do_async_login(is_manual=True)
-        future.set_result((False, "登录失败"))
-        callback_done.wait(timeout=2)
-        # 手动登录不应递增
-        assert svc._retry_policy._attempt == 2
-
-    async def test_on_done_manual_success_does_not_clear_failure_count(
-        self, engine_factory
-    ):
-        """手动登录成功不应清空自动登录的退避计数。"""
-        svc = engine_factory(raw=True)
-        svc._runtime_config = RuntimeConfig(
-            credentials=LoginCredentials(
-                username="u",
-                password="p",
-                auth_url="http://x",
-            ),
-        )
-        svc._retry_policy._attempt = 2
-        future, callback_done, handle = _make_future_with_callback((True, "登录成功"))
-        svc._orchestrator.submit.return_value = handle
-        await svc._do_async_login(is_manual=True)
-        future.set_result((True, "登录成功"))
-        callback_done.wait(timeout=2)
-        assert svc._retry_policy._attempt == 2
-
-    def test_retry_policy_init_field_exist(self, engine_factory):
-        """__init__ 中应初始化 _retry_policy。"""
-        svc = engine_factory(raw=True)
-        assert svc._retry_policy._attempt == 0
-
 
 class TestDoAsyncLogin:
     async def test_already_in_progress(self, engine_factory):
@@ -1002,41 +849,6 @@ class TestDoAsyncLogin:
         with pytest.raises(RuntimeError):
             await svc._do_async_login()
 
-    async def test_exception_does_not_consume_retry(self, engine_factory):
-        """orchestrator.submit 抛异常时不应递增失败计数。"""
-        svc = engine_factory(raw=True)
-        svc._runtime_config = RuntimeConfig(
-            credentials=LoginCredentials(
-                username="u",
-                password="p",
-                auth_url="http://x",
-            ),
-        )
-        svc._orchestrator.submit.side_effect = RuntimeError("pool closed")
-        svc._retry_policy._attempt = 0
-        with pytest.raises(RuntimeError):
-            await svc._do_async_login()
-        assert svc._retry_policy._attempt == 0
-
-    async def test_success_increments_retry_count(self, engine_factory):
-        """成功提交后退避计数应保持不变。"""
-        svc = engine_factory(raw=True)
-        svc._runtime_config = RuntimeConfig(
-            credentials=LoginCredentials(
-                username="u",
-                password="p",
-                auth_url="http://x",
-            ),
-        )
-        future = Future()
-        handle = MagicMock()
-        handle.rejected_reason = None
-        handle.future = future
-        svc._orchestrator.submit.return_value = handle
-        svc._retry_policy._attempt = 0
-        await svc._do_async_login()
-        # 提交成功，退避计数不受提交影响（由回调处理）
-        assert svc._retry_policy._attempt == 0
 
     async def test_config_validation_blocks_auto_login(self, engine_factory):
         """配置不完整时自动登录应被拦截，不提交任务。"""
@@ -1859,138 +1671,8 @@ class TestBoot:
 # =====================================================================
 
 
-# =====================================================================
-# _next_retry_time 跨线程锁保护
-# =====================================================================
-
-
-class TestRetryTimeLock:
-    """_next_retry_time 跨线程读写的锁保护。"""
-
-    def test_bridge_retry_scheduled_sets_time(self):
-        """_bridge_retry_scheduled 应在锁保护下写入 _next_retry_time。"""
-        engine = ScheduleEngine.__new__(ScheduleEngine)
-        engine._next_retry_time = 0
-        engine._retry_time_lock = threading.Lock()
-        engine._login_bridge = MagicMock()
-
-        # 注册与 __init__ 一致的桥接回调
-        def _bridge_retry_scheduled(delay: float) -> None:
-            with engine._retry_time_lock:
-                engine._next_retry_time = time.time() + delay
-
-        engine._login_bridge._on_retry_scheduled = _bridge_retry_scheduled
-
-        engine._login_bridge._on_retry_scheduled(30.0)
-        with engine._retry_time_lock:
-            assert engine._next_retry_time > time.time()
-
-    def test_calculate_wakeup_reads_under_lock(self):
-        """_calculate_wakeup 应在锁保护下读取 _next_retry_time。"""
-        engine = ScheduleEngine.__new__(ScheduleEngine)
-        mock_core = MagicMock()
-        mock_core.monitoring = True
-        engine._monitor_core = mock_core
-        engine._scheduler = MagicMock()
-        engine._scheduler.running = False
-        engine._next_network_check = time.time() + 100
-        engine._next_retry_time = time.time() + 5
-        engine._retry_time_lock = threading.Lock()
-
-        wakeup = engine._calculate_wakeup()
-        # wakeup 应接近 _next_retry_time（5 秒后）
-        assert abs(wakeup - engine._next_retry_time) < 1.0
-
-    def test_bridge_login_success_clears_time(self):
-        """_bridge_login_success 应在锁保护下清零 _next_retry_time。"""
-        engine = ScheduleEngine.__new__(ScheduleEngine)
-        engine._next_retry_time = time.time() + 30
-        engine._retry_time_lock = threading.Lock()
-        engine._login_bridge = MagicMock()
-
-        # 注册与 __init__ 一致的桥接回调
-        def _bridge_login_success() -> None:
-            with engine._retry_time_lock:
-                engine._next_retry_time = 0
-
-        engine._login_bridge._on_login_success = _bridge_login_success
-
-        engine._login_bridge._on_login_success()
-        assert engine._next_retry_time == 0
-
-    def test_bridge_retry_exhausted_clears_time(self):
-        """_bridge_retry_exhausted 应在锁保护下清零 _next_retry_time。"""
-        engine = ScheduleEngine.__new__(ScheduleEngine)
-        engine._next_retry_time = time.time() + 30
-        engine._retry_time_lock = threading.Lock()
-        engine._login_bridge = MagicMock()
-
-        # 注册与 __init__ 一致的桥接回调
-        def _bridge_retry_exhausted() -> None:
-            with engine._retry_time_lock:
-                engine._next_retry_time = 0
-
-        engine._login_bridge._on_retry_exhausted = _bridge_retry_exhausted
-
-        engine._login_bridge._on_retry_exhausted()
-        assert engine._next_retry_time == 0
-
-    def test_concurrent_write_no_data_loss(self):
-        """并发写入不应丢失数据（锁保护下所有写入可见）。"""
-        engine = ScheduleEngine.__new__(ScheduleEngine)
-        engine._next_retry_time = 0
-        engine._retry_time_lock = threading.Lock()
-
-        results = []
-        barrier = threading.Barrier(3)
-
-        def writer(delay: float) -> None:
-            barrier.wait()
-            with engine._retry_time_lock:
-                engine._next_retry_time = time.time() + delay
-                results.append(engine._next_retry_time)
-
-        threads = [
-            threading.Thread(target=writer, args=(d,)) for d in [10.0, 20.0, 30.0]
-        ]
-        for t in threads:
-            t.start()
-        for t in threads:
-            t.join(timeout=2)
-
-        # 所有写入都应完成，最终值应为三个之一
-        assert len(results) == 3
-        with engine._retry_time_lock:
-            assert engine._next_retry_time in results
-
-
-class TestRetryWakeup:
-    """retry 调度后 engine loop 应立即唤醒，不等 timeout。"""
-
-    def test_retry_scheduled_wakes_loop(self, engine_factory):
-        """_bridge_retry_scheduled 设置 _next_retry_time 后应投 noop 命令唤醒 loop。"""
-        svc = engine_factory()
-        mock_loop = MagicMock()
-        mock_loop.is_running.return_value = True
-        svc._engine_loop = mock_loop
-        svc._cmd_queue = asyncio.Queue()
-
-        # 调用 __init__ 中注册的真实 _bridge_retry_scheduled 闭包
-        svc._login_bridge._on_retry_scheduled(5.0)
-
-        # 应通过 call_soon_threadsafe 向 queue 投 noop 命令唤醒 loop
-        mock_loop.call_soon_threadsafe.assert_called_once()
-        assert svc._next_retry_time > time.time()
-
-    def test_retry_scheduled_loop_not_running(self, engine_factory):
-        """loop 未运行时不应抛异常。"""
-        svc = engine_factory()
-        svc._engine_loop = None
-
-        # 调用 __init__ 中注册的真实 _bridge_retry_scheduled 闭包
-        # loop=None 应安全跳过 call_soon_threadsafe
-        svc._login_bridge._on_retry_scheduled(5.0)
-        assert svc._next_retry_time > time.time()
+class TestEngineLoopAsyncCommands:
+    """_engine_loop_async 应通过 asyncio.Queue 处理命令。"""
 
     def test_noop_command_processed(self, engine_factory):
         """NOOP 命令应被 _process_command_async 正常处理（无操作）。"""
@@ -2005,9 +1687,6 @@ class TestRetryWakeup:
         loop.close()
 
 
-class TestEngineLoopAsyncCommands:
-    """_engine_loop_async 应通过 asyncio.Queue 处理命令。"""
-
     def test_engine_loop_async_processes_commands(self):
         """引擎 loop 应处理队列中的命令直至 SHUTDOWN。"""
         engine = ScheduleEngine.__new__(ScheduleEngine)
@@ -2017,11 +1696,9 @@ class TestEngineLoopAsyncCommands:
         engine._engine_loop = None
         engine._monitor_core = None
         engine._scheduler = None
-        engine._next_retry_time = 0
         engine._next_network_check = 0
         engine._monitor_check_interval = 300
         engine._MAX_LOOP_SLEEP = 1.0
-        engine._retry_time_lock = threading.Lock()
 
         processed = []
 
@@ -2115,10 +1792,8 @@ class TestLoginBridgeDuplicateCallback:
         bridge = LoginBridge(
             get_orchestrator=lambda: mock_orchestrator,
             get_runtime_config=lambda: RuntimeConfig(),
-            retry_policy=MonitoredPolicy(),
             status_update_callback=lambda: None,
             logger=MagicMock(),
-            get_monitor_check_interval=lambda: 300,
         )
         return bridge, mock_orchestrator
 

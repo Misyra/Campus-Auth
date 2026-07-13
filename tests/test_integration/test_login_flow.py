@@ -25,7 +25,6 @@ from app.services.engine import (
     StatusManager,
 )
 from app.services.monitor_service import CheckOnceResult
-from app.services.retry_policy import MonitoredPolicy
 
 # ── 辅助工厂 ──
 
@@ -40,7 +39,6 @@ def _make_raw_engine() -> ScheduleEngine:
     svc._engine_running = False
     svc._engine_ready = threading.Event()
     svc._monitor_core = None
-    svc._retry_policy = MonitoredPolicy()
     svc._runtime_config = RuntimeConfig()
     svc._monitor_check_interval = 300
     svc._next_network_check = 0
@@ -73,30 +71,9 @@ def _make_raw_engine() -> ScheduleEngine:
     svc._login_bridge = LoginBridge(
         get_orchestrator=lambda: svc._orchestrator,
         get_runtime_config=lambda: svc._runtime_config,
-        retry_policy=svc._retry_policy,
         status_update_callback=svc._update_status_snapshot,
         logger=svc._logger,
-        get_monitor_check_interval=lambda: svc._monitor_check_interval,
     )
-    svc._retry_time_lock = threading.Lock()
-    import time as _time
-
-    def _bridge_retry_scheduled(delay: float) -> None:
-        with svc._retry_time_lock:
-            svc._next_retry_time = _time.time() + delay
-
-    def _bridge_login_success() -> None:
-        with svc._retry_time_lock:
-            svc._next_retry_time = 0
-
-    def _bridge_retry_exhausted() -> None:
-        with svc._retry_time_lock:
-            svc._next_retry_time = 0
-
-    svc._login_bridge._on_retry_scheduled = _bridge_retry_scheduled
-    svc._login_bridge._on_login_success = _bridge_login_success
-    svc._login_bridge._on_retry_exhausted = _bridge_retry_exhausted
-    svc._next_retry_time = 0
     return svc
 
 
@@ -268,7 +245,7 @@ class TestLoginWithNetworkDetection:
         svc._do_async_login.assert_called_once()
 
     async def test_network_check_no_login_needed(self):
-        """网络正常时，不触发登录，通过 _retry_policy 重置退避。"""
+        """网络正常时，不触发登录。"""
         svc = _make_raw_engine()
         mock_core = MagicMock()
         mock_core.check_once = AsyncMock(
@@ -286,12 +263,11 @@ class TestLoginWithNetworkDetection:
         )
         mock_core.consume_profile_switch_flag.return_value = False
         svc._monitor_core = mock_core
-        svc._retry_policy._attempt = 2
-        svc._retry_policy._prev_network_ok = False  # 模拟之前断开
+        svc._do_async_login = AsyncMock()
 
         await svc._do_network_check_async()
 
-        assert svc._retry_policy._attempt == 0
+        svc._do_async_login.assert_not_called()
         assert svc._next_network_check > time.time()
 
     async def test_network_check_updates_interval(self):
@@ -445,7 +421,6 @@ class TestLoginWithNetworkDetection:
         handle.rejected_reason = None
         handle.future = future
         svc._orchestrator.submit.return_value = handle
-        svc._retry_policy._attempt = 0
 
         # 模拟引擎循环中的网络检测
         now = time.time()
@@ -464,9 +439,6 @@ class TestLoginWithNetworkDetection:
         # 模拟登录成功完成回调（元组契约），确定性等待回调执行
         future.set_result((True, "登录成功"))
         assert callback_done.wait(timeout=2)
-        # 登录成功后重试计数应被重置、重试定时清零
-        assert svc._retry_policy._attempt == 0
-        assert svc._next_retry_time == 0
 
 
 # =====================================================================

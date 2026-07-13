@@ -92,8 +92,6 @@ class TestFullEngineLoginChain:
         assert result == (True, "登录成功")
         mock_worker.submit.assert_called_once()
 
-        # 手动登录不触发自动失败计数
-        assert engine._retry_policy._attempt == 0
 
     def test_chain_failure(self, integration_stack):
         engine, profile_service, task_executor, _, mock_worker = integration_stack
@@ -110,8 +108,6 @@ class TestFullEngineLoginChain:
         assert result == (False, "认证失败")
 
         mock_worker.submit.assert_called_once()
-        # 手动登录不触发自动失败计数
-        assert engine._retry_policy._attempt == 0
 
 
 class TestNetworkDetectionLogin:
@@ -198,8 +194,6 @@ class TestNetworkDetectionLogin:
         result1 = handle1.future.result(timeout=10)
         assert result1 == (False, "认证失败")
 
-        # 模拟重试状态：一次失败后
-        engine._retry_policy._attempt = 1
 
         # 第二次登录（自动重试路径）
         result_container2, done_event2, restore_fn2 = _capture_login_completion(
@@ -219,8 +213,6 @@ class TestNetworkDetectionLogin:
             assert msg == "认证失败"
 
             assert mock_worker.submit.call_count == 2
-            # 自动登录失败应递增退避计数
-            assert engine._retry_policy._attempt >= 1
         finally:
             restore_fn2()
 
