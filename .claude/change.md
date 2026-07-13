@@ -5060,3 +5060,16 @@
 ### 范围
 - 仅新增方法，不修改现有 _execute_script 或其他方法
 - 为 Task 4.2（删除 api/scripts.py 模块级线程池）做准备
+
+## Task 4.1 review fix: 方法位置与测试补强 (2026-07-13)
+
+### 变更
+- `app/services/task_executor.py`：将 `run_script_on_demand` 从"内部执行方法"分节移至"同步执行接口"分节（紧跟 execute_task 之后），符合公共方法的位置约定
+- `app/services/task_executor.py`：docstring 中"无 cancel_event（同步阻塞执行）"改为"无 cancel_event（不支持外部取消）"，表述更精确
+- `tests/test_services/test_task_executor_lifecycle.py`：3 个 timeout 测试补充 `cancel_event=None` 透传断言
+
+### 测试
+- 全量测试：2441 passed
+
+### 范围
+- code quality review 的 MINOR + 2 个 SUGGESTION 修复

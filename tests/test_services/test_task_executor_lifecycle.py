@@ -931,6 +931,7 @@ class TestRunScriptOnDemand:
 
         # 验证 runner 收到 timeout=120
         assert mock_runner_cls.call_args.kwargs["timeout"] == 120
+        assert mock_runner_cls.call_args.kwargs["cancel_event"] is None
 
     def test_run_script_on_demand_explicit_timeout(self, tmp_path):
         """显式传入 timeout 时不应读取 config，且 runner 收到该 timeout。"""
@@ -957,6 +958,7 @@ class TestRunScriptOnDemand:
         mock_get_config.assert_not_called()
         # 验证 runner 收到 timeout=30
         assert mock_runner_cls.call_args.kwargs["timeout"] == 30
+        assert mock_runner_cls.call_args.kwargs["cancel_event"] is None
 
     def test_run_script_on_demand_timeout_fallback_on_config_error(self, tmp_path):
         """config 读取异常时应回退到 60 秒。"""
@@ -982,3 +984,4 @@ class TestRunScriptOnDemand:
 
         # 验证 runner 收到 timeout=60（回退值）
         assert mock_runner_cls.call_args.kwargs["timeout"] == 60
+        assert mock_runner_cls.call_args.kwargs["cancel_event"] is None
