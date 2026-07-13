@@ -80,9 +80,7 @@ class ConfigService:
             raise ValueError(f"无效的日志级别: {level}")
         base = self._runtime_config
         new_config = base.model_copy(
-            update={
-                "logging": base.logging.model_copy(update={"level": level})
-            }
+            update={"logging": base.logging.model_copy(update={"level": level})}
         )
         self._swap(new_config)
 
