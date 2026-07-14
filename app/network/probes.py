@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import socket
 import ssl
 import threading
 import time
-from collections.abc import Iterable, Sequence
+from collections.abc import AsyncIterator, Iterable, Sequence
+from typing import Any
 
 import httpx
 import psutil
@@ -33,6 +35,25 @@ def shutdown_probes() -> None:
     由 ServiceContainer.shutdown() 在应用关闭时调用。
     """
     _shutdown_event.set()
+
+
+@contextlib.asynccontextmanager
+async def _probe_client(
+    source_ip: str | None = None, follow_redirects: bool = True
+) -> AsyncIterator[httpx.AsyncClient]:
+    """网络探测用 httpx 客户端（禁用 SSL 验证，可选绑定源 IP）。"""
+    block = is_block_proxy()
+    transport = (
+        httpx.AsyncHTTPTransport(local_address=source_ip) if source_ip else None
+    )
+    async with httpx.AsyncClient(
+        verify=False,
+        follow_redirects=follow_redirects,
+        trust_env=not block,
+        transport=transport,
+        limits=httpx.Limits(max_connections=4, max_keepalive_connections=2),
+    ) as client:
+        yield client
 
 
 def set_block_proxy(enabled: bool) -> None:
@@ -310,16 +331,7 @@ async def is_network_available_url(
     if not url_checks:
         return True
 
-    block = is_block_proxy()
-    transport = httpx.AsyncHTTPTransport(local_address=source_ip) if source_ip else None
-
-    async with httpx.AsyncClient(
-        verify=False,
-        follow_redirects=True,
-        trust_env=not block,
-        transport=transport,
-        limits=httpx.Limits(max_connections=4, max_keepalive_connections=2),
-    ) as client:
+    async with _probe_client(source_ip) as client:
 
         async def _check_url(url: str, expected: str) -> tuple[str, bool, str]:
             start = time.perf_counter()
@@ -373,16 +385,7 @@ async def is_network_available_http(
     if len(urls) == 0:
         return False
 
-    block = is_block_proxy()
-    transport = httpx.AsyncHTTPTransport(local_address=source_ip) if source_ip else None
-
-    async with httpx.AsyncClient(
-        verify=False,
-        follow_redirects=follow_redirects,
-        trust_env=not block,
-        transport=transport,
-        limits=httpx.Limits(max_connections=4, max_keepalive_connections=2),
-    ) as client:
+    async with _probe_client(source_ip, follow_redirects) as client:
 
         async def _check_one(url: str) -> tuple[str, bool, str]:
             start = time.perf_counter()

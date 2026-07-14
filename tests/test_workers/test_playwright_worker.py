@@ -6,13 +6,17 @@ import asyncio
 import contextlib
 import threading
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import psutil
 import pytest
 
 import app.workers.playwright_worker as pw_module
-from app.workers.playwright_worker import cleanup_orphan_browsers
+from app.workers.playwright_worker import (
+    CMD_BROWSER,
+    CMD_LOGIN,
+    cleanup_orphan_browsers,
+)
 
 # ── cleanup_orphan_browsers ──
 
@@ -358,3 +362,236 @@ class TestCleanupDebugSession:
 
         fake_page.close.assert_not_called()
         assert worker._page is None
+
+
+# ── CMD_BROWSER 常量 ──
+
+
+def test_cmd_browser_constant_exists():
+    """CMD_BROWSER 常量已定义，与 CMD_LOGIN 区分。"""
+    assert CMD_BROWSER == "browser"
+    assert CMD_BROWSER != CMD_LOGIN
+
+
+# ── _handle_browser_task 参数校验与错误路径 ──
+
+
+class TestHandleBrowserTask:
+    """_handle_browser_task 早返回路径（无需真实浏览器）。"""
+
+    async def test_missing_cancel_event(self):
+        """缺 cancel_event → 返回 cancel_event 缺失。"""
+        from app.workers.playwright_worker import PlaywrightWorker
+
+        worker = PlaywrightWorker()
+        data = {"config": {"active_task": "some_task"}}
+
+        resp = await worker._handle_browser_task(data)
+
+        assert resp.success is False
+        assert resp.error == "cancel_event 缺失"
+
+    async def test_missing_active_task(self):
+        """active_task 为空 → 返回未指定任务。"""
+        from app.workers.playwright_worker import PlaywrightWorker
+
+        worker = PlaywrightWorker()
+        cancel_event = threading.Event()
+        data = {"config": {}, "cancel_event": cancel_event}
+
+        resp = await worker._handle_browser_task(data)
+
+        assert resp.success is False
+        assert resp.error == "未指定任务"
+
+    async def test_task_not_found(self):
+        """TaskManager 返回 None → 返回浏览器任务不存在。"""
+        from app.workers.playwright_worker import PlaywrightWorker
+
+        worker = PlaywrightWorker()
+        cancel_event = threading.Event()
+        data = {
+            "config": {"active_task": "nonexistent"},
+            "cancel_event": cancel_event,
+        }
+
+        with patch("app.tasks.TaskManager") as MockTaskManager:
+            mock_instance = MockTaskManager.return_value
+            mock_instance.get_task_detail.return_value = None
+
+            resp = await worker._handle_browser_task(data)
+
+        assert resp.success is False
+        assert resp.error == "浏览器任务不存在: nonexistent"
+
+    async def test_wrong_task_type(self):
+        """任务类型不是 browser → 返回浏览器任务不存在。"""
+        from app.workers.playwright_worker import PlaywrightWorker
+
+        worker = PlaywrightWorker()
+        cancel_event = threading.Event()
+        data = {
+            "config": {"active_task": "script_task"},
+            "cancel_event": cancel_event,
+        }
+
+        with patch("app.tasks.TaskManager") as MockTaskManager:
+            mock_instance = MockTaskManager.return_value
+            mock_instance.get_task_detail.return_value = {
+                "id": "script_task",
+                "type": "script",
+            }
+
+            resp = await worker._handle_browser_task(data)
+
+        assert resp.success is False
+        assert resp.error == "浏览器任务不存在: script_task"
+
+    async def test_template_vars_built_from_runtime_config(self):
+        """_handle_browser_task 应从 worker config 构建 template_vars 传入 BrowserTaskRunner。
+
+        回归测试：原 template_vars=config.get("template_vars", {}) 永远为空 dict，
+        因 runtime_config_to_worker_dict 不生成该字段，导致 {{USERNAME}} 等无法解析。
+        """
+        from app.workers.playwright_worker import PlaywrightWorker
+
+        worker = PlaywrightWorker()
+        cancel_event = threading.Event()
+        data = {
+            "config": {
+                "active_task": "test_task",
+                "auth_url": "http://auth.example.com",
+                "username": "testuser",
+                "password": "testpass",
+                "isp": "@cmcc",
+            },
+            "cancel_event": cancel_event,
+        }
+        task_detail = {
+            "id": "test_task",
+            "type": "browser",
+            "name": "测试任务",
+            "url": "",
+            "steps": [],
+        }
+
+        captured_runner = MagicMock()
+        captured_runner.execute = AsyncMock(return_value=(True, "成功"))
+
+        with (
+            patch("app.tasks.TaskManager") as MockTaskManager,
+            patch("app.tasks.BrowserTaskRunner") as MockRunner,
+            patch.object(worker, "ensure_browser", new_callable=AsyncMock),
+            patch.object(worker, "_close_browser", new_callable=AsyncMock),
+        ):
+            MockTaskManager.return_value.get_task_detail.return_value = task_detail
+            MockRunner.return_value = captured_runner
+            worker._page = MagicMock()
+            worker._page.is_closed.return_value = False
+
+            resp = await worker._handle_browser_task(data)
+
+        assert resp.success is True
+        # 验证 BrowserTaskRunner 构造时收到正确的 template_vars
+        MockRunner.assert_called_once()
+        _, kwargs = MockRunner.call_args
+        template_vars = kwargs["template_vars"]
+        assert template_vars["LOGIN_URL"] == "http://auth.example.com"
+        assert template_vars["USERNAME"] == "testuser"
+        assert template_vars["PASSWORD"] == "testpass"
+        assert template_vars["ISP"] == "@cmcc"
+
+# ── Task 2.3: PlaywrightWorker 显式实现 WorkerPort 协议 ──
+
+
+class TestWorkerPortCompliance:
+    """Task 2.3: PlaywrightWorker 显式实现 WorkerPort 协议。"""
+
+    def test_playwright_worker_is_worker_port_instance(self):
+        """PlaywrightWorker 实例是 WorkerPort 的 runtime_checkable 实例。"""
+        from app.services.worker_port import WorkerPort
+        from app.workers.playwright_worker import PlaywrightWorker
+
+        worker = PlaywrightWorker()
+        assert isinstance(worker, WorkerPort)
+
+    def test_playwright_worker_inherits_worker_port(self):
+        """PlaywrightWorker 显式继承 WorkerPort。"""
+        from app.services.worker_port import WorkerPort
+        from app.workers.playwright_worker import PlaywrightWorker
+
+        # 显式继承（不仅是结构化子类型）
+        assert issubclass(PlaywrightWorker, WorkerPort)
+
+    def test_cmd_constants_single_source(self):
+        """CMD_* 常量单一来源：playwright_worker 从 worker_port 导入。"""
+        from app.services import worker_port as wp
+        from app.workers import playwright_worker as pw
+
+        # 所有 CMD_* 应是同一个对象（同一内存地址）
+        for name in (
+            "CMD_LOGIN",
+            "CMD_BROWSER",
+            "CMD_DEBUG_START",
+            "CMD_DEBUG_STEP",
+            "CMD_DEBUG_STOP",
+            "CMD_SHUTDOWN",
+        ):
+            wp_const = getattr(wp, name)
+            pw_const = getattr(pw, name)
+            assert wp_const is pw_const, (
+                f"{name} 应从 worker_port 导入（同一对象），实际是独立定义"
+            )
+
+    def test_worker_response_single_source(self):
+        """WorkerResponse 单一来源：playwright_worker 从 worker_port 导入。"""
+        from app.services.worker_port import WorkerResponse as WP_Response
+        from app.workers.playwright_worker import WorkerResponse as PW_Response
+
+        assert WP_Response is PW_Response, "WorkerResponse 应是同一个类对象"
+
+    def test_worker_response_is_dataclass(self):
+        """统一后的 WorkerResponse 应是 @dataclass（保持原 playwright_worker 行为）。"""
+        import dataclasses
+
+        from app.services.worker_port import WorkerResponse
+
+        assert dataclasses.is_dataclass(WorkerResponse), (
+            "WorkerResponse 应是 @dataclass 以保持 PlaywrightWorker 原有行为"
+        )
+
+    def test_worker_response_fields_preserved(self):
+        """统一后的 WorkerResponse 保持原有字段：success/data/error。"""
+        from app.services.worker_port import WorkerResponse
+
+        resp = WorkerResponse(success=True, data="ok", error=None)
+        assert resp.success is True
+        assert resp.data == "ok"
+        assert resp.error is None
+
+        resp2 = WorkerResponse(success=False, error="失败")
+        assert resp2.success is False
+        assert resp2.data is None
+        assert resp2.error == "失败"
+
+    def test_submit_signature_matches_protocol(self):
+        """submit 方法签名与 WorkerPort 协议一致：timeout 默认值为 None。"""
+        import inspect
+
+        from app.workers.playwright_worker import PlaywrightWorker
+
+        sig = inspect.signature(PlaywrightWorker.submit)
+        timeout_param = sig.parameters.get("timeout")
+        assert timeout_param is not None
+        assert timeout_param.default is None, (
+            f"submit timeout 默认值应为 None（与 Protocol 一致），实际为 {timeout_param.default}"
+        )
+
+    def test_submit_default_timeout_uses_worker_submit_timeout(self):
+        """submit 不传 timeout 时，内部使用 WORKER_SUBMIT_TIMEOUT（行为保持）。"""
+        import app.workers.playwright_worker as pw
+
+        # _DEFAULT_SUBMIT_TIMEOUT 别名常量应已移除，submit 内部直接使用 WORKER_SUBMIT_TIMEOUT
+        assert not hasattr(pw, "_DEFAULT_SUBMIT_TIMEOUT"), (
+            "_DEFAULT_SUBMIT_TIMEOUT 常量应已移除，submit 内部直接使用 WORKER_SUBMIT_TIMEOUT"
+        )

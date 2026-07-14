@@ -29,9 +29,5 @@ async def repo_fetch_task(
     url: str = Query(..., description="任务 JSON 地址"),
 ) -> dict:
     """代理获取单个任务配置"""
-    try:
-        validate_url(url)
-        return await async_repo_fetch_json(url, dict, "任务")
-    except HTTPException as e:
-        api_logger.warning("仓库代理请求失败: {} ({})", e.detail, url)
-        raise
+    validate_url(url)
+    return await async_repo_fetch_json(url, dict, "任务")

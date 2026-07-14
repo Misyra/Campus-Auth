@@ -108,11 +108,10 @@ class TestInit:
     def test_engine_created_with_dependencies(
         self, container, project_root, mock_classes
     ):
-        """ScheduleEngine 应接收 project_root、profile_service、ws_manager、login_history_service。"""
+        """ScheduleEngine 应接收 project_root、profile_service、ws_manager。"""
         mock_classes["ScheduleEngine"].assert_called_once()
         call_args = mock_classes["ScheduleEngine"].call_args
         assert call_args[0][0] == project_root
-        assert call_args[1]["login_history_service"] is container.login_history_service
 
     def test_task_manager_created_with_root(
         self, container, project_root, mock_classes
@@ -146,7 +145,7 @@ class TestInit:
         """轻量模式下也应创建 WebSocketManager。"""
         from app.container import ServiceContainer
 
-        container = ServiceContainer(project_root, mode="lightweight")
+        container = ServiceContainer(project_root)
         mock_classes["WebSocketManager"].assert_called_once()
 
     def test_lightweight_mode_creates_real_task_executor(
@@ -155,7 +154,7 @@ class TestInit:
         """轻量模式下也应创建 TaskExecutor（用于自动登录）。"""
         from app.container import ServiceContainer
 
-        container = ServiceContainer(project_root, mode="lightweight")
+        container = ServiceContainer(project_root)
         mock_classes["TaskExecutor"].assert_called_once()
         assert container.task_executor is not None
 
@@ -443,6 +442,7 @@ class TestWaitForCallbacks:
             registry=MagicMock(),
             history_store=MagicMock(),
             worker_getter=MagicMock(),
+            get_runtime_config=MagicMock(),
             login_orchestrator=MagicMock(),
         )
 

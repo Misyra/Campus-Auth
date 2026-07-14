@@ -26,6 +26,7 @@ from app.tasks.step_handlers import (
     ClickHandler,
     ClickSelectHandler,
     EvalHandler,
+    GotoHandler,
     InputHandler,
     OcrHandler,
     ScreenshotHandler,
@@ -106,20 +107,20 @@ class TestStepHandlerBase:
     """StepHandler 基类工具方法。"""
 
     def test_parse_selectors_single(self):
-        handler = InputHandler()
-        assert handler._parse_selectors("#btn") == ["#btn"]
+        """逗号分隔选择器解析 — 单个选择器。"""
+        assert [s.strip() for s in "#btn".split(",") if s.strip()] == ["#btn"]
 
     def test_parse_selectors_multiple(self):
-        handler = InputHandler()
-        assert handler._parse_selectors("#a, #b, #c") == ["#a", "#b", "#c"]
+        """逗号分隔选择器解析 — 多个选择器。"""
+        assert [s.strip() for s in "#a, #b, #c".split(",") if s.strip()] == ["#a", "#b", "#c"]
 
     def test_parse_selectors_strips_spaces(self):
-        handler = InputHandler()
-        assert handler._parse_selectors("  #a  ,  #b  ") == ["#a", "#b"]
+        """逗号分隔选择器解析 — 去除空格。"""
+        assert [s.strip() for s in "  #a  ,  #b  ".split(",") if s.strip()] == ["#a", "#b"]
 
     def test_parse_selectors_empty(self):
-        handler = InputHandler()
-        assert handler._parse_selectors("") == []
+        """逗号分隔选择器解析 — 空字符串。"""
+        assert [s.strip() for s in "".split(",") if s.strip()] == []
 
     def test_resolve_params_basic(self):
         """resolve_params 应提取 step 的非 None 字段并解析变量。"""
@@ -710,6 +711,139 @@ class TestWaitUrlHandler:
         ok, msg = await handler.execute(page, step, _make_resolver())
         assert ok is False
         assert "超时" in msg
+
+
+# ── GotoHandler ──
+
+
+class TestGotoHandler:
+    """页面导航步骤处理器。"""
+
+    def test_step_type(self):
+        assert GotoHandler().step_type == StepType.GOTO
+
+    @pytest.mark.asyncio
+    async def test_no_url_returns_error(self):
+        """缺少 url 时应返回错误。"""
+        handler = GotoHandler()
+        step = StepConfig(id="s1", type="goto")
+        ok, msg = await handler.execute(_make_page(), step, _make_resolver())
+        assert ok is False
+        assert "url" in msg
+
+    @pytest.mark.asyncio
+    async def test_goto_success_default_wait_until(self):
+        """默认 wait_until=load，导航成功应返回 True 并附带 HTTP 状态。"""
+        handler = GotoHandler()
+        step = StepConfig(id="s1", type="goto", url="https://example.com")
+        page = _make_page()
+        response = MagicMock()
+        response.status = 200
+        page.goto = AsyncMock(return_value=response)
+
+        ok, msg = await handler.execute(page, step, _make_resolver())
+        assert ok is True
+        assert "200" in msg
+        # 默认 wait_until=load
+        _, kwargs = page.goto.call_args
+        assert kwargs["wait_until"] == "load"
+
+    @pytest.mark.asyncio
+    async def test_goto_resolves_template(self):
+        """url 中的模板变量应被解析。"""
+        handler = GotoHandler()
+        step = StepConfig(id="s1", type="goto", url="{{LOGIN_URL}}")
+        page = _make_page()
+        response = MagicMock()
+        response.status = 302
+        page.goto = AsyncMock(return_value=response)
+        resolver = VariableResolver(TaskConfig(), {"LOGIN_URL": "http://auth.local"})
+
+        ok, _msg = await handler.execute(page, step, resolver)
+        assert ok is True
+        args, _ = page.goto.call_args
+        assert args[0] == "http://auth.local"
+
+    @pytest.mark.asyncio
+    async def test_goto_custom_wait_until(self):
+        """extra 中的 wait_until 应被采用。"""
+        handler = GotoHandler()
+        step = StepConfig(
+            id="s1",
+            type="goto",
+            url="https://example.com",
+            extra={"wait_until": "networkidle"},
+        )
+        page = _make_page()
+        response = MagicMock()
+        response.status = 200
+        page.goto = AsyncMock(return_value=response)
+
+        ok, _msg = await handler.execute(page, step, _make_resolver())
+        assert ok is True
+        _, kwargs = page.goto.call_args
+        assert kwargs["wait_until"] == "networkidle"
+
+    @pytest.mark.asyncio
+    async def test_goto_invalid_wait_until_falls_back_to_load(self):
+        """无效的 wait_until 应回退到 load。"""
+        handler = GotoHandler()
+        step = StepConfig(
+            id="s1",
+            type="goto",
+            url="https://example.com",
+            extra={"wait_until": "weird"},
+        )
+        page = _make_page()
+        response = MagicMock()
+        response.status = 200
+        page.goto = AsyncMock(return_value=response)
+
+        ok, _msg = await handler.execute(page, step, _make_resolver())
+        assert ok is True
+        _, kwargs = page.goto.call_args
+        assert kwargs["wait_until"] == "load"
+
+    @pytest.mark.asyncio
+    async def test_goto_navigation_failure(self):
+        """page.goto 抛异常时应返回失败。"""
+        handler = GotoHandler()
+        step = StepConfig(id="s1", type="goto", url="https://example.com")
+        page = _make_page()
+        page.goto = AsyncMock(side_effect=TimeoutError("net err"))
+
+        ok, msg = await handler.execute(page, step, _make_resolver())
+        assert ok is False
+        assert "导航失败" in msg
+
+    @pytest.mark.asyncio
+    async def test_goto_no_response(self):
+        """response 为 None 时（如同源跳转/空白页）也应成功，状态显示为 ?。"""
+        handler = GotoHandler()
+        step = StepConfig(id="s1", type="goto", url="about:blank")
+        page = _make_page()
+        page.goto = AsyncMock(return_value=None)
+
+        ok, msg = await handler.execute(page, step, _make_resolver())
+        assert ok is True
+        assert "?" in msg
+
+    @pytest.mark.asyncio
+    async def test_goto_timeout_passed_to_playwright(self):
+        """step.timeout 应传给 page.goto。"""
+        handler = GotoHandler()
+        step = StepConfig(
+            id="s1", type="goto", url="https://example.com", timeout=7777
+        )
+        page = _make_page()
+        response = MagicMock()
+        response.status = 200
+        page.goto = AsyncMock(return_value=response)
+
+        ok, _msg = await handler.execute(page, step, _make_resolver())
+        assert ok is True
+        _, kwargs = page.goto.call_args
+        assert kwargs["timeout"] == 7777
 
 
 # ── EvalHandler ──

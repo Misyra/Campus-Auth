@@ -93,10 +93,6 @@ class StepHandler(ABC):
             params[key] = resolver.resolve(value)
         return params
 
-    @staticmethod
-    def _parse_selectors(selector: str) -> list[str]:
-        """解析逗号分隔的候选选择器列表"""
-        return [s.strip() for s in selector.split(",") if s.strip()]
 
     async def _try_candidates_with_fallback(
         self,
@@ -123,7 +119,7 @@ class StepHandler(ABC):
         Returns:
             (success, message)
         """
-        candidates = self._parse_selectors(selector)
+        candidates = [s.strip() for s in selector.split(",") if s.strip()]
         deadline = time.perf_counter() + timeout / 1000
 
         # 策略1: 快速尝试可见元素
@@ -227,7 +223,7 @@ class StepHandler(ABC):
 
     async def _find_element(self, ctx, selector: str, timeout: int):
         """查找元素（支持多个候选选择器，deadline 模式分摊超时）。"""
-        candidates = self._parse_selectors(selector)
+        candidates = [s.strip() for s in selector.split(",") if s.strip()]
         deadline = time.perf_counter() + timeout / 1000
         for sel in candidates:
             remaining = deadline - time.perf_counter()
@@ -612,6 +608,58 @@ class WaitUrlHandler(StepHandler):
             await asyncio.sleep(min(0.2, remaining))
 
 
+class GotoHandler(StepHandler):
+    """页面导航步骤处理器 — 导航到指定 URL。
+
+    与任务顶层的 `url` 字段自动导航互补：顶层 `url` 在步骤执行前自动导航一次，
+    `goto` 步骤用于在执行过程中切换页面（如登录后跳到打卡页）。
+    """
+
+    # 合法的 wait_until 值（与 Playwright page.goto 一致）
+    _VALID_WAIT_UNTIL = ("load", "domcontentloaded", "networkidle", "commit")
+
+    @property
+    def step_type(self) -> str:
+        return StepType.GOTO
+
+    async def execute(
+        self, page, step: StepConfig, resolver: VariableResolver
+    ) -> tuple[bool, str]:
+        params = self.resolve_params(step, resolver)
+        url = params.get("url", "")
+        timeout = step.timeout or DEFAULT_STEP_TIMEOUT_MS
+
+        if not url:
+            return False, "goto 步骤需要 url"
+
+        # wait_until 通过 extra 传入，默认 load
+        wait_until = "load"
+        if step.extra:
+            raw = step.extra.get("wait_until", "load")
+            if isinstance(raw, str) and raw in self._VALID_WAIT_UNTIL:
+                wait_until = raw
+            else:
+                logger.warning(
+                    "[goto] wait_until 值 '{}' 无效，可选: {}，使用默认 'load'",
+                    raw,
+                    ", ".join(self._VALID_WAIT_UNTIL),
+                )
+
+        logger.debug(
+            "[goto] url={}, wait_until={}, timeout={}ms", url, wait_until, timeout
+        )
+        try:
+            response = await page.goto(
+                url, wait_until=wait_until, timeout=timeout
+            )
+        except Exception as e:
+            return False, f"导航失败: {url} ({e})"
+
+        status = response.status if response else "?"
+        logger.info("[goto] 已导航: {} (HTTP {})", url, status)
+        return True, f"已导航: {url} (HTTP {status})"
+
+
 class EvalHandler(StepHandler):
     """JavaScript求值处理器"""
 
@@ -904,6 +952,39 @@ class OcrHandler(StepHandler):
             self.schedule_cleanup(old)
 
 
+class AssertTextHandler(StepHandler):
+    """断言文本步骤 — 等待页面出现指定文本。成功由 runner 根据返回值判定。"""
+
+    @property
+    def step_type(self) -> str:
+        return "assert_text"
+
+    async def execute(
+        self, page, step: StepConfig, resolver: VariableResolver
+    ) -> tuple[bool, str]:
+        params = self.resolve_params(step, resolver)
+        value = params.get("value", "")
+        timeout = step.timeout or DEFAULT_STEP_TIMEOUT_MS
+
+        if not value:
+            return False, "assert_text 步骤需要 value"
+
+        logger.debug("[assert_text] 等待文本: '{}', timeout={}ms", value, timeout)
+        try:
+            escaped = value.replace("\\", "\\\\").replace("'", "\\'")
+            await page.wait_for_function(
+                f"() => document.body.innerText.includes('{escaped}')",
+                timeout=timeout,
+            )
+        except (PlaywrightTimeoutError, TimeoutError):
+            return False, f"等待文本超时 ({timeout}ms): {value}"
+        except Exception as e:
+            return False, f"等待文本失败: {value}, 错误: {e}"
+
+        logger.info("[assert_text] 检测到文本: '{}'", value)
+        return True, f"检测到文本: {value}"
+
+
 # ── 模块级常量：默认处理器映射（所有 handler 无状态，安全共享）──
 
 DEFAULT_HANDLERS: dict[str, StepHandler] = {
@@ -915,9 +996,11 @@ DEFAULT_HANDLERS: dict[str, StepHandler] = {
         ClickSelectHandler(),
         WaitHandler(),
         WaitUrlHandler(),
+        GotoHandler(),
         EvalHandler(),
         ScreenshotHandler(),
         SleepHandler(),
+        AssertTextHandler(),
         OcrHandler(),
     ]
 }

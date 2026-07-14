@@ -15,18 +15,21 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.schemas import MonitorSettings, RuntimeConfig
-from app.services.login_attempt import SCREENSHOT_URL_PATTERN, LoginAttempt
 from app.services.monitor_service import (
     NetworkMonitorCore,
     NetworkState,
 )
+from app.workers.login_attempt import LoginAttempt
 
 # ── 第一部分：LoginAttempt（原 test_login.py）──
 
 
 # =====================================================================
-# SCREENSHOT_URL_PATTERN
+# SCREENSHOT_URL_PATTERN (inlined — no longer exported)
 # =====================================================================
+
+
+SCREENSHOT_URL_PATTERN = r"\s*截图[:：]\s*/\S+\.(?:png|jpg|jpeg|webp|gif)"
 
 
 class TestScreenshotUrlPattern:

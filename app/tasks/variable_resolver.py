@@ -13,6 +13,18 @@ from .models import StepError, TaskConfig
 logger = get_logger("variable_resolver", source="backend")
 
 
+def _to_str(value: Any) -> str:
+    """将变量值转为字符串，非字符串类型序列化为 JSON。"""
+    if value is None:
+        return ""
+    if not isinstance(value, str):
+        try:
+            return json.dumps(value, ensure_ascii=False)
+        except TypeError:
+            return str(value)
+    return value
+
+
 class VariableResolver:
     """变量解析器"""
 
@@ -48,7 +60,7 @@ class VariableResolver:
         """
         # 1. runtime_vars（eval 步骤结果、已注入的任务变量等）
         if name in self.runtime_vars:
-            return self._to_str(self.runtime_vars[name])
+            return _to_str(self.runtime_vars[name])
 
         # 2. template_vars（登录凭证、ISP 等外部传入）
         if name in self.template_vars:
@@ -62,17 +74,6 @@ class VariableResolver:
 
         return None
 
-    @staticmethod
-    def _to_str(value: Any) -> str:
-        """将变量值转为字符串，非字符串类型序列化为 JSON。"""
-        if value is None:
-            return ""
-        if not isinstance(value, str):
-            try:
-                return json.dumps(value, ensure_ascii=False)
-            except TypeError:
-                return str(value)
-        return value
 
     # ── 公开 API ──
 

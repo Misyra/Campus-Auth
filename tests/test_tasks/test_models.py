@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.tasks.models import TASK_ID_PATTERN, StepConfig
+from app.tasks.models import TASK_ID_PATTERN, StepConfig, TaskConfig
 
 # ── TASK_ID_PATTERN 长度限制 ──
 
@@ -96,3 +96,45 @@ class TestStepConfig:
         assert d == {"id": "s1", "type": "click"}
         assert "description" not in d
         assert "timeout" not in d
+
+
+# ── TaskConfig success_condition 字段测试 ──
+
+
+class TestTaskConfigSuccessCondition:
+    """TaskConfig.success_condition 字段测试。"""
+
+    def test_default_empty(self):
+        """TaskConfig 默认 success_condition 为空字符串。"""
+        cfg = TaskConfig()
+        assert cfg.success_condition == ""
+
+    def test_from_dict_with_condition(self):
+        """TaskConfig.from_dict 解析 success_condition。"""
+        cfg = TaskConfig.from_dict({
+            "name": "登录任务",
+            "success_condition": "success_flag",
+        })
+        assert cfg.success_condition == "success_flag"
+
+    def test_from_dict_default_empty(self):
+        """TaskConfig.from_dict 未指定 success_condition 时为空字符串。"""
+        cfg = TaskConfig.from_dict({"name": "t"})
+        assert cfg.success_condition == ""
+
+    def test_from_dict_non_string_coerced_to_string(self):
+        """TaskConfig.from_dict 非字符串值被强转为字符串。"""
+        cfg = TaskConfig.from_dict({"success_condition": 123})
+        assert cfg.success_condition == "123"
+
+    def test_to_dict_with_condition(self):
+        """TaskConfig.to_dict 序列化非空 success_condition。"""
+        cfg = TaskConfig(name="t", success_condition="flag")
+        d = cfg.to_dict()
+        assert d["success_condition"] == "flag"
+
+    def test_to_dict_without_condition(self):
+        """TaskConfig.to_dict 空 success_condition 不序列化。"""
+        cfg = TaskConfig(name="t")
+        d = cfg.to_dict()
+        assert "success_condition" not in d

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
@@ -23,13 +22,6 @@ router = APIRouter()
 api_logger = get_logger("api", source="backend")
 
 
-def _safe_detect(func: Callable[..., Any], label: str, default: Any = None) -> Any:
-    """安全执行检测函数，异常时记录日志并返回默认值。"""
-    try:
-        return func()
-    except Exception as exc:
-        api_logger.exception("{}检测异常: {}", label, exc)
-        return default
 
 
 @router.get("/api/profiles", response_model=ProfileListResponse)
@@ -143,9 +135,16 @@ def detect_network_profile(
 ) -> NetworkDetectResponse:
     from app.network.detect import detect_gateway_ip, detect_wifi_ssid
 
-    gateway = _safe_detect(detect_gateway_ip, "网关")
-    ssid = _safe_detect(detect_wifi_ssid, "SSID")
-    matched_id = _safe_detect(profile_svc.detect_matching_profile, "方案匹配")
+    def _try(label: str, fn):
+        try:
+            return fn()
+        except Exception as exc:
+            api_logger.exception("{}检测异常: {}", label, exc)
+            return None
+
+    gateway = _try("网关", detect_gateway_ip)
+    ssid = _try("SSID", detect_wifi_ssid)
+    matched_id = _try("方案匹配", profile_svc.detect_matching_profile)
 
     data = profile_svc.load()
     matched_name = None

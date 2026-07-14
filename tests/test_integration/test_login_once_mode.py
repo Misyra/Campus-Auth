@@ -1,10 +1,36 @@
-"""LOGIN_ONCE 模式测试 — 验证 main.py::_run_login_then_exit 的三种结果。"""
+"""LOGIN_ONCE 模式测试 — 验证 run_login_then_exit 的三种结果。"""
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.schemas import LoginCredentials, LoginResult, RuntimeConfig
+from app.services.login_orchestrator import LoginOrchestrator
+from app.services.worker_port import WorkerResponse
+
+
+def _build_container_with_orchestrator(
+    runtime_config: RuntimeConfig,
+    mock_worker: MagicMock,
+    mock_history: MagicMock | None = None,
+):
+    """构造测试 container，注入真实 LoginOrchestrator + mock worker。
+
+    返回 (container, executor)，调用方负责 executor.shutdown。
+    """
+    executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="test-login")
+    orchestrator = LoginOrchestrator(
+        worker_getter=lambda: mock_worker,
+        get_runtime_config=lambda: runtime_config,
+        executor=executor,
+        login_history=mock_history,
+        profile_service=MagicMock(),
+    )
+    container = MagicMock()
+    container.config_service.get_runtime_config.return_value = runtime_config
+    container.login_orchestrator = orchestrator
+    return container, executor
 
 
 class TestLoginOnceMode:
@@ -23,15 +49,10 @@ class TestLoginOnceMode:
 
         ctx = self._make_ctx()
         logger = MagicMock()
-
-        mock_ps = MagicMock()
-        mock_ps.get_runtime_config.return_value = RuntimeConfig()
+        container = MagicMock()
+        container.config_service.get_runtime_config.return_value = RuntimeConfig()
 
         with (
-            patch(
-                "app.services.profile_service.get_profile_service",
-                return_value=mock_ps,
-            ),
             patch(
                 "app.network.decision.check_network_status", new_callable=AsyncMock
             ) as mock_net,
@@ -40,7 +61,7 @@ class TestLoginOnceMode:
             mock_net.return_value = (False, "network_down", "")
             mock_login.return_value = LoginResult.SUCCESS
 
-            result = _run_login_then_exit(ctx, logger)
+            result = _run_login_then_exit(ctx, container, logger)
 
         assert result == LoginResult.SUCCESS
 
@@ -52,15 +73,10 @@ class TestLoginOnceMode:
 
         ctx = self._make_ctx()
         logger = MagicMock()
-
-        mock_ps = MagicMock()
-        mock_ps.get_runtime_config.return_value = RuntimeConfig()
+        container = MagicMock()
+        container.config_service.get_runtime_config.return_value = RuntimeConfig()
 
         with (
-            patch(
-                "app.services.profile_service.get_profile_service",
-                return_value=mock_ps,
-            ),
             patch(
                 "app.network.decision.check_network_status", new_callable=AsyncMock
             ) as mock_net,
@@ -69,7 +85,7 @@ class TestLoginOnceMode:
             mock_net.return_value = (False, "network_down", "")
             mock_login.return_value = LoginResult.TEMPORARY_FAILURE
 
-            result = _run_login_then_exit(ctx, logger)
+            result = _run_login_then_exit(ctx, container, logger)
 
         assert result == LoginResult.TEMPORARY_FAILURE
 
@@ -81,15 +97,12 @@ class TestLoginOnceMode:
 
         ctx = self._make_ctx()
         logger = MagicMock()
+        container = MagicMock()
+        container.config_service.get_runtime_config.side_effect = Exception(
+            "配置加载失败"
+        )
 
-        mock_ps = MagicMock()
-        mock_ps.get_runtime_config.side_effect = Exception("配置加载失败")
-
-        with patch(
-            "app.services.profile_service.get_profile_service",
-            return_value=mock_ps,
-        ):
-            result = _run_login_then_exit(ctx, logger)
+        result = _run_login_then_exit(ctx, container, logger)
 
         assert result == LoginResult.CONFIG_ERROR
 
@@ -105,25 +118,19 @@ class TestLoginOnceMode:
         )
         runtime_config = RuntimeConfig(credentials=_creds)
 
-        mock_result = MagicMock()
-        mock_result.success = True
-        mock_result.data = "登录成功"
+        mock_worker = MagicMock()
+        mock_worker.submit.return_value = WorkerResponse(success=True, data="登录成功")
+        mock_history = MagicMock()
 
-        with (
-            patch(
-                "app.services.profile_service.get_profile_service"
-            ) as mock_profile_factory,
-            patch(
-                "app.services.login_history_service.LoginHistoryService"
-            ) as mock_history_cls,
-            patch("app.workers.playwright_worker.get_worker") as mock_get_worker,
-            patch("app.workers.playwright_worker.cleanup_orphan_browsers"),
-        ):
-            mock_history = MagicMock()
-            mock_history_cls.return_value = mock_history
-            mock_get_worker.return_value.submit.return_value = mock_result
+        container, executor = _build_container_with_orchestrator(
+            runtime_config, mock_worker, mock_history
+        )
 
-            result = _execute_login_with_retries(runtime_config, logger)
+        try:
+            with patch("app.services.worker_port.cleanup_orphan_browsers"):
+                result = _execute_login_with_retries(runtime_config, container, logger)
+        finally:
+            executor.shutdown(wait=True)
 
         assert result == LoginResult.SUCCESS
         mock_history.add.assert_called_once()
@@ -147,25 +154,21 @@ class TestLoginOnceMode:
             credentials=_creds, retry=RetrySettings(max_retries=1)
         )
 
-        mock_result = MagicMock()
-        mock_result.success = False
-        mock_result.error = "密码错误"
+        mock_worker = MagicMock()
+        mock_worker.submit.return_value = WorkerResponse(
+            success=False, error="密码错误"
+        )
+        mock_history = MagicMock()
 
-        with (
-            patch(
-                "app.services.profile_service.get_profile_service"
-            ) as mock_profile_factory,
-            patch(
-                "app.services.login_history_service.LoginHistoryService"
-            ) as mock_history_cls,
-            patch("app.workers.playwright_worker.get_worker") as mock_get_worker,
-            patch("app.workers.playwright_worker.cleanup_orphan_browsers"),
-        ):
-            mock_history = MagicMock()
-            mock_history_cls.return_value = mock_history
-            mock_get_worker.return_value.submit.return_value = mock_result
+        container, executor = _build_container_with_orchestrator(
+            runtime_config, mock_worker, mock_history
+        )
 
-            result = _execute_login_with_retries(runtime_config, logger)
+        try:
+            with patch("app.services.worker_port.cleanup_orphan_browsers"):
+                result = _execute_login_with_retries(runtime_config, container, logger)
+        finally:
+            executor.shutdown(wait=True)
 
         assert result == LoginResult.TEMPORARY_FAILURE
         mock_history.add.assert_called_once()

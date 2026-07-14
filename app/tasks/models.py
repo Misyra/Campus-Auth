@@ -54,6 +54,8 @@ class StepType(str, Enum):
     SLEEP = "sleep"
     OCR = "ocr"
     CLICK_SELECT = "click_select"
+    ASSERT_TEXT = "assert_text"
+    GOTO = "goto"
 
 
 @dataclass
@@ -85,22 +87,6 @@ class StepConfig:
     # 扩展参数
     extra: dict[str, Any] = field(default_factory=dict)
 
-    @classmethod
-    def _field_defaults(cls) -> dict[str, Any]:
-        """动态获取字段默认值，用于 to_dict 时跳过默认值（结果按类缓存）。"""
-        if "_cached_field_defaults" not in cls.__dict__:
-            from dataclasses import MISSING, fields
-
-            defaults = {}
-            for f in fields(cls):
-                if f.name in ("id", "type", "extra"):
-                    continue
-                if f.default is not MISSING:
-                    defaults[f.name] = f.default
-                elif f.default_factory is not MISSING:
-                    defaults[f.name] = f.default_factory()
-            cls._cached_field_defaults = defaults
-        return cls._cached_field_defaults
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> StepConfig:
@@ -143,14 +129,20 @@ class StepConfig:
     def to_dict(self) -> dict[str, Any]:
         """序列化为紧凑字典，跳过默认值和 None，合并 extra 回顶层"""
         result: dict[str, Any] = {"id": self.id, "type": self.type}
-        defaults = self._field_defaults()
-        for field_name in self.__dataclass_fields__:
-            if field_name in ("id", "type", "extra"):
+        from dataclasses import MISSING, fields as dc_fields
+
+        for f in dc_fields(self):
+            if f.name in ("id", "type", "extra"):
                 continue
-            value = getattr(self, field_name)
-            default = defaults.get(field_name)
-            if value is not None and value != default:
-                result[field_name] = value
+            value = getattr(self, f.name)
+            # 跳过 None 和等于默认值的字段
+            if value is None:
+                continue
+            if f.default is not MISSING and value == f.default:
+                continue
+            if f.default_factory is not MISSING and value == f.default_factory():
+                continue
+            result[f.name] = value
         if self.extra:
             result.update(self.extra)
         return result
@@ -175,6 +167,12 @@ class TaskConfig:
     reveal_hidden: bool = False  # 默认关闭，由每个步骤的 force 降级自动处理隐藏输入框
     step_delay: float = 0.5
     navigation_wait: float = 1  # 页面加载后额外等待秒数，用于等待 AJAX 初始化
+    # 成功条件变量名：声明后，runner 在步骤跑完后从 runtime_vars 取该变量的值做真值判定
+    # - 真值 → 成功
+    # - 假值 → 失败（按重试策略重试）
+    # - 留空 → 走兜底（登录路径网络检测，通用路径信任步骤）
+    # 用户通过 eval 步骤的 store_as 写入该变量
+    success_condition: str = ""
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> TaskConfig:
@@ -197,6 +195,7 @@ class TaskConfig:
             reveal_hidden=data.get("reveal_hidden", False),
             step_delay=_safe_float(data.get("step_delay"), 0.5),
             navigation_wait=_safe_float(data.get("navigation_wait"), 1),
+            success_condition=str(data.get("success_condition", "")),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -223,6 +222,8 @@ class TaskConfig:
             result["step_delay"] = self.step_delay
         if self.navigation_wait != 1:
             result["navigation_wait"] = self.navigation_wait
+        if self.success_condition:
+            result["success_condition"] = self.success_condition
         return result
 
 

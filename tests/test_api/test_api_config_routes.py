@@ -6,7 +6,6 @@ from unittest.mock import MagicMock, patch
 
 from app.schemas import (
     BrowserSettings,
-    LoggingSettings,
     LoginCredentials,
     MonitorSettings,
     RuntimeConfig,
@@ -121,7 +120,7 @@ class TestSetLogLevel:
     def test_set_log_level_calls_update_log_level(
         self, mock_log_center_cls, api_client
     ):
-        """设置日志级别后应调用 engine.update_log_level()。"""
+        """设置日志级别后应调用 config_service.update_log_level()。"""
         test_client, mock_services = api_client
 
         # 模拟 LogConfigCenter：set_level 后 get_config 返回新级别
@@ -133,8 +132,10 @@ class TestSetLogLevel:
         assert resp.status_code == 200
         assert resp.json()["success"] is True
 
-        # 验证 engine.update_log_level 被调用（替代裸改 _runtime_config）
-        mock_services.engine.update_log_level.assert_called_once_with("DEBUG")
+        # 验证 config_service.update_log_level 被调用（Task 3.4：API 改用 ConfigServiceDep）
+        mock_services.config_service.update_log_level.assert_called_once_with("DEBUG")
+        # engine 不应再被直接调用更新日志级别
+        mock_services.engine.update_log_level.assert_not_called()
 
     @patch("app.utils.logging.LogConfigCenter")
     def test_set_log_level_invalid_level_rejected(
@@ -156,12 +157,6 @@ class TestSetLogLevel:
         mock_center = MagicMock()
         mock_center.get_config.return_value = {"level": "WARNING"}
         mock_log_center_cls.get_instance.return_value = mock_center
-
-        mock_engine = MagicMock()
-        mock_engine._runtime_config = RuntimeConfig(
-            logging=LoggingSettings(level="INFO")
-        )
-        mock_services.engine = mock_engine
 
         resp = test_client.put("/api/config/log-level", json={"level": "WARNING"})
         assert resp.status_code == 200

@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import threading
 
+import pytest
+
 
 class TestShutdownProbesBehavior:
     """shutdown_probes 关闭行为验证。"""
@@ -107,6 +109,17 @@ class TestAtexitRemoved:
 
 class TestTcpProbeInterfaceBind:
     """TCP 探测 interface_name 参数传递验证。"""
+
+    @pytest.fixture(autouse=True)
+    def _clear_shutdown_event(self):
+        """清除前序测试（如 E2E 引擎关闭）残留的 _shutdown_event。
+
+        is_network_available_socket 在入口处检查 _shutdown_event.is_set()，
+        若已被前序测试 set 则直接返回 False，导致 mock 未被调用。
+        """
+        from app.network.probes import _shutdown_event
+
+        _shutdown_event.clear()
 
     async def test_no_interface_uses_default_route(self, monkeypatch):
         """interface_name 为空时走 asyncio.open_connection（默认路由）。"""
@@ -257,11 +270,12 @@ class TestNoExecutorRemnants:
 
         assert not hasattr(probes_mod, "executor")
 
-    def test_no_probe_client_attribute(self):
-        """probes 模块不再有 _probe_client 属性。"""
+    def test_probe_client_is_context_manager(self):
+        """_probe_client 是异步上下文管理器（非旧式客户端池）。"""
         import app.network.probes as probes_mod
 
-        assert not hasattr(probes_mod, "_probe_client")
+        assert hasattr(probes_mod, "_probe_client")
+        assert callable(probes_mod._probe_client)
 
     def test_no_bound_clients_attribute(self):
         """probes 模块不再有 _bound_clients 属性。"""

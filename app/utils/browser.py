@@ -82,7 +82,6 @@ class BrowserContextManager:
         self.logger = get_logger("browser", source="backend")
 
         # 浏览器相关属性
-        self.playwright: object | None = None
         self.browser: object | None = None
         self.context: object | None = None
         self.page: object | None = None
@@ -107,7 +106,6 @@ class BrowserContextManager:
         await worker.ensure_browser(self.config)
 
         # 从 Worker 获取浏览器对象引用（同线程，通过只读属性访问）
-        self.playwright = worker.playwright_instance
         self.browser = worker.browser
         self.context = worker.context
         self.page = worker.page
@@ -128,7 +126,6 @@ class BrowserContextManager:
         except Exception as e:
             self.logger.exception("关闭浏览器异常: {}", e)
 
-        self.playwright = None
         self.browser = None
         self.context = None
         self.page = None

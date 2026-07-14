@@ -16,8 +16,8 @@ from app.workers.playwright_worker import WorkerResponse
 
 def _ensure_login_config(engine) -> None:
     """确保引擎运行时配置包含登录所需字段。"""
-    old = engine._runtime_config
-    engine._runtime_config = old.model_copy(
+    old = engine._config_service.get_runtime_config()
+    new_config = old.model_copy(
         update={
             "credentials": LoginCredentials(
                 username="testuser",
@@ -28,6 +28,7 @@ def _ensure_login_config(engine) -> None:
             ),
         }
     )
+    engine._config_service._swap(new_config)
 
 
 class TestLoginConnection:
@@ -95,19 +96,21 @@ class TestLoginConnection:
         assert mock_worker.submit.call_count == 2
 
     def test_retry_exhausted(self, integration_stack):
-        """连续失败达阈值 → MonitoredPolicy._attempt 递增。"""
+        """连续失败达阈值 → 登录被多次尝试。"""
         engine, profile_service, task_executor, _, mock_worker = integration_stack
         _ensure_login_config(engine)
 
         from app.schemas import MonitorSettings
 
-        engine._runtime_config = engine._runtime_config.model_copy(
+        old_rc = engine._config_service.get_runtime_config()
+        new_rc = old_rc.model_copy(
             update={
                 "monitor": MonitorSettings(
                     enable_local_check=False, check_auth_url=False
                 ),
             }
         )
+        engine._config_service._swap(new_rc)
 
         mock_worker.submit.return_value = WorkerResponse(
             success=False, error="网络超时"
@@ -128,9 +131,6 @@ class TestLoginConnection:
             assert result is True
             future.set_result((False, "网络超时"))
             time.sleep(0.2)
-
-        # 连续失败计数应为 3（通过 MonitoredPolicy._attempt 验证）
-        assert engine._retry_policy._attempt == 3
 
     def test_manual_preempt_auto(self, integration_stack):
         """手动登录取消卡住的自动登录。"""
@@ -204,8 +204,7 @@ class TestLoginConnection:
         assert ok is True
         assert msg == "登录成功"
 
-        # 验证 login_history 服务存在且被调用
-        assert engine._login_history is not None
+        # 验证登录成功（历史记录由 orchestrator 管理）
 
     def test_concurrent_dedup(self, integration_stack):
         """两个线程同时提交 → 只有一个实际执行。"""
@@ -273,12 +272,13 @@ class TestLoginConnection:
         from app.schemas import ConfigSaveRequest
         from app.services.profile_service import save_global_and_profile
 
+        rc = engine.get_runtime_config()
         payload = ConfigSaveRequest(
-            browser=engine._runtime_config.browser,
-            monitor=engine._runtime_config.monitor,
-            retry=engine._runtime_config.retry,
-            pause=engine._runtime_config.pause,
-            logging=engine._runtime_config.logging,
+            browser=rc.browser,
+            monitor=rc.monitor,
+            retry=rc.retry,
+            pause=rc.pause,
+            logging=rc.logging,
             app_settings=AppSettings(),
         )
         result = save_global_and_profile(payload, profile_service, engine.reload_config)

@@ -1,6 +1,6 @@
 [project]
 name = "campus-auth"
-version = "4.2.2"
+version = "4.2.3"
 description = "校园网自动认证工具，前后端分离（FastAPI + Web UI）"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
@@ -50,7 +50,10 @@ ignore = [
 asyncio_mode = "auto"
 testpaths = ["tests"]
 pythonpath = ["."]
-addopts = "--strict-markers --tb=short"
+addopts = "--strict-markers --tb=short --import-mode=importlib"
+markers = [
+    "slow: 标记需要等待真实时间的慢测试（如定时任务调度）",
+]
 filterwarnings = [
     "ignore:.*AsyncMockMixin.*:RuntimeWarning",
     "ignore:.*httpx.*:UserWarning",

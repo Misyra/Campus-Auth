@@ -48,7 +48,8 @@ def mock_deps():
     """Mock 外部依赖。"""
     with (
         patch("app.application.resolve_port", return_value=50721),
-        patch("app.application._cleanup_screenshots"),
+        patch("app.application._cleanup_temp_screenshots"),
+        patch("app.application._cleanup_dated_screenshots"),
         patch("app.version.get_project_version", return_value="0.0.0-test"),
     ):
         yield
@@ -260,14 +261,12 @@ class TestRunFullNoDirectBoot:
 
         with (
             patch("app.utils.ports.resolve_port", return_value=50721),
-            patch("app.container.ServiceContainer") as mock_container_cls,
             patch("app.application.run") as mock_run,
             patch("app.services.launcher.get_runtime_features") as mock_features,
             patch("app.services.launcher.signal.signal"),
             patch("app.services.launcher.force_exit"),
         ):
             mock_container = MagicMock()
-            mock_container_cls.return_value = mock_container
             mock_features.return_value = MagicMock(
                 tray_enabled=False, browser_enabled=False
             )
@@ -275,7 +274,13 @@ class TestRunFullNoDirectBoot:
             mock_container.profile_service.load.return_value.global_config.logging.log_retention_days = 7
 
             # should_boot_engine=True
-            _run_full(ctx, should_boot_engine=True, logger=logger, startup_begin=0.0)
+            _run_full(
+                ctx,
+                mock_container,
+                should_boot_engine=True,
+                logger=logger,
+                startup_begin=0.0,
+            )
 
             # 不应直接调用 engine.boot
             mock_container.engine.boot.assert_not_called()
@@ -303,21 +308,25 @@ class TestRunFullNoDirectBoot:
 
         with (
             patch("app.utils.ports.resolve_port", return_value=50721),
-            patch("app.container.ServiceContainer") as mock_container_cls,
             patch("app.application.run") as mock_run,
             patch("app.services.launcher.get_runtime_features") as mock_features,
             patch("app.services.launcher.signal.signal"),
             patch("app.services.launcher.force_exit"),
         ):
             mock_container = MagicMock()
-            mock_container_cls.return_value = mock_container
             mock_features.return_value = MagicMock(
                 tray_enabled=False, browser_enabled=False
             )
             mock_container.profile_service.load.return_value.global_config.logging.access_log = False
             mock_container.profile_service.load.return_value.global_config.logging.log_retention_days = 7
 
-            _run_full(ctx, should_boot_engine=False, logger=logger, startup_begin=0.0)
+            _run_full(
+                ctx,
+                mock_container,
+                should_boot_engine=False,
+                logger=logger,
+                startup_begin=0.0,
+            )
 
             mock_container.engine.boot.assert_not_called()
 

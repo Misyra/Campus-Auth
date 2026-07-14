@@ -32,7 +32,8 @@ class TestInitStatus:
     def test_initialized(self, api_client):
         """已初始化时返回 True。"""
         test_client, mock_services = api_client
-        mock_services.engine.get_runtime_config.return_value = RuntimeConfig(
+        # Task 3.4：get_runtime_config 改从 config_service 获取
+        mock_services.config_service.get_runtime_config.return_value = RuntimeConfig(
             credentials=LoginCredentials(username="test", password="test"),
         )
         with patch("app.utils.crypto.has_decryption_error", return_value=False):
@@ -44,12 +45,12 @@ class TestInitStatus:
     def test_not_initialized(self, api_client):
         """未初始化时返回 False。"""
         test_client, mock_services = api_client
-        mock_services.engine.get_runtime_config.return_value = RuntimeConfig()
+        # Task 3.4：get_runtime_config 改从 config_service 获取
+        mock_services.config_service.get_runtime_config.return_value = RuntimeConfig()
         with patch("app.utils.crypto.has_decryption_error", return_value=False):
             resp = test_client.get("/api/init-status")
         assert resp.status_code == 200
         assert resp.json()["initialized"] is False
-
 
 
 # ── 自启动管理 ──
@@ -96,21 +97,21 @@ class TestAutoStart:
 class TestOCR:
     """OCR 相关端点。"""
 
-    @patch("app.api.ocr._check_ddddocr_installed")
+    @patch("app.api.ocr.importlib.util.find_spec")
     def test_ocr_status_not_installed(self, mock_check, api_client):
         """ddddocr 未安装时返回状态。"""
-        mock_check.return_value = False
+        mock_check.return_value = None
         test_client, _ = api_client
         resp = test_client.get("/api/ocr/status")
         assert resp.status_code == 200
         assert resp.json()["installed"] is False
         assert resp.json()["size_mb"] == 0.0
 
-    @patch("app.api.ocr._check_ddddocr_installed")
+    @patch("app.api.ocr.importlib.util.find_spec")
     @patch("app.api.ocr._estimate_pkg_size_mb")
     def test_ocr_status_installed(self, mock_size, mock_check, api_client):
         """ddddocr 已安装时返回大小。"""
-        mock_check.return_value = True
+        mock_check.return_value = MagicMock()
         mock_size.return_value = 50.0
         test_client, _ = api_client
         resp = test_client.get("/api/ocr/status")
@@ -118,40 +119,40 @@ class TestOCR:
         assert resp.json()["installed"] is True
         assert resp.json()["size_mb"] > 0
 
-    @patch("app.api.ocr._check_ddddocr_installed")
+    @patch("app.api.ocr.importlib.util.find_spec")
     def test_ocr_install_already_installed(self, mock_check, api_client):
         """已安装时直接返回成功。"""
-        mock_check.return_value = True
+        mock_check.return_value = MagicMock()
         test_client, _ = api_client
         resp = test_client.post("/api/ocr/install")
         assert resp.status_code == 200
         assert resp.json()["success"] is True
 
-    @patch("app.api.ocr._check_ddddocr_installed")
+    @patch("app.api.ocr.importlib.util.find_spec")
     def test_ocr_uninstall_not_installed(self, mock_check, api_client):
         """未安装时直接返回成功。"""
-        mock_check.return_value = False
+        mock_check.return_value = None
         test_client, _ = api_client
         resp = test_client.post("/api/ocr/uninstall")
         assert resp.status_code == 200
         assert resp.json()["success"] is True
 
-    @patch("app.api.ocr._check_ddddocr_installed")
+    @patch("app.api.ocr.importlib.util.find_spec")
     @patch("subprocess.run")
     def test_ocr_install_success(self, mock_run, mock_check, api_client):
         """安装 ddddocr 成功。"""
-        mock_check.return_value = False
+        mock_check.return_value = None
         mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
         test_client, _ = api_client
         resp = test_client.post("/api/ocr/install")
         assert resp.status_code == 200
         assert resp.json()["success"] is True
 
-    @patch("app.api.ocr._check_ddddocr_installed")
+    @patch("app.api.ocr.importlib.util.find_spec")
     @patch("subprocess.run")
     def test_ocr_install_failure(self, mock_run, mock_check, api_client):
         """安装 ddddocr 失败。"""
-        mock_check.return_value = False
+        mock_check.return_value = None
         mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="安装错误")
         test_client, _ = api_client
         resp = test_client.post("/api/ocr/install")
@@ -159,13 +160,13 @@ class TestOCR:
         assert resp.json()["success"] is False
         assert "失败" in resp.json()["message"]
 
-    @patch("app.api.ocr._check_ddddocr_installed")
+    @patch("app.api.ocr.importlib.util.find_spec")
     @patch("subprocess.run")
     def test_ocr_install_timeout(self, mock_run, mock_check, api_client):
         """安装超时。"""
         import subprocess
 
-        mock_check.return_value = False
+        mock_check.return_value = None
         mock_run.side_effect = subprocess.TimeoutExpired(cmd="uv", timeout=300)
         test_client, _ = api_client
         resp = test_client.post("/api/ocr/install")
@@ -173,11 +174,11 @@ class TestOCR:
         assert resp.json()["success"] is False
         assert "超时" in resp.json()["message"]
 
-    @patch("app.api.ocr._check_ddddocr_installed")
+    @patch("app.api.ocr.importlib.util.find_spec")
     @patch("subprocess.run")
     def test_ocr_uninstall_success(self, mock_run, mock_check, api_client):
         """卸载 ddddocr 成功。"""
-        mock_check.return_value = True
+        mock_check.return_value = MagicMock()
         mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
         test_client, _ = api_client
         resp = test_client.post("/api/ocr/uninstall")

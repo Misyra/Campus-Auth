@@ -9,17 +9,6 @@ if TYPE_CHECKING:
     from app.schemas import PauseSettings
 
 
-def _parse_pause_range(raw: str) -> tuple[datetime.time, datetime.time]:
-    """解析 HH:MM-HH:MM 格式的暂停时段字符串。"""
-    if "-" not in raw:
-        raise ValueError(f"暂停时段格式错误 '{raw}'：缺少 '-' 分隔符，应为 HH:MM-HH:MM")
-    parts = raw.split("-")
-    if len(parts) != 2:
-        raise ValueError(f"暂停时段格式错误 '{raw}'：包含多个 '-'，应为 HH:MM-HH:MM")
-    start_str, end_str = parts
-    start = datetime.datetime.strptime(start_str.strip(), "%H:%M").time()
-    end = datetime.datetime.strptime(end_str.strip(), "%H:%M").time()
-    return start, end
 
 
 def _is_in_pause_period(

@@ -60,6 +60,7 @@ def _make_executor(
         get_runtime_config=kwargs.get("get_runtime_config", lambda: RuntimeConfig()),
         login_orchestrator=kwargs.get("login_orchestrator", MagicMock()),
         task_manager=kwargs.get("task_manager", MagicMock()),
+        browser_task_service=kwargs.get("browser_task_service", MagicMock()),
     )
     return executor
 
@@ -348,32 +349,29 @@ class TestTaskExecutionWithVariableResolution:
 
     def test_execute_browser_task_with_variables(self, tmp_path: Path):
         """浏览器任务执行时正确传递变量配置。"""
-        from app.services.login_orchestrator import LoginHandle
-        from app.utils.cancel_token import CompositeCancelEvent
-
         registry = TaskRegistry(tmp_path)
         config = _make_task_config(task_type="browser", target_id="test_task")
         registry.save_task("test_task", config)
 
-        mock_orchestrator = MagicMock()
-        mock_handle = LoginHandle(
-            future=None,
-            source="browser",
-            cancel_event=CompositeCancelEvent(),
-        )
+        mock_browser_svc = MagicMock()
+        mock_handle = MagicMock()
         mock_handle.result = MagicMock(return_value=(True, "浏览器任务执行成功"))
         mock_handle.rejected_reason = None
-        mock_orchestrator.submit.return_value = mock_handle
+        mock_browser_svc.submit_task.return_value = mock_handle
+
+        mock_task_manager = MagicMock()
+        mock_task_manager.get_task_detail.return_value = {"type": "browser"}
 
         executor = _make_executor(
-            registry=registry, login_orchestrator=mock_orchestrator
+            registry=registry,
+            browser_task_service=mock_browser_svc,
+            task_manager=mock_task_manager,
         )
 
         success, message = executor._execute_browser("test_task", 30)
 
         assert success is True
         assert "成功" in message
-
 
 
 # =====================================================================
@@ -436,9 +434,9 @@ class TestTaskFailureHandling:
 
     def test_execute_browser_nonexistent(self):
         """执行不存在的浏览器任务返回失败。"""
-        registry = MagicMock()
-        registry.get_task.return_value = None
-        executor = _make_executor(registry=registry)
+        mock_tm = MagicMock()
+        mock_tm.get_task_detail.return_value = None
+        executor = _make_executor(task_manager=mock_tm)
 
         success, message = executor._execute_browser("no_browser", 30)
 

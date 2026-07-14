@@ -12,7 +12,7 @@ import psutil
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 
 from app.constants import AUTH_DATA_DIR, PROJECT_ROOT
-from app.deps import MonitorServiceDep
+from app.deps import ConfigServiceDep, MonitorServiceDep
 from app.schemas import (
     ApiResponse,
     HealthResponse,
@@ -38,20 +38,11 @@ _update_lock = asyncio.Lock()
 # ── 健康检查 / 更新检测 ──
 
 
-def _safe_psutil_call(fn, default=None):
-    """安全调用 psutil 方法，受限环境返回默认值。"""
-    if default is None:
-        default = []
-    try:
-        return fn()
-    except (psutil.AccessDenied, psutil.ZombieProcess, psutil.NoSuchProcess):
-        return default
-
-
 @router.get("/api/health", response_model=HealthResponse)
 def health() -> HealthResponse:
     proc = psutil.Process(os.getpid())
     mem = proc.memory_info()
+
     return HealthResponse(
         status="ok",
         version=get_project_version(PROJECT_ROOT),
@@ -61,8 +52,6 @@ def health() -> HealthResponse:
             "vms_mb": round(mem.vms / 1024 / 1024, 1),
         },
         process={
-            "threads": _safe_psutil_call(proc.threads),
-            "open_files": _safe_psutil_call(proc.open_files),
             "pid": proc.pid,
         },
     )
@@ -130,13 +119,15 @@ async def check_update() -> UpdateCheckResponse:
 @router.get("/api/init-status", response_model=InitStatusResponse)
 def get_init_status(
     svc: MonitorServiceDep,
+    config_svc: ConfigServiceDep,
 ) -> InitStatusResponse:
     from app.utils.crypto import has_decryption_error
 
-    config = svc.get_runtime_config()
+    # Task 3.4：runtime_config 改从 ConfigService 获取（不再经 Engine 委托）
+    config = config_svc.get_runtime_config()
     is_initialized = bool(config.credentials.username and config.credentials.password)
 
-    # 检查用户是否已同意使用协议
+    # project_root 仍从 Engine 获取（Engine 持有路径，非配置职责）
     agree_file = svc.project_root / "config" / ".agree"
     agreed = agree_file.exists()
 
@@ -190,15 +181,9 @@ def shutdown_server(
     # Playwright Worker 和孤儿浏览器清理由 lifespan 的 container.shutdown() 统一处理
 
     # 通过 shutdown_event 触发 lifespan 正常关闭
-    bg_tasks.add_task(_trigger_shutdown_event, request)
+    bg_tasks.add_task(lambda: request.app.state.shutdown_event.set())
 
     return ApiResponse(success=True, message="服务器正在关闭，请稍候，页面将自动断开")
-
-
-def _trigger_shutdown_event(request: Request) -> None:
-    """在 HTTP 响应发送后触发 shutdown_event"""
-    if hasattr(request.app.state, "shutdown_event"):
-        request.app.state.shutdown_event.set()
 
 
 # ── 卸载 ──

@@ -8,77 +8,73 @@ from typing import TYPE_CHECKING
 from app.schemas import LoginResult, RuntimeConfig
 
 if TYPE_CHECKING:
+    from app.container import ServiceContainer
     from app.schemas import ApplicationContext
 
 
-def execute_login_with_retries(runtime_config: RuntimeConfig, logger) -> LoginResult:
+def execute_login_with_retries(
+    runtime_config: RuntimeConfig,
+    container: ServiceContainer,
+    logger,
+) -> LoginResult:
     """执行登录（重试由 Worker 内的 LoginSession 负责）。
 
-    本函数仅做单次 submit，重试循环已收敛到 LoginSession（单次会话内
-    复用浏览器，失败重试间隔由 RetrySettings.retry_interval 控制）。
+    通过 Container 的 login_orchestrator 提交登录任务。
+    本函数仅做单次 submit，重试循环已收敛到 LoginSession。
 
     Args:
         runtime_config: 运行时配置。
+        container: 服务容器，提供 login_orchestrator。
         logger: 日志记录器。
 
     Returns:
         LoginResult.SUCCESS — 登录成功
-        LoginResult.TEMPORARY_FAILURE — 重试耗尽仍失败
+        LoginResult.TEMPORARY_FAILURE — 重试耗尽仍失败，或执行过程异常
     """
-    from concurrent.futures import ThreadPoolExecutor
-
-    from app.constants import AUTH_DATA_DIR
-    from app.services.login_history_service import LoginHistoryService
-    from app.services.login_orchestrator import LoginOrchestrator
-    from app.services.profile_service import get_profile_service
-    from app.workers.playwright_worker import cleanup_orphan_browsers, get_worker
-
-    profile_service = get_profile_service()
-    history = LoginHistoryService(AUTH_DATA_DIR)
-    # login_once 是单次登录后退出，用一次性 executor 即可
-    one_shot_executor = ThreadPoolExecutor(
-        max_workers=1, thread_name_prefix="login-once"
-    )
-    orchestrator = LoginOrchestrator(
-        worker_getter=get_worker,
-        executor=one_shot_executor,
-        login_history=history,
-        profile_service=profile_service,
-    )
+    from app.services.login_orchestrator import validate_login_config
+    from app.services.worker_port import cleanup_orphan_browsers
 
     # B2 修复：预校验凭据完整性
-    from app.services.login_orchestrator import validate_login_config
     err = validate_login_config(runtime_config)
     if err is not None:
         logger.warning("登录配置无效: {}", err)
         return LoginResult.CONFIG_ERROR
+
     try:
-        handle = orchestrator.submit(source="login_once", config=runtime_config)
+        handle = container.login_orchestrator.submit(
+            source="login_once", config=runtime_config
+        )
         ok, msg = handle.result()
         cleanup_orphan_browsers()
         if ok:
             return LoginResult.SUCCESS
         logger.warning("登录失败: {}", msg)
         return LoginResult.TEMPORARY_FAILURE
-    finally:
-        orchestrator.shutdown(wait=False)
-        one_shot_executor.shutdown(wait=False)
+    except Exception as exc:
+        logger.warning("登录执行异常: {}", exc)
+        return LoginResult.TEMPORARY_FAILURE
 
 
-def run_login_then_exit(ctx: ApplicationContext, logger) -> LoginResult:
+def run_login_then_exit(
+    ctx: ApplicationContext,
+    container: ServiceContainer,
+    logger,
+) -> LoginResult:
     """自动登录，成功后退出模式。
 
-    返回:
+    Args:
+        ctx: 应用上下文。
+        container: 服务容器，提供 config_service 和 login_orchestrator。
+        logger: 日志记录器。
+
+    Returns:
         LoginResult.SUCCESS — 登录成功，应退出进程
         LoginResult.CONFIG_ERROR — 配置错误，应退出进程
         LoginResult.TEMPORARY_FAILURE — 临时失败，继续监控
     """
     # 加载配置
     try:
-        from app.services.profile_service import get_profile_service
-
-        ps = get_profile_service()
-        runtime_config = ps.get_runtime_config()
+        runtime_config = container.config_service.get_runtime_config()
     except Exception as exc:
         logger.warning("加载配置失败: {}", exc)
         return LoginResult.CONFIG_ERROR
@@ -101,4 +97,4 @@ def run_login_then_exit(ctx: ApplicationContext, logger) -> LoginResult:
     except Exception as exc:
         logger.debug("网络检测异常，继续尝试登录: {}", exc)
 
-    return execute_login_with_retries(runtime_config, logger)
+    return execute_login_with_retries(runtime_config, container, logger)

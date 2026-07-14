@@ -9,17 +9,11 @@ import time
 from pathlib import Path
 from typing import Any
 
-from app.services.login_models import AttemptOutcome, AttemptOutcomeType
 from app.utils.browser import BrowserContextManager
 from app.utils.env import build_login_template_vars
 from app.utils.exceptions import LoginCancelledError
 from app.utils.logging import get_logger
-
-# 从日志消息中提取截图 URL 的正则（前端 formatters.js 也使用同款格式）
-SCREENSHOT_URL_PATTERN = r"\s*截图[:：]\s*/\S+\.(?:png|jpg|jpeg|webp|gif)"
-
-# 登录成功后等待页面完成跳转和状态更新的时间（秒）
-LOGIN_SUCCESS_SETTLE_SECONDS = 2
+from app.workers.login_models import AttemptOutcome, AttemptOutcomeType
 
 
 class LoginAttempt:
@@ -49,7 +43,7 @@ class LoginAttempt:
         self._task_manager: Any | None = None
         self._project_root: Path | None = None
 
-        # 解构常用字段为命名属性（dict 结构由 _runtime_config_to_worker_dict 保证）
+        # 解构常用字段为命名属性（dict 结构由 runtime_config_to_worker_dict 保证）
         self._credentials: dict[str, str] = {
             "username": config.get("username", ""),
             "password": config.get("password", ""),
@@ -88,50 +82,20 @@ class LoginAttempt:
     async def execute(self) -> AttemptOutcome:
         """执行单次登录尝试，返回 AttemptOutcome。
 
-        LoginSession 调用此方法。内部委托给 attempt_login() 并做
-        tuple[bool, str] → AttemptOutcome 映射。
+        失败统一标记为 RETRYABLE（按重试策略重试）。
 
         异常处理：
         - LoginCancelledError → CANCELLED
-        - 明确可重试网络异常 → RETRYABLE
-        - PlaywrightError（Target closed 等）→ RETRYABLE
-        - 程序异常 → 不捕获，向上传播让 Worker 处理
-
-        本方法不识别 INVALID_CREDENTIAL（保守策略：未识别一律 RETRYABLE），
-        凭证错误识别留待后续按 Portal 特征实现。
+        - attempt_login() 内部已 catch 所有非取消异常（login_attempt.py:77-79），
+          返回 (False, str(exc))，本方法无需重复 catch
         """
-        from playwright.async_api import Error as PlaywrightError
-        from playwright.async_api import TimeoutError as PlaywrightTimeoutError
-
-        _RETRYABLE_ERRORS: tuple[type[BaseException], ...] = (
-            ConnectionResetError,
-            ConnectionAbortedError,
-            ConnectionRefusedError,
-            TimeoutError,  # Python 内置
-            PlaywrightTimeoutError,  # playwright.async_api.TimeoutError
-        )
-        _RETRYABLE_PLAYWRIGHT_SUBSTRINGS = (
-            "Target closed",
-            "Connection closed",
-            "Browser has been closed",
-        )
-
         try:
             success, message = await self.attempt_login()
             if success:
                 return AttemptOutcome(AttemptOutcomeType.SUCCESS, message)
-            # 失败默认 RETRYABLE；INVALID_CREDENTIAL 识别待后续实现
             return AttemptOutcome(AttemptOutcomeType.RETRYABLE, message)
         except LoginCancelledError:
             return AttemptOutcome(AttemptOutcomeType.CANCELLED, "登录已取消")
-        except _RETRYABLE_ERRORS as exc:
-            return AttemptOutcome(AttemptOutcomeType.RETRYABLE, str(exc))
-        except PlaywrightError as exc:
-            msg = str(exc)
-            if any(s in msg for s in _RETRYABLE_PLAYWRIGHT_SUBSTRINGS):
-                return AttemptOutcome(AttemptOutcomeType.RETRYABLE, msg)
-            raise  # 其他 PlaywrightError 视为程序异常
-        # 程序异常（TypeError/KeyError 等）不捕获，直接抛出
 
     async def _perform_login_with_active_task(self) -> tuple[bool, str] | None:
         """执行当前活动任务；返回 None 表示未找到可执行任务。"""
@@ -172,6 +136,40 @@ class LoginAttempt:
                 else Path(__file__).resolve().parents[2]
             )
             self._task_manager = TaskManager(self._project_root / "tasks")
+
+    async def _verify_network_after_login(self) -> tuple[bool, str]:
+        """登录步骤通过后，等待 portal 生效并执行网络检测。
+
+        Returns:
+            (ok, msg)：网络恢复返回 (True, "network_ok (...)")；
+            未恢复返回 (False, 状态描述)；
+            所有检测禁用时返回 (True, "all_disabled")（信任步骤结果）。
+        """
+        from app.network.decision import check_network_status
+        from app.schemas import MonitorSettings
+
+        cfg = self._monitor_settings
+        monitor = MonitorSettings(
+            **{
+                k: v
+                for k, v in cfg.items()
+                if k in MonitorSettings.model_fields
+                and v is not None
+                and not (isinstance(v, list | str | dict) and not v)
+            }
+        )
+
+        # post_login_delay：让 portal 完成跳转和会话生效
+        delay = monitor.post_login_delay
+        await asyncio.sleep(delay)
+
+        ok, status, method = await check_network_status(monitor)
+        if status == "all_disabled":
+            self.logger.debug("[network_check] 所有检测方式已禁用，信任步骤结果")
+            return True, "all_disabled"
+        if ok:
+            return True, f"network_ok ({method})"
+        return False, status
 
     async def _execute_browser_task(
         self, task: Any, active_task_id: str, phase_start: float
@@ -263,7 +261,6 @@ class LoginAttempt:
                 template_vars,
                 default_timeout=browser_timeout,
                 navigation_timeout=navigation_timeout,
-                monitor_config=self._monitor_settings,
                 cancel_event=self.cancel_event,
             )
 
@@ -281,11 +278,29 @@ class LoginAttempt:
                 browser_manager.page.remove_listener("dialog", _handle_dialog)
             total = time.perf_counter() - phase_start
             if success:
-                self.logger.info("登录成功: {} (耗时 {:.1f}s)", message, total)
-                await asyncio.sleep(
-                    LOGIN_SUCCESS_SETTLE_SECONDS
-                )  # 登录成功后等待，让页面完成跳转和状态更新
-                return True, message
+                # 任务声明了 success_condition → 信任 runner 的判定，不走网络检测
+                # 未声明 → 登录路径追加网络检测作为兜底确认
+                has_explicit_condition = bool(task.success_condition.strip())
+                if has_explicit_condition:
+                    self.logger.info(
+                        "登录成功: {} (已声明成功条件, 跳过网络检测, 耗时 {:.1f}s)",
+                        message,
+                        total,
+                    )
+                    return True, message
+                # 未声明成功条件 → 网络检测兜底
+                net_ok, net_msg = await self._verify_network_after_login()
+                if net_ok:
+                    self.logger.info(
+                        "登录成功: {} (网络验证通过, 耗时 {:.1f}s)",
+                        message,
+                        total,
+                    )
+                    return True, message
+                self.logger.warning(
+                    "登录失败: 步骤通过但网络未恢复 (耗时 {:.1f}s)", total
+                )
+                return False, f"步骤通过但网络未恢复: {net_msg}"
             self.logger.warning("登录失败: {} (耗时 {:.1f}s)", message, total)
             return False, message
         finally:
@@ -325,7 +340,8 @@ class LoginAttempt:
             return False, f"脚本执行失败: {script_output}"
 
         self.logger.debug("脚本已执行，等待网络验证")
-        await asyncio.sleep(LOGIN_SUCCESS_SETTLE_SECONDS)
+        # 等待 portal 生效（与浏览器路径一致）
+        await asyncio.sleep(self._monitor_settings.get("post_login_delay", 5))
 
         from app.schemas import MonitorSettings
 

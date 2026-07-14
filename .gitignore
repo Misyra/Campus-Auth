@@ -1,6 +1,9 @@
 # 测试覆盖率
 .coverage
 
+# Git worktrees（本地隔离工作区）
+.worktrees/
+
 # Python-generated files
 __pycache__/
 *.py[oc]
@@ -88,3 +91,4 @@ pyrightconfig.json
 
 # Brainstorm visual companion (local mockups)
 .superpowers/
+docs/superpowers/

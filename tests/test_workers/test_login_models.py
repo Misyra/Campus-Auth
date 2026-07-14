@@ -7,7 +7,7 @@ import dataclasses
 import pytest
 
 from app.schemas import RetrySettings
-from app.services.login_models import (
+from app.workers.login_models import (
     AttemptOutcome,
     AttemptOutcomeType,
     LoginRetryPolicy,

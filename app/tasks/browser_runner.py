@@ -34,7 +34,6 @@ class BrowserTaskRunner:
         screenshot_dir: Path | str | None = None,
         default_timeout: int | None = None,
         navigation_timeout: int | None = None,
-        monitor_config: dict[str, Any] | None = None,
         cancel_event: threading.Event | None = None,
     ):
         self.config = config
@@ -51,7 +50,7 @@ class BrowserTaskRunner:
         self.registry = dict(DEFAULT_HANDLERS)
         self._step_results: list[dict[str, Any]] = []
         self._screenshot_dir = Path(screenshot_dir) if screenshot_dir else None
-        self.monitor_config = monitor_config
+        self._asserted = False
         self.cancel_event = cancel_event
 
     async def execute(self, page) -> tuple[bool, str]:
@@ -137,12 +136,14 @@ class BrowserTaskRunner:
                     }
                 )
 
+                if success and step.type == StepType.ASSERT_TEXT:
+                    self._asserted = True
+
                 if not success:
                     return await self._handle_failure(page, step, message)
-
-            if not await self._check_success(page):
-                return await self._handle_failure(page, None, "网络验证未通过")
-
+            ok, reason = await self._check_success(page)
+            if not ok:
+                return await self._handle_failure(page, None, reason)
             total_elapsed = (time.perf_counter() - task_start) * 1000
             logger.info(
                 "任务执行成功: {} (耗时 {:.0f}ms)", self.config.name, total_elapsed
@@ -273,7 +274,6 @@ class BrowserTaskRunner:
                 overrides["duration"] = remaining_ms
             if overrides:
                 effective_step = replace(step, **overrides)
-
         try:
             return await handler.execute(page, effective_step, self.resolver)
         except Exception as e:
@@ -306,46 +306,61 @@ class BrowserTaskRunner:
         self._step_results.append(result)
         return result
 
-    async def _check_success(self, _page) -> bool:
-        if self.monitor_config:
-            return await self._network_detection_check()
-        return True
+    async def _check_success(self, page) -> tuple[bool, str]:
+        """成功条件判断（不含网络检测）。
 
-    async def _network_detection_check(self) -> bool:
-        """任务步骤全部通过后，验证网络是否已恢复连通。"""
-        try:
-            from app.network.decision import check_network_status
-            from app.schemas import MonitorSettings
+        判定逻辑：
+        1. 任务声明了 success_condition（变量名）→ 从 runtime_vars 取值做真值判定
+           - 真值 → 成功
+           - 假值 → 失败（按重试策略重试）
+           - 变量未设置 → 失败（提示步骤配置问题）
+        2. 未声明 success_condition → 兜底信任步骤执行结果
+           - _asserted（步骤 assert_text 命中）→ 成功
+           - 否则 → 成功（登录路径由 LoginAttempt 追加网络检测）
+        """
+        var_name = self.config.success_condition.strip()
+        if not var_name:
+            # 未声明成功条件 → 信任步骤执行结果
+            if self._asserted:
+                return True, "断言文本已命中"
+            return True, "步骤执行完成"
 
-            cfg = self.monitor_config
-            # 过滤逻辑：仅保留 MonitorSettings 认可的字段，排除 None 和空集合（空 list/str/dict）
-            monitor = MonitorSettings(
-                **{
-                    k: v
-                    for k, v in cfg.items()
-                    if k in MonitorSettings.model_fields
-                    and v is not None
-                    and not (isinstance(v, (list, str, dict)) and not v)
-                }
+        # 从 runtime_vars 读取变量值
+        if var_name not in self.resolver.runtime_vars:
+            logger.warning(
+                "[success_condition] 变量未设置: {} (请检查 eval 步骤的 store_as)",
+                var_name,
             )
+            return False, f"成功条件变量未设置: {var_name}"
 
-            # 等待网址响应处理认证请求
-            delay = cfg.get("post_login_delay")
-            await asyncio.sleep(delay if delay is not None else 5)
+        value = self.resolver.runtime_vars[var_name]
+        if self._is_truthy(value):
+            logger.info(
+                "[success_condition] 命中成功: {}={}", var_name, value
+            )
+            return True, f"成功条件命中: {var_name}={value}"
+        logger.info("[success_condition] 未命中: {}={}", var_name, value)
+        return False, f"成功条件未命中: {var_name}={value}"
 
-            ok, status, method = await check_network_status(monitor)
-            if status == "all_disabled":
-                logger.debug("[network_check] 所有检测方式已禁用，信任登录结果")
-                return True
-            if ok:
-                logger.info("网络已恢复，登录认证生效 (检测方式={})", method)
-            else:
-                logger.warning("网络仍不可达 (状态={})", status)
+    @staticmethod
+    def _is_truthy(value: Any) -> bool:
+        """判定变量值的真假。
 
-            return ok
-        except Exception:
-            logger.exception("网络验证异常")
+        - bool: 直接返回
+        - None: False
+        - str: "false"/"0"/""/no/off → False；其他 → True
+        - 数字: 非零 → True
+        - 其他: bool(value)
+        """
+        if isinstance(value, bool):
+            return value
+        if value is None:
             return False
+        if isinstance(value, str):
+            return value.strip().lower() not in ("false", "0", "", "no", "off")
+        if isinstance(value, int | float):
+            return value != 0
+        return bool(value)
 
     async def _handle_success(self, page) -> tuple[bool, str]:
         """处理成功情况"""

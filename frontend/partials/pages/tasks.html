@@ -158,6 +158,7 @@
             <li><code>select</code> - 选择下拉框</li>
             <li><code>wait</code> - 等待元素出现</li>
             <li><code>wait_url</code> - 等待URL匹配</li>
+            <li><code>goto</code> - 页面导航（与顶层 <code>url</code> 自动导航互补，用于执行过程中切换页面，支持 <code>wait_until</code> 字段）</li>
 <li><code>eval</code> - 执行JS（支持返回值存储到变量）</li>
             <li><code>screenshot</code> - 保存截图</li>
             <li><code>sleep</code> - 等待指定时间</li>
@@ -180,6 +181,7 @@
             <li><code>reveal_hidden</code> - 执行前强制显示所有隐藏输入框（布尔值，默认 false）。通常无需开启，每个步骤在普通操作失败后会自动降级到强制模式</li>
             <li><code>step_delay</code> - 步骤间休眠时间（秒，默认 0.5）</li>
             <li><code>navigation_wait</code> - 页面加载后额外等待时间（秒，默认 1）。适用于页面通过 AJAX 动态渲染表单的场景，等待时间不足会导致后续步骤找不到元素</li>
+            <li><code>success_condition</code> - 成功条件变量名（可选，字符串）。声明后系统在步骤跑完后从运行时变量中读取该值做真值判定：真值→成功；假值→失败（按重试策略重试）。登录任务声明后<strong>跳过网络检测</strong>。配合 <code>eval</code> 步骤的 <code>store_as</code> 使用：在 <code>eval</code> 步骤里写 JS 判定逻辑存到变量，顶层用此字段引用变量名。单纯的校园网登录任务可以不设，系统会自动通过网络检测判断登录是否成功</li>
           </ul>
           <h4>可用变量</h4>
           <ul>
@@ -201,6 +203,25 @@
       "description": "输入用户名"
     }
   ]
+}</pre>
+          <h4>成功判定示例（用 eval 步骤识别密码错误）</h4>
+          <p>在 <code>eval</code> 步骤里写 JS 判定逻辑存到变量，顶层用 <code>success_condition</code> 引用变量名。声明后登录任务跳过网络检测：</p>
+          <pre v-pre>{
+  "name": "校园网登录",
+  "steps": [
+    {"id": "s1", "type": "goto", "url": "{{auth_url}}"},
+    {"id": "s2", "type": "input", "selector": "#username", "value": "{{username}}"},
+    {"id": "s3", "type": "input", "selector": "#password", "value": "{{password}}"},
+    {"id": "s4", "type": "click", "selector": "#login"},
+    {
+      "id": "check_result",
+      "type": "eval",
+      "description": "页面无错误提示即视为成功",
+      "script": "() => !document.body.innerText.includes('密码错误') && !document.body.innerText.includes('认证失败')",
+      "store_as": "success_flag"
+    }
+  ],
+  "success_condition": "success_flag"
 }</pre>
           <h4>OCR 验证码示例</h4>
           <p>普通图片验证码（识别后直接填入输入框）：</p>

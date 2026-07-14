@@ -51,10 +51,7 @@ class AttemptOutcome:
 class LoginRetryPolicy:
     """单次登录会话内的重试策略。
 
-    与 app/services/retry_policy.py::MonitoredPolicy 互不重叠：
-    - MonitoredPolicy：引擎长期网络监控，含 down→up 状态转换回调
-    - LoginRetryPolicy：单次会话内的固定间隔重试，无状态机
-
+    固定间隔重试，无状态机。
     边界约束与 login_runner 既有约束一致：max_retries ∈ [1, 10]。
     """
 

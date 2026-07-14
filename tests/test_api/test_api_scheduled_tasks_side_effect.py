@@ -20,8 +20,8 @@ class TestToggleNoSideEffect:
         test_client, mock_services = api_client
         mock_engine = MagicMock()
         mock_tasks = MagicMock()
-        mock_engine.tasks = mock_tasks
         mock_services.engine = mock_engine
+        mock_services.task_executor = mock_tasks
 
         mock_tasks.registry.get_task.return_value = None
         mock_tasks.registry.list_tasks.return_value = []
@@ -56,8 +56,8 @@ class TestToggleNoSideEffect:
         test_client, mock_services = api_client
         mock_engine = MagicMock()
         mock_tasks = MagicMock()
-        mock_engine.tasks = mock_tasks
         mock_services.engine = mock_engine
+        mock_services.task_executor = mock_tasks
 
         mock_tasks.registry.get_task.return_value = None
         mock_tasks.registry.list_tasks.return_value = []

@@ -25,13 +25,16 @@ from app.services.engine import (
     StatusManager,
 )
 from app.services.monitor_service import CheckOnceResult
-from app.services.retry_policy import MonitoredPolicy
 
 # ── 辅助工厂 ──
 
 
 def _make_raw_engine() -> ScheduleEngine:
     """创建一个用 __new__ 跳过 __init__ 的空引擎，用于隔离测试。"""
+    from unittest.mock import MagicMock
+
+    from app.services.config_service import ConfigService
+
     svc = ScheduleEngine.__new__(ScheduleEngine)
     svc._cmd_queue = asyncio.Queue(maxsize=50)
     svc._shutdown_event = threading.Event()
@@ -40,8 +43,14 @@ def _make_raw_engine() -> ScheduleEngine:
     svc._engine_running = False
     svc._engine_ready = threading.Event()
     svc._monitor_core = None
-    svc._retry_policy = MonitoredPolicy()
-    svc._runtime_config = RuntimeConfig()
+    # ConfigService mock — 运行时配置的唯一持有者
+    mock_cs = MagicMock(spec=ConfigService)
+    mock_cs.get_runtime_config.return_value = RuntimeConfig()
+    mock_cs.pure_mode = False
+    mock_cs.reload.return_value = True
+    mock_cs.update_log_level = MagicMock()
+    mock_cs.toggle_pure_mode.return_value = True
+    svc._config_service = mock_cs
     svc._monitor_check_interval = 300
     svc._next_network_check = 0
     svc._scheduler = MagicMock()
@@ -52,16 +61,12 @@ def _make_raw_engine() -> ScheduleEngine:
     svc._task_executor = MagicMock()
     svc._manual_login_in_progress = False
     svc._manual_login_lock = threading.Lock()
-    svc._reload_lock = threading.Lock()
     svc._start_stop_lock = threading.Lock()
-    svc._pure_mode = False
     svc._ws_manager = MagicMock()
     svc._status_manager = StatusManager(
         get_monitor_core=lambda: svc._monitor_core,
         ws_manager=svc._ws_manager,
     )
-    svc._login_history = None
-    svc._worker_getter = None
     svc._profile_service = MagicMock()
     svc.project_root = MagicMock()
     svc._logger = MagicMock()
@@ -72,31 +77,10 @@ def _make_raw_engine() -> ScheduleEngine:
 
     svc._login_bridge = LoginBridge(
         get_orchestrator=lambda: svc._orchestrator,
-        get_runtime_config=lambda: svc._runtime_config,
-        retry_policy=svc._retry_policy,
+        get_runtime_config=svc.get_runtime_config,
         status_update_callback=svc._update_status_snapshot,
         logger=svc._logger,
-        get_monitor_check_interval=lambda: svc._monitor_check_interval,
     )
-    svc._retry_time_lock = threading.Lock()
-    import time as _time
-
-    def _bridge_retry_scheduled(delay: float) -> None:
-        with svc._retry_time_lock:
-            svc._next_retry_time = _time.time() + delay
-
-    def _bridge_login_success() -> None:
-        with svc._retry_time_lock:
-            svc._next_retry_time = 0
-
-    def _bridge_retry_exhausted() -> None:
-        with svc._retry_time_lock:
-            svc._next_retry_time = 0
-
-    svc._login_bridge._on_retry_scheduled = _bridge_retry_scheduled
-    svc._login_bridge._on_login_success = _bridge_login_success
-    svc._login_bridge._on_retry_exhausted = _bridge_retry_exhausted
-    svc._next_retry_time = 0
     return svc
 
 
@@ -120,7 +104,7 @@ class TestFullLoginSequence:
     def test_login_command_success(self):
         """手动登录命令成功：配置完整 → orchestrator 提交并等待 → 返回成功。"""
         svc = _make_raw_engine()
-        svc._runtime_config = RuntimeConfig(
+        svc._config_service.get_runtime_config.return_value = RuntimeConfig(
             credentials=LoginCredentials(
                 username="testuser",
                 password="testpass",
@@ -149,7 +133,7 @@ class TestFullLoginSequence:
     def test_login_command_failure_already_in_progress(self):
         """登录任务已在执行中时，返回失败。"""
         svc = _make_raw_engine()
-        svc._runtime_config = RuntimeConfig(
+        svc._config_service.get_runtime_config.return_value = RuntimeConfig(
             credentials=LoginCredentials(
                 username="testuser",
                 password="testpass",
@@ -171,7 +155,7 @@ class TestFullLoginSequence:
     def test_login_command_missing_config(self):
         """配置不完整时，登录命令直接返回失败。"""
         svc = _make_raw_engine()
-        svc._runtime_config = RuntimeConfig(
+        svc._config_service.get_runtime_config.return_value = RuntimeConfig(
             credentials=LoginCredentials(username="u"),  # 缺少 password 和 auth_url
         )
         # 校验失败由 orchestrator.submit 内部处理，返回 rejected handle
@@ -191,7 +175,7 @@ class TestFullLoginSequence:
     def test_do_async_login_submits_to_executor(self):
         """_do_async_login 正确提交到 orchestrator 并管理状态。"""
         svc = _make_raw_engine()
-        svc._runtime_config = RuntimeConfig(
+        svc._config_service.get_runtime_config.return_value = RuntimeConfig(
             credentials=LoginCredentials(
                 username="testuser",
                 password="testpass",
@@ -268,7 +252,7 @@ class TestLoginWithNetworkDetection:
         svc._do_async_login.assert_called_once()
 
     async def test_network_check_no_login_needed(self):
-        """网络正常时，不触发登录，通过 _retry_policy 重置退避。"""
+        """网络正常时，不触发登录。"""
         svc = _make_raw_engine()
         mock_core = MagicMock()
         mock_core.check_once = AsyncMock(
@@ -286,12 +270,11 @@ class TestLoginWithNetworkDetection:
         )
         mock_core.consume_profile_switch_flag.return_value = False
         svc._monitor_core = mock_core
-        svc._retry_policy._attempt = 2
-        svc._retry_policy._prev_network_ok = False  # 模拟之前断开
+        svc._do_async_login = AsyncMock()
 
         await svc._do_network_check_async()
 
-        assert svc._retry_policy._attempt == 0
+        svc._do_async_login.assert_not_called()
         assert svc._next_network_check > time.time()
 
     async def test_network_check_updates_interval(self):
@@ -375,7 +358,7 @@ class TestLoginWithNetworkDetection:
         )
         mock_core.consume_profile_switch_flag.return_value = False
         svc._monitor_core = mock_core
-        svc._runtime_config = RuntimeConfig()
+        svc._config_service.get_runtime_config.return_value = RuntimeConfig()
         svc._do_async_login = AsyncMock()
 
         await svc._do_network_check_async()
@@ -424,7 +407,7 @@ class TestLoginWithNetworkDetection:
         mock_core.consume_profile_switch_flag.return_value = False
         svc._monitor_core = mock_core
         # 关闭登录前置检查，确保 _do_async_login 真正提交到 orchestrator
-        svc._runtime_config = RuntimeConfig(
+        svc._config_service.get_runtime_config.return_value = RuntimeConfig(
             monitor=MonitorSettings(enable_local_check=False, check_auth_url=False),
         )
 
@@ -445,7 +428,6 @@ class TestLoginWithNetworkDetection:
         handle.rejected_reason = None
         handle.future = future
         svc._orchestrator.submit.return_value = handle
-        svc._retry_policy._attempt = 0
 
         # 模拟引擎循环中的网络检测
         now = time.time()
@@ -464,9 +446,6 @@ class TestLoginWithNetworkDetection:
         # 模拟登录成功完成回调（元组契约），确定性等待回调执行
         future.set_result((True, "登录成功"))
         assert callback_done.wait(timeout=2)
-        # 登录成功后重试计数应被重置、重试定时清零
-        assert svc._retry_policy._attempt == 0
-        assert svc._next_retry_time == 0
 
 
 # =====================================================================
@@ -537,7 +516,7 @@ class TestLoginConcurrencyProtection:
     def test_concurrent_login_rejection(self):
         """并发登录请求：第一个成功，后续被去重拒绝。"""
         svc = _make_raw_engine()
-        svc._runtime_config = RuntimeConfig(
+        svc._config_service.get_runtime_config.return_value = RuntimeConfig(
             credentials=LoginCredentials(
                 username="testuser",
                 password="testpass",
@@ -622,7 +601,7 @@ class TestLoginConcurrencyProtection:
     def test_login_exception_returns_false(self):
         """登录执行异常时，返回 False。"""
         svc = _make_raw_engine()
-        svc._runtime_config = RuntimeConfig(
+        svc._config_service.get_runtime_config.return_value = RuntimeConfig(
             credentials=LoginCredentials(
                 username="testuser",
                 password="testpass",
@@ -654,7 +633,7 @@ class TestLoginConcurrencyProtection:
     def test_multiple_threads_competing_for_login(self):
         """多线程竞争登录：由 orchestrator 内部去重，结果取决于 submit 返回。"""
         svc = _make_raw_engine()
-        svc._runtime_config = RuntimeConfig(
+        svc._config_service.get_runtime_config.return_value = RuntimeConfig(
             credentials=LoginCredentials(
                 username="testuser",
                 password="testpass",

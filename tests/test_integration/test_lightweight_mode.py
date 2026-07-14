@@ -11,8 +11,8 @@ from app.workers.playwright_worker import WorkerResponse
 
 def _ensure_login_config(engine) -> None:
     """确保引擎运行时配置包含登录所需字段。"""
-    old = engine._runtime_config
-    engine._runtime_config = old.model_copy(
+    old = engine._config_service.get_runtime_config()
+    new_config = old.model_copy(
         update={
             "credentials": LoginCredentials(
                 username="testuser",
@@ -23,6 +23,7 @@ def _ensure_login_config(engine) -> None:
             ),
         }
     )
+    engine._config_service._swap(new_config)
 
 
 class TestLightweightMode:

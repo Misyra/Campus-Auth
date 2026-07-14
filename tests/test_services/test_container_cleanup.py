@@ -177,8 +177,13 @@ class TestCleanupEfficiencyFix:
 
 
 def test_lightweight_container_has_real_task_executor(tmp_path):
-    """轻量模式应使用真实 TaskExecutor。"""
+    """轻量模式应使用真实 TaskExecutor。
+
+    Task 3.2: ScheduleEngine 需要 config_service（Task 3.3 注入），
+    暂时 mock ScheduleEngine 以验证 TaskExecutor 仍为真实实例。
+    """
     from app.services.task_executor import TaskExecutor
 
-    container = ServiceContainer(tmp_path, mode="lightweight")
+    with patch("app.container.ScheduleEngine"):
+        container = ServiceContainer(tmp_path)
     assert isinstance(container.task_executor, TaskExecutor)

@@ -84,12 +84,6 @@ class TestResolveWorkerTimeout:
         cfg = RuntimeConfig()
         assert resolve_worker_timeout(cfg) == 90
 
-    def test_custom_fallback_only_when_invalid(self):
-        """fallback 仅在 login_timeout 无法解析时使用。
-        RuntimeConfig 保证 login_timeout 是 int，所以 fallback 实际不会触发。"""
-        cfg = _make_runtime_config(login_timeout=120)
-        assert resolve_worker_timeout(cfg, fallback=200) == 120
-
     def test_floor_60(self):
         cfg = _make_runtime_config(login_timeout=10)
         assert resolve_worker_timeout(cfg) == 60
@@ -191,6 +185,7 @@ def orchestrator():
     worker = _make_slow_worker()
     return LoginOrchestrator(
         worker_getter=lambda: worker,
+        get_runtime_config=lambda: VALID_CONFIG,
         login_history=MagicMock(),
         profile_service=MagicMock(),
         executor=_make_mock_executor(),
@@ -300,26 +295,6 @@ class TestOrchestratorCancel:
         orchestrator.cancel_running()
 
 
-# ── validate ──
-
-
-class TestOrchestratorValidate:
-    def test_validate_passes_valid_config(self, orchestrator):
-        assert orchestrator.validate(VALID_CONFIG) is None
-
-    def test_validate_fails_bad_config(self, orchestrator):
-        assert orchestrator.validate(RuntimeConfig()) is not None
-
-    def test_validate_uses_runtime_config(self):
-        worker = _make_slow_worker()
-        orch = LoginOrchestrator(
-            worker_getter=lambda: worker,
-            get_runtime_config=lambda: VALID_CONFIG,
-            executor=_make_mock_executor(),
-        )
-        assert orch.validate() is None
-
-
 # ── shutdown ──
 
 
@@ -341,6 +316,7 @@ class TestDispatchClearsCancelSources:
         worker = _make_mock_worker()
         orch = LoginOrchestrator(
             worker_getter=lambda: worker,
+            get_runtime_config=lambda: VALID_CONFIG,
             login_history=MagicMock(),
             profile_service=MagicMock(),
             executor=_make_mock_executor(),
@@ -485,6 +461,7 @@ class TestTimeoutCancelsEvent:
 
         orch = LoginOrchestrator(
             worker_getter=lambda: worker,
+            get_runtime_config=lambda: VALID_CONFIG,
             login_history=MagicMock(),
             profile_service=MagicMock(),
             executor=_make_mock_executor(),
@@ -503,6 +480,7 @@ class TestTimeoutCancelsEvent:
 
         orch = LoginOrchestrator(
             worker_getter=lambda: worker,
+            get_runtime_config=lambda: VALID_CONFIG,
             login_history=MagicMock(),
             profile_service=MagicMock(),
             executor=_make_mock_executor(),
@@ -520,6 +498,7 @@ class TestTimeoutCancelsEvent:
 
         orch = LoginOrchestrator(
             worker_getter=lambda: worker,
+            get_runtime_config=lambda: VALID_CONFIG,
             login_history=MagicMock(),
             profile_service=MagicMock(),
             executor=_make_mock_executor(),
@@ -543,6 +522,7 @@ class TestTaskExecutorLoginExecutor:
             registry=MagicMock(),
             history_store=MagicMock(),
             worker_getter=lambda: None,
+            get_runtime_config=MagicMock(),
             login_orchestrator=MagicMock(),
         )
         # login_executor 应返回 BoundedExecutor 实例
@@ -557,27 +537,97 @@ class TestExecutorRequired:
     def test_no_executor_raises(self):
         """未传 executor 时应直接报错，不再静默自建 pool。"""
         with pytest.raises(TypeError, match="executor"):
-            LoginOrchestrator(worker_getter=lambda: None)
+            LoginOrchestrator(
+                worker_getter=lambda: None, get_runtime_config=lambda: VALID_CONFIG
+            )
 
     def test_executor_stored(self):
         """传入的 executor 应被保存为 _executor。"""
         mock_exec = MagicMock()
-        orch = LoginOrchestrator(worker_getter=lambda: None, executor=mock_exec)
+        orch = LoginOrchestrator(
+            worker_getter=lambda: None,
+            get_runtime_config=lambda: VALID_CONFIG,
+            executor=mock_exec,
+        )
         assert orch._executor is mock_exec
 
     def test_no_set_executor_method(self):
         """set_executor 应已被移除。"""
-        orch = LoginOrchestrator(worker_getter=lambda: None, executor=MagicMock())
+        orch = LoginOrchestrator(
+            worker_getter=lambda: None,
+            get_runtime_config=lambda: VALID_CONFIG,
+            executor=MagicMock(),
+        )
         assert not hasattr(orch, "set_executor")
 
     def test_no_pool_attribute(self):
         """_pool 字段应已移除。"""
-        orch = LoginOrchestrator(worker_getter=lambda: None, executor=MagicMock())
+        orch = LoginOrchestrator(
+            worker_getter=lambda: None,
+            get_runtime_config=lambda: VALID_CONFIG,
+            executor=MagicMock(),
+        )
         assert not hasattr(orch, "_pool")
 
     def test_shutdown_does_not_close_external_executor(self):
         """shutdown 不应关闭外部 executor（由调用方管理）。"""
         mock_exec = MagicMock()
-        orch = LoginOrchestrator(worker_getter=lambda: None, executor=mock_exec)
+        orch = LoginOrchestrator(
+            worker_getter=lambda: None,
+            get_runtime_config=lambda: VALID_CONFIG,
+            executor=mock_exec,
+        )
         orch.shutdown(wait=False)
         mock_exec.shutdown.assert_not_called()
+
+
+# ── Task 1.5: source="browser" 死代码移除 ──
+
+
+class TestSourceBrowserRemoved:
+    """Task 1.5: source='browser' 分支已移除（死代码清理）。"""
+
+    def test_login_source_literal_no_longer_includes_browser(self):
+        """LoginSource 类型不再包含 'browser'。"""
+        from typing import get_args
+
+        from app.services.login_orchestrator import LoginSource
+
+        args = get_args(LoginSource)
+        assert "browser" not in args
+        assert "auto" in args
+        assert "manual" in args
+        assert "login_once" in args
+
+    def test_history_recorded_regardless_of_source(self):
+        """_record_history 应对所有 source 一视同仁（不再跳过 browser）。
+
+        用 source='browser' 字符串调用 submit（运行时仍合法，但应走标准路径），
+        断言 history service 被调用。
+        """
+        from app.services.login_history_service import LoginHistoryService
+
+        history = MagicMock(spec=LoginHistoryService)
+        orch = LoginOrchestrator(
+            worker_getter=lambda: _make_slow_worker(),
+            login_history=history,
+            get_runtime_config=lambda: VALID_CONFIG,
+            executor=_make_mock_executor(),
+        )
+
+        # 提交 source='browser'（运行时仍可传字符串，无类型检查拦截）
+        handle = orch.submit(source="browser", config=VALID_CONFIG)
+        handle.result(timeout=5)
+
+        # 验证历史被记录（移除 if source != "browser" 后应总是调用）
+        assert history.add.called, "source='browser' 时也应记录登录历史"
+
+    def test_validation_runs_for_browser_source(self, orchestrator):
+        """validate_login_config 应对所有 source 执行（不再跳过 browser）。
+
+        用空配置 + source='browser' 调用 submit，应被拒绝。
+        """
+        handle = orchestrator.submit(source="browser", config=RuntimeConfig())
+        assert handle.future is None
+        assert handle.rejected_reason is not None
+        assert "登录配置不完整" in handle.rejected_reason

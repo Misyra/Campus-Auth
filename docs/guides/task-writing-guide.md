@@ -54,7 +54,7 @@
 | `reveal_hidden` | 否 | `false` | 执行前强制显示所有隐藏输入框。通常无需开启——每个步骤在普通操作失败后会自动降级到强制模式处理隐藏元素 |
 | `step_delay` | 否 | `0.5` | 步骤间休眠时间（秒），上一步完成后 → 休眠 → 执行下一步。第一步前不休眠。值越小任务执行越快，但网络延迟较大时可适当增大 |
 | `navigation_wait` | 否 | `1` | 页面加载后额外等待时间（秒）。适用于页面加载后通过 AJAX 动态渲染表单的场景——等待时间不足会导致后续步骤找不到元素 |
-| ~~`success_conditions`~~ | ~~否~~ | — | ~~已废弃，系统不再使用，无需添加~~ |
+| `success_condition` | 否 | `""` | 成功条件变量名。声明后，系统在步骤跑完后从运行时变量中读取该值做真值判定。留空走默认路径（登录任务走网络检测，普通任务步骤完成即成功）。详见 [成功判断](#成功判断) |
 | `on_success` | 否 | `{}` | 成功时的处理，如 `{ "message": "登录成功" }` |
 | `on_failure` | 否 | `{}` | 失败时的处理，如 `{ "message": "登录失败", "screenshot": true }`。`screenshot` 默认值为 `true`（不设也会截图） |
 
@@ -271,6 +271,45 @@
 }
 ```
 
+### goto — 页面导航
+
+导航到指定 URL。与任务顶层的 `url` 字段自动导航互补：顶层 `url` 在步骤执行前自动导航一次，`goto` 步骤用于在执行过程中切换页面（如登录后跳到打卡页、分步表单跨页操作）。
+
+| 参数 | 必填 | 默认值 | 说明 |
+|------|------|--------|------|
+| `url` | 是 | — | 目标 URL，支持 `{{变量}}` 模板 |
+| `timeout` | 否 | `10000` | 超时时间（毫秒） |
+| `wait_until` | 否 | `"load"` | 等待页面加载到何种状态即视为完成。可选值：`load`/`domcontentloaded`/`networkidle`/`commit` |
+
+**关于 `wait_until`**：
+- `load`（默认）：等待 `window.load` 事件，页面所有资源（图片、CSS、iframe）加载完成
+- `domcontentloaded`：DOM 解析完成即返回，不等图片/CSS，速度最快
+- `networkidle`：等待 500ms 内没有网络请求，适合 SPA 单页应用
+- `commit`：导航请求得到响应即返回，不等页面渲染
+
+`wait_until` 通过 `extra` 字段传递（非顶层字段）。无效值会回退到 `load` 并记录警告日志。
+
+```json
+{
+  "id": "goto_punch",
+  "type": "goto",
+  "description": "跳转到打卡页面",
+  "url": "https://example.com/punch",
+  "wait_until": "networkidle"
+}
+```
+
+```json
+{
+  "id": "goto_auth",
+  "type": "goto",
+  "url": "{{LOGIN_URL}}",
+  "timeout": 20000
+}
+```
+
+> **与自动导航的关系**：任务顶层声明 `url` 时，runner 会在步骤执行前自动导航到该地址（并处理 JS 重定向链、`navigation_wait` 等）。`goto` 步骤用于执行过程中需要额外跳转的场景。如果任务顶层未声明 `url` 且第一个步骤是 `goto`，则跳过自动导航，由 `goto` 接管。
+
 ### eval — JavaScript 求值
 
 执行 JavaScript 表达式并可选保存结果到变量。`code` 字段是 `script` 的已废弃别名，仍然支持但建议使用 `script`。`custom_js` 步骤类型已合并到 `eval`，旧任务中的 `custom_js` 仍会被自动映射到 `eval` 执行。
@@ -434,11 +473,182 @@ ddddocr 内置两套模型，`old` 参数控制使用哪一套：
 
 ## 成功判断
 
-系统统一使用网络连通性检测判断任务成功与否：任务步骤全部完成后，默认等待 5 秒，然后自动检测网络是否可达。网络通 = 认证成功，网络断 = 认证失败。检测失败时会在日志中显示具体原因。
+任务步骤全部执行完后，系统需要判断这次任务算成功还是失败。判定方式有两种：**什么都不写**（默认走系统网络检测），或**用 `eval` 步骤写一个变量 + 顶层 `success_condition` 引用它**。
 
-> **关于等待时间：** 等待时长由系统监控配置中的 `post_login_delay` 字段控制（默认 5 秒），属于**系统监控设置**而非任务 JSON 字段。如需调整，请在 Web 控制台的监控设置中修改，不要在任务 JSON 中添加此字段。
+### 两种方式对比
 
-> **注意：** 原有 `success_conditions` 字段已被废弃，不再参与成功判断。任务文件中无需再添加该字段。
+| 方式 | 触发条件 | 判定依据 | 失败后处理 |
+|------|---------|---------|-----------|
+| 默认（网络检测） | 登录任务且未声明 `success_condition` | 探测网络是否恢复 | 按重试策略重试 |
+| 默认（步骤完成） | 普通浏览器任务且未声明 `success_condition` | 步骤全部跑完即成功 | 步骤执行失败才重试 |
+| `success_condition` | 任务顶层声明了 `success_condition`（非空字符串） | 读取变量值做真值判定 | 假值按重试策略重试 |
+
+> **关键规则**：只要在任务顶层声明了非空 `success_condition`，登录任务就**跳过网络检测**，完全信任变量的真值判定结果。
+
+### 方式一：默认（什么都不写）
+
+**适用场景**：普通校园网登录任务，登录成功后网络就通了，无需关心页面文字。
+
+**执行流程**：
+1. 任务步骤全部执行完成
+2. 系统等待 `post_login_delay` 秒（默认 5 秒，让认证服务器响应）
+3. 使用 Web 控制台监控设置中配置的 TCP/HTTP/URL 探测方式检测网络
+4. 网络恢复 → 判定成功；网络未恢复 → 判定失败，按重试策略重试
+
+**配置方式**：无需在任务 JSON 中添加任何字段，保持原样即可。
+
+**注意**：只有"登录任务"会自动检测网络。其他浏览器任务（比如打卡、签到）**不会**检测网络——步骤跑完就算成功（因为这些任务运行时本来就有网，不然页面打不开）。
+
+### 方式二：用 `success_condition` 自己判断
+
+**适用场景**：
+- 想识别"密码错误""账号被锁定"等明确失败信号
+- 登录成功后不想等 5 秒网络检测，想用页面特征快速判定
+- 打卡/签到任务想通过页面文字判断是否成功
+
+#### 工作原理
+
+1. 你在 `steps` 里加一个 `eval` 步骤，写一段 JS 判定逻辑，用 `store_as` 把结果存到一个变量
+2. 在任务 JSON 顶层用 `success_condition` 字段引用这个变量名
+3. 系统在步骤跑完后读取该变量的值做真值判定
+
+#### 字段定义
+
+| 字段 | 位置 | 类型 | 默认值 | 说明 |
+|------|------|------|--------|------|
+| `success_condition` | 任务顶层 | string | `""` | 变量名（不带 `{{}}`），系统从运行时变量中取该值做真值判定。留空走默认路径 |
+
+#### 真值判定规则
+
+系统读取 `success_condition` 指向的变量值后，按以下规则判定真假：
+
+| 变量值类型 | 判定为 True | 判定为 False |
+|----------|------------|-------------|
+| bool | `True` | `False` |
+| None | — | 总是 False |
+| string | 非空且不等于 `"false"`/`"0"`/`"no"`/`"off"`（不区分大小写） | `""`/`"false"`/`"0"`/`"no"`/`"off"` |
+| 数字 | 非零 | 零 |
+| 其他 | `bool(value)` 为真 | `bool(value)` 为假 |
+
+> **变量未设置**：如果声明的变量名在运行时变量中不存在（例如 `eval` 步骤未执行或 `store_as` 名字写错），判定为**失败**，日志会提示检查 `store_as`。
+
+#### 失败后的处理
+
+- 变量值为假值 → 判定失败，**按重试策略重试**（与默认路径一致）
+- 重试耗尽后返回 EXHAUSTED
+
+> **关于"密码错误不重试"**：本方案不区分"密码错误"和"网络抖动"，统一按重试策略处理。如果你希望密码错误时立即停止，可以在 `eval` 脚本里抛异常让步骤直接失败（步骤失败会立即终止任务，但仍计入重试）。
+
+#### `eval` 步骤的 JS 写法
+
+`eval` 步骤的 `script` 在浏览器页面上下文中执行，可访问 DOM、URL、Cookie、localStorage 等页面 API：
+
+```javascript
+// 检查页面文字（返回 true/false）
+() => !document.body.innerText.includes('密码错误')
+
+// 检查元素是否存在
+() => document.querySelector('.welcome-user') !== null
+
+// 检查 URL 跳转
+() => location.href.includes('success')
+
+// 组合判定（出现"密码错误"或"账号锁定"返回 false，否则 true）
+() => !document.body.innerText.includes('密码错误') && !document.body.innerText.includes('账号锁定')
+
+// 使用变量（自动替换）
+() => document.body.innerText.includes('{{username}}')
+```
+
+> `script` 可以是函数表达式 `() => ...`，也可以是直接求值的表达式。返回值通过 `store_as` 存入运行时变量。详见 [eval 步骤](#eval--javascript-求值)。
+
+#### 示例 1：登录任务识别密码错误
+
+```json
+{
+  "name": "校园网登录",
+  "steps": [
+    {"id": "s1", "type": "goto", "url": "{{auth_url}}"},
+    {"id": "s2", "type": "fill", "selector": "#username", "value": "{{username}}"},
+    {"id": "s3", "type": "fill", "selector": "#password", "value": "{{password}}"},
+    {"id": "s4", "type": "click", "selector": "#login"},
+    {
+      "id": "check_result",
+      "type": "eval",
+      "description": "检查是否登录成功（页面无错误提示即视为成功）",
+      "script": "() => !document.body.innerText.includes('密码错误') && !document.body.innerText.includes('认证失败')",
+      "store_as": "success_flag"
+    }
+  ],
+  "success_condition": "success_flag"
+}
+```
+
+**执行过程**：
+- 点击登录后执行 `eval` 步骤，检查页面是否出现"密码错误"或"认证失败"
+- 没有出现 → `success_flag` = `true` → 判定成功；因声明了 `success_condition`，**跳过网络检测**
+- 出现了 → `success_flag` = `false` → 判定失败，按重试策略重试（密码错误会一直重试到耗尽，约 5 分钟后返回 EXHAUSTED）
+
+#### 示例 2：组合多个判定条件
+
+```json
+{
+  "name": "校园网登录",
+  "steps": [
+    {"id": "s1", "type": "goto", "url": "{{auth_url}}"},
+    {"id": "s2", "type": "fill", "selector": "#username", "value": "{{username}}"},
+    {"id": "s3", "type": "fill", "selector": "#password", "value": "{{password}}"},
+    {"id": "s4", "type": "click", "selector": "#login"},
+    {
+      "id": "check_result",
+      "type": "eval",
+      "description": "综合判定：无错误提示且出现欢迎元素才算成功",
+      "script": "() => !document.body.innerText.includes('密码错误') && !document.body.innerText.includes('认证失败') && document.querySelector('.welcome-user') !== null",
+      "store_as": "success_flag"
+    }
+  ],
+  "success_condition": "success_flag"
+}
+```
+
+> **配合 `wait` 步骤**：如果想在判定前先等待某个元素出现，可以在 `eval` 之前加一个 `wait` 步骤（如 `{"type": "wait", "selector": ".welcome-user", "timeout": 5000}`）。`wait` 失败会直接终止任务（计入重试），`eval` 再做最终判定。
+
+#### 示例 3：打卡任务靠页面文字判断
+
+```json
+{
+  "name": "每日打卡",
+  "steps": [
+    {"id": "s1", "type": "goto", "url": "https://example.com/punch"},
+    {"id": "s2", "type": "click", "selector": "#punch-btn"},
+    {
+      "id": "check_punch",
+      "type": "eval",
+      "description": "检查打卡结果文字",
+      "script": "() => document.body.innerText.includes('打卡成功')",
+      "store_as": "success_flag"
+    }
+  ],
+  "success_condition": "success_flag"
+}
+```
+
+**执行过程**：
+- 打卡任务为普通浏览器任务，本就不走网络检测
+- 声明 `success_condition` 后：`eval` 返回 `true` → 成功；返回 `false` → 失败
+
+### 关于 `post_login_delay`
+
+`post_login_delay` 控制默认方式中登录步骤跑完后到网络检测之间的等待时间，默认 5 秒。该字段在 **Web 控制台的监控设置**中配置，**不要写在任务 JSON 中**。
+
+| 配置位置 | 取值范围 | 生效场景 |
+|---------|---------|---------|
+| Web 控制台 → 监控设置 → `post_login_delay` | 0~60 秒 | 仅默认方式（未声明 `success_condition` 的登录任务） |
+
+- 仅在登录任务未声明 `success_condition` 时生效
+- 声明 `success_condition` 后，登录任务跳过网络检测，此等待时间不生效
+- 普通浏览器任务不涉及登录，不使用此参数
+- 设为 0 表示不等待，立即检测
 
 ---
 
@@ -738,8 +948,9 @@ ddddocr 内置两套模型，`old` 参数控制使用哪一套：
 
 ### 成功判定
 
-- 系统统一使用网络检测兜底判断成功，无需配置成功条件
-- 任务 JSON 中无需添加 `success_conditions` 字段
+- 默认无需配置，登录任务靠系统网络检测兜底，普通任务步骤完成即成功
+- 如需识别"密码错误"等页面特征，用 `eval` 步骤 + `store_as` 存判定结果，再在顶层声明 `success_condition` 引用该变量
+- 详见 [成功判断](#成功判断) 章节
 
 ---
 
@@ -802,6 +1013,7 @@ A: 两种方式可以提高识别准确度：
 | `click_select` | 点击式选择 | `selector`, `value`, `option_selector`(可选) | 点击触发器后按文字匹配选项；`option_selector` 限定搜索容器 |
 | `wait` | 等待元素 | `selector` | — |
 | `wait_url` | 等待 URL | `pattern` | — |
+| `goto` | 页面导航 | `url`, `wait_until` | 与顶层 `url` 自动导航互补，用于执行中切换页面 |
 | `eval` | JS 求值 | `script`, `store_as` | 结果可存入变量；`code` 为已废弃别名；`custom_js` 已合并到此类型 |
 | `screenshot` | 截图 | `path` | — |
 | `sleep` | 休眠 | `duration` | 最大 300000ms |

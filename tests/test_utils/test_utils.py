@@ -56,7 +56,6 @@ from app.utils.platform import (
 )
 from app.utils.time_utils import (
     _is_in_pause_period,
-    _parse_pause_range,
     is_pause_enabled,
 )
 
@@ -374,30 +373,6 @@ class TestGetProjectVersion:
 # =====================================================================
 
 
-class TestParsePauseRange:
-    """_parse_pause_range 解析测试。"""
-
-    def test_basic_range(self):
-        start, end = _parse_pause_range("08:00-18:00")
-        assert start == datetime.time(8, 0)
-        assert end == datetime.time(18, 0)
-
-    def test_with_minutes(self):
-        start, end = _parse_pause_range("08:15-09:30")
-        assert start == datetime.time(8, 15)
-        assert end == datetime.time(9, 30)
-
-    def test_cross_midnight(self):
-        start, end = _parse_pause_range("23:30-06:15")
-        assert start == datetime.time(23, 30)
-        assert end == datetime.time(6, 15)
-
-    def test_strips_whitespace(self):
-        start, end = _parse_pause_range(" 08:00 - 18:00 ")
-        assert start == datetime.time(8, 0)
-        assert end == datetime.time(18, 0)
-
-
 class TestIsInPausePeriod:
     """is_in_pause_period(now, ranges) 纯函数测试。"""
 
@@ -704,7 +679,7 @@ class TestCreateNoWindowFlag:
 class TestLoginAttemptCloseIdempotent:
     def test_close_browser_idempotent(self):
         """多次调用 close_browser 不应报错（幂等）"""
-        from app.services.login_attempt import LoginAttempt
+        from app.workers.login_attempt import LoginAttempt
 
         handler = LoginAttempt(config={})
         # _browser_ctx 为 None 时，close_browser 应安全返回

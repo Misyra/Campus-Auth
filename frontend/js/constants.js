@@ -74,11 +74,10 @@ export const LEVEL_VALUES = Object.fromEntries(LOG_LEVELS.map((l, i) => [l.value
 
 // 日志来源列表
 export const LOG_SOURCES = [
-  { value: "backend",  label: "backend",  color: "#60a5fa" },
-  { value: "frontend", label: "frontend", color: "#a78bfa" }
+  { value: "backend",  label: "backend" },
+  { value: "frontend", label: "frontend" }
 ];
 
-export const BROWSER_ARGS_DEFAULT = "--disable-blink-features=AutomationControlled\n--disable-software-rasterizer\n--disable-extensions\n--disable-background-timer-throttling\n--disable-backgrounding-occluded-windows\n--disable-renderer-backgrounding\n--disable-features=TranslateUI,BlinkGenPropertyTrees\n--disable-ipc-flooding-protection\n--disable-hang-monitor\n--disable-popup-blocking";
 
 export const DEFAULT_CONFIG = {
   browser: {
@@ -89,8 +88,7 @@ export const DEFAULT_CONFIG = {
     user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
     low_resource_mode: false,
     disable_web_security: false,
-    extra_headers_json: "",
-    browser_args: BROWSER_ARGS_DEFAULT,
+    browser_args: "--disable-blink-features=AutomationControlled\n--disable-software-rasterizer\n--disable-extensions\n--disable-background-timer-throttling\n--disable-backgrounding-occluded-windows\n--disable-renderer-backgrounding\n--disable-features=TranslateUI,BlinkGenPropertyTrees\n--disable-ipc-flooding-protection\n--disable-hang-monitor\n--disable-popup-blocking",
     stealth_mode: false,
     stealth_custom_script: "",
     locale: "zh-CN",
@@ -204,8 +202,6 @@ export const LIGHT_BG_COLORS = [
   { value: '#ecfdf5', label: '薄荷绿' },
 ];
 
-// 兼容旧引用
-export const BG_COLORS = DARK_BG_COLORS;
 
 // 自定义颜色默认结构（按类型分组，持久化到 localStorage 'appearance.custom_colors'）
 export const DEFAULT_CUSTOM_COLORS = {
