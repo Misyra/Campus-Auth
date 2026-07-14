@@ -15,7 +15,7 @@ from playwright.sync_api import TimeoutError as PlaywrightTimeout
 from app.constants import DEFAULT_STEP_TIMEOUT_MS, DEFAULT_TASK_TIMEOUT_MS
 from app.utils.logging import get_logger
 
-from .models import StepConfig, StepType, TaskConfig
+from .models import JsCheck, StepConfig, StepType, TaskConfig
 from .step_handlers import DEFAULT_HANDLERS
 from .variable_resolver import VariableResolver
 
@@ -34,7 +34,6 @@ class BrowserTaskRunner:
         screenshot_dir: Path | str | None = None,
         default_timeout: int | None = None,
         navigation_timeout: int | None = None,
-        monitor_config: dict[str, Any] | None = None,
         cancel_event: threading.Event | None = None,
     ):
         self.config = config
@@ -51,7 +50,6 @@ class BrowserTaskRunner:
         self.registry = dict(DEFAULT_HANDLERS)
         self._step_results: list[dict[str, Any]] = []
         self._screenshot_dir = Path(screenshot_dir) if screenshot_dir else None
-        self.monitor_config = monitor_config
         self._asserted = False
         self.cancel_event = cancel_event
 
@@ -143,8 +141,9 @@ class BrowserTaskRunner:
 
                 if not success:
                     return await self._handle_failure(page, step, message)
-            if not await self._check_success(page):
-                return await self._handle_failure(page, None, "成功条件验证未通过")
+            ok, reason = await self._check_success(page)
+            if not ok:
+                return await self._handle_failure(page, None, reason)
             total_elapsed = (time.perf_counter() - task_start) * 1000
             logger.info(
                 "任务执行成功: {} (耗时 {:.0f}ms)", self.config.name, total_elapsed
@@ -307,52 +306,98 @@ class BrowserTaskRunner:
         self._step_results.append(result)
         return result
 
-    async def _check_success(self, page) -> bool:
-        """成功条件判断。
+    async def _poll_js_expression(
+        self, page, expr: str, timeout_ms: int
+    ) -> bool:
+        """在 timeout 内轮询 JS 表达式，任一时刻返回真值即返回 True。
 
-        1. assert_text 步骤检测成功 → 直接通过
-        2. 有 monitor_config → 网络检测（校园网登录）
-        3. 都没有 → 信任步骤结果
+        使用 page.wait_for_function 让 Playwright 内部按 100ms 间隔轮询，
+        避免应用层忙等。timeout_ms 超时返回 False。
         """
-        if self._asserted:
-            return True
-        if self.monitor_config:
-            return await self._network_detection_check()
-        return True
-
-    async def _network_detection_check(self) -> bool:
-        """任务步骤全部通过后，验证网络是否已恢复连通。"""
         try:
-            from app.network.decision import check_network_status
-            from app.schemas import MonitorSettings
-
-            cfg = self.monitor_config
-            monitor = MonitorSettings(
-                **{
-                    k: v
-                    for k, v in cfg.items()
-                    if k in MonitorSettings.model_fields
-                    and v is not None
-                    and not (isinstance(v, (list, str, dict)) and not v)
-                }
-            )
-
-            delay = cfg.get("post_login_delay")
-            await asyncio.sleep(delay if delay is not None else 5)
-
-            ok, status, method = await check_network_status(monitor)
-            if status == "all_disabled":
-                logger.debug("[network_check] 所有检测方式已禁用，信任登录结果")
-                return True
-            if ok:
-                logger.info("网络已恢复，登录认证生效 (检测方式={})", method)
-            else:
-                logger.warning("网络仍不可达 (状态={})", status)
-
-            return ok
-        except Exception:
-            logger.exception("网络验证异常")
+            # 表达式包装为函数形式：() => Boolean(expr)
+            wrapped = f"() => Boolean({expr})"
+            await page.wait_for_function(wrapped, timeout=timeout_ms)
+            return True
+        except PlaywrightTimeout:
             return False
+        except Exception as e:
+            logger.debug(
+                "[js_check] 表达式评估失败: expr={}, error={}",
+                expr[:60],
+                e,
+            )
+            return False
+
+    async def _evaluate_js_checks(
+        self, page, checks: list[JsCheck], label: str
+    ) -> str | None:
+        """评估 JS 表达式列表，返回首个命中的 message（或 expr 前 40 字符）。
+
+        Args:
+            checks: 待评估的 JsCheck 列表
+            label: "success" 或 "failure"，仅用于日志
+
+        Returns:
+            命中的 check 的 message（或 expr 截断），全部未命中返回 None。
+            评估异常视为未命中（不阻断流程），记录 warning。
+        """
+        for check in checks:
+            if not check.expr:
+                continue
+            try:
+                resolved_expr = self.resolver.resolve_for_js(check.expr)
+                result = await self._poll_js_expression(
+                    page, resolved_expr, check.timeout
+                )
+                if result:
+                    msg = check.message or check.expr[:40]
+                    logger.info(
+                        "[js_check/{}] 命中: {} (expr={})",
+                        label,
+                        msg,
+                        check.expr[:60],
+                    )
+                    return msg
+            except Exception as e:
+                logger.warning(
+                    "[js_check/{}] 评估异常: expr={}, error={}",
+                    label,
+                    check.expr[:60],
+                    e,
+                )
+        return None
+
+    async def _check_success(self, page) -> tuple[bool, str]:
+        """成功条件判断（纯文本/JS 判定，不含网络检测）。
+
+        优先级：
+        1. failure_checks 任一命中 → 失败（识别为 INVALID_CREDENTIAL）
+        2. _asserted（步骤 assert_text 命中）→ 成功
+        3. success_checks 任一命中 → 成功
+        4. 都未命中 → 兜底"信任步骤"（登录路径由 LoginAttempt 追加网络检测）
+        """
+        # 1. 失败信号优先（短路）
+        failure_msg = await self._evaluate_js_checks(
+            page, self.config.failure_checks, "failure"
+        )
+        if failure_msg is not None:
+            return False, f"命中失败信号: {failure_msg}"
+
+        # 2. 步骤内置 assert_text 命中
+        if self._asserted:
+            return True, "断言文本已命中"
+
+        # 3. 成功信号
+        success_msg = await self._evaluate_js_checks(
+            page, self.config.success_checks, "success"
+        )
+        if success_msg is not None:
+            return True, f"命中成功信号: {success_msg}"
+
+        # 4. 兜底：信任步骤结果
+        # 登录路径由 LoginAttempt._execute_browser_task 追加网络检测
+        return True, "步骤执行完成"
 
     async def _handle_success(self, page) -> tuple[bool, str]:
         """处理成功情况"""
