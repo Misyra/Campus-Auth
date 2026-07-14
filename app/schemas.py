@@ -330,6 +330,9 @@ class MonitorSettings(BaseModel, frozen=True):
     bind_interface_name: str = Field(
         default="", description="绑定网卡名称，空串表示不绑定"
     )
+    # 登录后网络检测前的等待时间（秒）
+    # 让 portal 完成跳转和会话生效，再触发网络检测
+    post_login_delay: int = Field(default=5, ge=0, le=60)
 
 
 class PauseSettings(BaseModel, frozen=True):
