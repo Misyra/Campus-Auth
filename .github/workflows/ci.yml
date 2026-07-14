@@ -13,10 +13,10 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
         python-version: ["3.12"]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 10
+    timeout-minutes: 15
     env:
-      # 测试全部为 mock 形式，无需真实 Chromium；跳过浏览器下载可省 30-60s
-      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+      # 仅下载 Chromium（跳过 Firefox/WebKit），节省约 60s
+      PLAYWRIGHT_BROWSERS_PATH: "0"
 
     steps:
       - uses: actions/checkout@v4
@@ -53,6 +53,9 @@ jobs:
           key: playwright-${{ runner.os }}-${{ hashFiles('**/pyproject.toml', '**/uv.lock') }}
           restore-keys: |
             playwright-${{ runner.os }}-
+
+      - name: Install Playwright Chromium
+        run: uv run playwright install chromium
 
       - name: Run tests
         run: uv run pytest --tb=short -q --cov=app --cov-report=term-missing
