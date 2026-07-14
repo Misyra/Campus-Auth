@@ -7,7 +7,8 @@
 - 超时机制正确工作
 """
 
-from __future__ import annotations
+import sys
+import pytest
 
 import shutil
 
@@ -49,6 +50,7 @@ class TestScriptExecution:
         assert success is True
         assert "hello from py" in message
 
+    @pytest.mark.skipif(sys.platform != "win32", reason="bat 脚本仅 Windows 可用")
     def test_bat_script_output(self, real_app):
         """bat 脚本通过 cmd.exe 执行并返回 stdout。"""
         client, _ = real_app
@@ -56,7 +58,7 @@ class TestScriptExecution:
         success, message = _run_script(client, "e2e_bat")
         assert success is True
         assert "hello from bat" in message
-
+    @pytest.mark.skipif(sys.platform != "win32", reason="ps1 脚本仅 Windows 可用")
     def test_ps1_script_output(self, real_app):
         """ps1 脚本通过 PowerShell 执行并返回 stdout。"""
         client, _ = real_app
