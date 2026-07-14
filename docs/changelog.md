@@ -6,6 +6,8 @@
 
 - 修复前端任务编辑器成功判定示例使用 `fill` 步骤类型（应为 `input`）
 - 修正架构文档任务执行流程：删除不存在的 `navigate` 步骤跳过描述，章节标题改为"成功条件判断"
+- 修复定时浏览器任务 `{{USERNAME}}` 等变量无法解析（`_handle_browser_task` 缺少 `template_vars` 构建）
+- 修复 PATCH 配置接口嵌套模型默认值覆盖已有配置（`model_dump` 改用 `exclude_unset=True`）
 
 ### 文档
 
