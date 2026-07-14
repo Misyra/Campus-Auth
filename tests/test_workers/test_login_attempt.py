@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -22,7 +23,10 @@ def _make_attempt(config: dict | None = None):
         "monitor": {"post_login_delay": 0},
         "active_task": "",
     }
-    return LoginAttempt(cfg, MagicMock())
+    # cancel_event.is_set() 必须返回 False，否则会触发"登录已取消"分支
+    cancel_event = MagicMock()
+    cancel_event.is_set = MagicMock(return_value=False)
+    return LoginAttempt(cfg, cancel_event)
 
 
 class TestExecuteOutcomeMapping:
@@ -185,3 +189,150 @@ class TestVerifyNetworkAfterLogin:
             ok, msg = await attempt._verify_network_after_login()
         assert ok is False
         assert msg == "tcp_failed"
+
+
+class TestExecuteBrowserTaskExplicitChecks:
+    """_execute_browser_task 的 has_explicit_checks 分支测试。"""
+
+    @pytest.mark.asyncio
+    async def test_declared_checks_skips_network_detection(self):
+        """任务声明 failure_checks → has_explicit_checks=True → 跳过网络检测直接 SUCCESS。"""
+        attempt = _make_attempt()
+
+        # 构造带 failure_checks 的 task
+        task = MagicMock()
+        task.task_id = "t1"
+        task.url = "http://example.com"
+        task.steps = []
+        task.success_checks = []
+        task.failure_checks = [MagicMock()]  # 非空 → has_explicit_checks=True
+        type(task).__name__ = "TaskConfig"
+
+        # mock executor.execute 返回成功
+        mock_executor = MagicMock()
+        mock_executor.execute = AsyncMock(return_value=(True, "步骤通过"))
+
+        # mock 浏览器
+        mock_page = MagicMock()
+        mock_page.on = MagicMock()
+        mock_page.remove_listener = MagicMock()
+        mock_browser_mgr = MagicMock()
+        mock_browser_mgr.page = mock_page
+        mock_browser_mgr.__aenter__ = AsyncMock(return_value=mock_browser_mgr)
+        mock_browser_mgr.__aexit__ = AsyncMock()
+
+        verify_mock = AsyncMock(return_value=(True, "should_not_be_called"))
+
+        with (
+            patch(
+                "app.workers.login_attempt.BrowserContextManager",
+                return_value=mock_browser_mgr,
+            ),
+            patch(
+                "app.workers.login_attempt.build_login_template_vars", return_value={}
+            ),
+            patch("app.tasks.BrowserTaskRunner", return_value=mock_executor),
+            patch.object(
+                attempt, "_verify_network_after_login", verify_mock
+            ),
+        ):
+            ok, msg = await attempt._execute_browser_task(
+                task, "default", time.perf_counter()
+            )
+
+        assert ok is True
+        # _verify_network_after_login 不应被调用（声明了 checks）
+        verify_mock.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_no_checks_runs_network_detection(self):
+        """任务未声明 checks → has_explicit_checks=False → 走网络检测。"""
+        attempt = _make_attempt()
+
+        task = MagicMock()
+        task.task_id = "t1"
+        task.url = "http://example.com"
+        task.steps = []
+        task.success_checks = []  # 空
+        task.failure_checks = []  # 空 → has_explicit_checks=False
+        type(task).__name__ = "TaskConfig"
+
+        mock_executor = MagicMock()
+        mock_executor.execute = AsyncMock(return_value=(True, "步骤通过"))
+
+        mock_page = MagicMock()
+        mock_page.on = MagicMock()
+        mock_page.remove_listener = MagicMock()
+        mock_browser_mgr = MagicMock()
+        mock_browser_mgr.page = mock_page
+        mock_browser_mgr.__aenter__ = AsyncMock(return_value=mock_browser_mgr)
+        mock_browser_mgr.__aexit__ = AsyncMock()
+
+        verify_mock = AsyncMock(return_value=(True, "network_ok"))
+
+        with (
+            patch(
+                "app.workers.login_attempt.BrowserContextManager",
+                return_value=mock_browser_mgr,
+            ),
+            patch(
+                "app.workers.login_attempt.build_login_template_vars", return_value={}
+            ),
+            patch("app.tasks.BrowserTaskRunner", return_value=mock_executor),
+            patch.object(
+                attempt, "_verify_network_after_login", verify_mock
+            ),
+        ):
+            ok, msg = await attempt._execute_browser_task(
+                task, "default", time.perf_counter()
+            )
+
+        assert ok is True
+        # _verify_network_after_login 应被调用一次
+        verify_mock.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_no_checks_network_down_returns_failure(self):
+        """任务未声明 checks + 网络检测失败 → 返回失败（可重试）。"""
+        attempt = _make_attempt()
+
+        task = MagicMock()
+        task.task_id = "t1"
+        task.url = "http://example.com"
+        task.steps = []
+        task.success_checks = []
+        task.failure_checks = []
+        type(task).__name__ = "TaskConfig"
+
+        mock_executor = MagicMock()
+        mock_executor.execute = AsyncMock(return_value=(True, "步骤通过"))
+
+        mock_page = MagicMock()
+        mock_page.on = MagicMock()
+        mock_page.remove_listener = MagicMock()
+        mock_browser_mgr = MagicMock()
+        mock_browser_mgr.page = mock_page
+        mock_browser_mgr.__aenter__ = AsyncMock(return_value=mock_browser_mgr)
+        mock_browser_mgr.__aexit__ = AsyncMock()
+
+        verify_mock = AsyncMock(return_value=(False, "network_down"))
+
+        with (
+            patch(
+                "app.workers.login_attempt.BrowserContextManager",
+                return_value=mock_browser_mgr,
+            ),
+            patch(
+                "app.workers.login_attempt.build_login_template_vars", return_value={}
+            ),
+            patch("app.tasks.BrowserTaskRunner", return_value=mock_executor),
+            patch.object(
+                attempt, "_verify_network_after_login", verify_mock
+            ),
+        ):
+            ok, msg = await attempt._execute_browser_task(
+                task, "default", time.perf_counter()
+            )
+
+        assert ok is False
+        assert "步骤通过但网络未恢复" in msg
