@@ -11,10 +11,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.utils.exceptions import LoginCancelledError
-from app.workers.login_attempt import (
-    LOGIN_SUCCESS_SETTLE_SECONDS,
-    LoginAttempt,
-)
+from app.workers.login_attempt import LoginAttempt
 from app.workers.login_models import AttemptOutcome, AttemptOutcomeType
 
 # ── helpers ──────────────────────────────────────────────────────────
@@ -40,6 +37,9 @@ def _make_task_config(task_id: str = "default", steps: list | None = None):
     task.task_id = task_id
     task.url = "http://example.com"
     task.steps = steps or [{"type": "input", "selector": "#user"}]
+    # 显式设为空列表，避免 MagicMock truthy 影响 has_explicit_checks 判断
+    task.success_checks = []
+    task.failure_checks = []
     # 确保 isinstance(task, ScriptTaskInfo) 为 False
     type(task).__name__ = "TaskConfig"
     return task
@@ -387,6 +387,10 @@ class TestExecuteBrowserTask:
             patch(
                 "app.workers.login_attempt.asyncio.sleep", new_callable=AsyncMock
             ) as mock_sleep,
+            patch(
+                "app.network.decision.check_network_status",
+                new=AsyncMock(return_value=(True, "ok", "tcp")),
+            ),
         ):
             MockExecutor.return_value.execute = AsyncMock(return_value=(True, "成功"))
 
@@ -396,7 +400,9 @@ class TestExecuteBrowserTask:
 
         assert ok is True
         assert msg == "成功"
-        mock_sleep.assert_awaited_with(LOGIN_SUCCESS_SETTLE_SECONDS)
+        # 未声明成功条件 → 走网络检测兜底 → sleep(post_login_delay)
+        # _make_config 的 monitor={} → MonitorSettings 默认 post_login_delay=5
+        mock_sleep.assert_awaited_with(5)
         assert handler._browser_ctx is None
 
     @pytest.mark.asyncio
@@ -754,6 +760,8 @@ class TestExecute:
 
     @pytest.mark.asyncio
     async def test_connection_reset_returns_retryable(self):
+        """attempt_login 内部 catch ConnectionResetError 转 (False, str(exc))，
+        execute 收到失败结果后映射为 RETRYABLE。"""
         config = _make_config()
         handler = LoginAttempt(config)
 
@@ -761,7 +769,7 @@ class TestExecute:
             handler,
             "attempt_login",
             new_callable=AsyncMock,
-            side_effect=ConnectionResetError("连接被重置"),
+            return_value=(False, "ConnectionResetError: 连接被重置"),
         ):
             outcome = await handler.execute()
 
@@ -770,6 +778,7 @@ class TestExecute:
 
     @pytest.mark.asyncio
     async def test_timeout_error_returns_retryable(self):
+        """attempt_login 内部 catch TimeoutError 转 (False, str(exc))。"""
         config = _make_config()
         handler = LoginAttempt(config)
 
@@ -777,7 +786,7 @@ class TestExecute:
             handler,
             "attempt_login",
             new_callable=AsyncMock,
-            side_effect=TimeoutError("操作超时"),
+            return_value=(False, "TimeoutError: 操作超时"),
         ):
             outcome = await handler.execute()
 
@@ -785,6 +794,7 @@ class TestExecute:
 
     @pytest.mark.asyncio
     async def test_playwright_target_closed_returns_retryable(self):
+        """attempt_login 内部 catch PlaywrightError('Target closed') 转 (False, str)。"""
         config = _make_config()
         handler = LoginAttempt(config)
 
@@ -792,17 +802,16 @@ class TestExecute:
             handler,
             "attempt_login",
             new_callable=AsyncMock,
-        ) as mock_login:
-            from playwright.async_api import Error as PlaywrightError
-
-            mock_login.side_effect = PlaywrightError("Target closed")
+            return_value=(False, "Target closed"),
+        ):
             outcome = await handler.execute()
 
         assert outcome.type == AttemptOutcomeType.RETRYABLE
 
     @pytest.mark.asyncio
-    async def test_playwright_other_error_propagates(self):
-        """非可重试 PlaywrightError 应向上传播。"""
+    async def test_playwright_other_error_becomes_retryable(self):
+        """非可重试 PlaywrightError 也由 attempt_login 内部 catch 转 (False, str)，
+        execute 统一映射为 RETRYABLE（不再有"向上传播"分支）。"""
         config = _make_config()
         handler = LoginAttempt(config)
 
@@ -810,13 +819,12 @@ class TestExecute:
             handler,
             "attempt_login",
             new_callable=AsyncMock,
-        ) as mock_login:
-            from playwright.async_api import Error as PlaywrightError
+            return_value=(False, "unexpected internal error"),
+        ):
+            outcome = await handler.execute()
 
-            mock_login.side_effect = PlaywrightError("unexpected internal error")
-
-            with pytest.raises(PlaywrightError, match="unexpected internal error"):
-                await handler.execute()
+        assert outcome.type == AttemptOutcomeType.RETRYABLE
+        assert "unexpected internal error" in outcome.message
 
     @pytest.mark.asyncio
     async def test_program_error_propagates(self):
