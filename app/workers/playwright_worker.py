@@ -450,6 +450,7 @@ class PlaywrightWorker(WorkerPort):
         """
         from app.constants import PROJECT_ROOT
         from app.tasks import BrowserTaskRunner, TaskConfig, TaskManager
+        from app.utils.env import build_login_template_vars
 
         config = data.get("config", {})
         cancel_event: threading.Event | None = data.get("cancel_event")
@@ -485,10 +486,21 @@ class PlaywrightWorker(WorkerPort):
             if self._page is None or self._page.is_closed():
                 return WorkerResponse(success=False, error="浏览器页面初始化失败")
 
+            # 构建 template_vars（与 LoginAttempt 对齐）
+            # runtime_config_to_worker_dict 携带 username/password/auth_url/isp，
+            # 任务 url 取自 task_config.url，使 {{USERNAME}} 等预定义变量可被解析
+            template_vars = build_login_template_vars(
+                auth_url=config.get("auth_url", ""),
+                username=config.get("username", ""),
+                password=config.get("password", ""),
+                isp=config.get("isp", ""),
+                task_url=task_config.url,
+            )
+
             # 执行任务
             runner = BrowserTaskRunner(
                 task_config,
-                template_vars=config.get("template_vars", {}),
+                template_vars=template_vars,
                 cancel_event=cancel_event,
             )
             success, message = await runner.execute(self._page)

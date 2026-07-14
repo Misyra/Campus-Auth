@@ -46,7 +46,7 @@ class LoginAttempt:
         self._task_manager: Any | None = None
         self._project_root: Path | None = None
 
-        # 解构常用字段为命名属性（dict 结构由 _runtime_config_to_worker_dict 保证）
+        # 解构常用字段为命名属性（dict 结构由 runtime_config_to_worker_dict 保证）
         self._credentials: dict[str, str] = {
             "username": config.get("username", ""),
             "password": config.get("password", ""),

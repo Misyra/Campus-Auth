@@ -152,7 +152,10 @@ def patch_config(
     # password 空串语义为不修改（见 save_password_field），不回填运行时明文以免无谓重新加密
     current["password"] = None
 
-    patch_data = payload.model_dump(exclude_none=True)
+    # exclude_unset=True：仅包含请求中显式传入的字段（含嵌套），
+    # 避免 BrowserSettings 等嵌套模型的默认值覆盖已有配置（如 headless 默认 True 覆盖 False）
+    # exclude_none=True：跳过未传的可选字段
+    patch_data = payload.model_dump(exclude_unset=True, exclude_none=True)
 
     merged = {**current, **patch_data}
     for key in ("browser", "monitor", "retry", "pause", "logging", "app_settings"):

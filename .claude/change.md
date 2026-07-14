@@ -3,6 +3,60 @@
 
 ## 2026-07-13
 
+### test: 新增 E2E 全量测试套件（106 个测试，覆盖后端核心模块 + 前端全量页面回归）
+
+**基础设施（tests/test_e2e/conftest.py）**：
+- `e2e_project` fixture：隔离的 tmp_path 项目根目录，同时 patch `app.constants` 与 `app.application` 的路径常量（PROJECT_ROOT/FRONTEND_DIR/DEBUG_DIR/LOGS_DIR/SCREENSHOTS_DIR/TEMP_DIR/BROWSER_DATA_DIR），重置 ProfileService 单例
+- `real_app` fixture：启动真实 FastAPI 应用 + 真实 ServiceContainer（不 mock 路由），patch `ScheduleEngine.boot` 只启动线程不自动启动监控（避免访问外网/触发 Playwright），patch `cleanup_orphan_browsers` 防误杀，patch `app.api.system.get_project_version` 修复模块级绑定问题
+- `http_portal` fixture：stdlib `ThreadingHTTPServer` 模拟校园网认证门户（GET / 返回登录表单、POST /login 校验 e2e_user/e2e_pass、GET /success、GET /generate_204、GET /hotspot-detect.html）
+- `real_browser` fixture：真实 Playwright Chromium（headless），未安装时 pytest.skip
+
+**后端 E2E 测试（tests/test_e2e/，9 个文件）**：
+- `test_conftest_smoke.py`：fixture 烟雾测试（11 个）
+- `test_app_lifecycle.py`：应用生命周期 + API 全量端点（12+ 个）
+- `test_network_detection.py`：合法站点通过 vs 伪造站点拦截
+- `test_config_persistence.py`：修改→落盘→重启验证
+- `test_script_execution.py`：py/bat/ps1/sh/exe 真实子进程执行（9 个）
+- `test_scheduled_task.py`：真实分钟边界调度触发（5 个，@slow）
+- `test_autostart_registration.py`：enable/disable/status 真实文件写入（5 个）
+- `test_browser_task.py`：真实 Playwright + http_portal 浏览器任务（3 个）
+- `test_browser_config.py`：浏览器配置持久化与切换（10 个）
+- `test_version_detection.py`：版本更新检测（mock GitHub API）
+
+**前端 E2E 测试（tests/test_e2e_frontend/，3 个文件）**：
+- `conftest.py`：`live_app` fixture（uvicorn 真实端口启动）+ `browser_page` fixture
+- `test_page_regression.py`：29 个页面回归测试（dashboard/settings 5 子页/tasks/profiles/scheduled_tasks/scripts/about/appearance）
+- `test_interactions.py`：8 个交互流程（首次启动向导/登录配置/任务编辑/方案切换/定时任务启停/主题切换/Toast 提示）
+
+**手动验证清单（docs/manual_verification_checklist.md）**：
+- OCR 文字识别完整流程（ddddocr 未安装，需手动验证）
+- 网卡绑定配置生效与 DHCP IP 变化更新（需真实多网卡环境）
+- 开机自启真机重启拉起（需重启设备）
+- 真实校园网认证端到端（断网重连/多方案切换/重试/暂停时段）
+- WebSocket 实时推送与断线重连
+- 系统托盘交互
+
+**顺带修复的 bug**：
+- `app/api/config.py`：PATCH /api/config 的 `model_dump` 从 `exclude_none=True` 改为 `exclude_unset=True, exclude_none=True`，修复嵌套模型默认值覆盖已有配置（如 PATCH browser.timeout 时 headless 默认值 True 覆盖已有 False）
+- `pyproject.toml`：`addopts` 新增 `--import-mode=importlib`，解决重复基名 pytest 收集错误；新增 `markers` 配置 `slow` 标记
+- `tests/test_network/test_probes.py`：`TestTcpProbeInterfaceBind` 新增 autouse fixture 清除 `_shutdown_event`，修复 E2E 引擎关闭后残留状态导致 mock 未调用
+- `app/workers/login_attempt.py`：注释中 `_runtime_config_to_worker_dict` 更正为 `runtime_config_to_worker_dict`（函数已公开）
+
+**验证结果**：106 passed in 382.84s（43 warnings 均为 pre-existing subprocess UnicodeDecodeError）
+
+### fix: 修复测试套件 3 个测试隔离失败（完整套件 2542 passed）
+
+- `tests/test_e2e/conftest.py`：`real_app` fixture 新增 `patch("app.api.system.get_project_version", ...)` — `system.py` 通过 `from app.version import get_project_version` 在模块级绑定函数引用，完整套件中 `system.py` 被前序测试导入后，`app.version` 上的 patch 不再生效，需直接 patch system 模块的绑定
+- `tests/test_network/test_probes.py`：`TestTcpProbeInterfaceBind` 新增 autouse fixture `_clear_shutdown_event` — E2E 测试引擎关闭调用 `shutdown_probes()` set 模块级 `_shutdown_event`，`is_network_available_socket` 入口检查 `_shutdown_event.is_set()` 直接返回 False，导致 mock 未被调用
+- `app/api/config.py`：`patch_config` 的 `model_dump` 参数从 `exclude_none=True` 改为 `exclude_unset=True, exclude_none=True` — `exclude_none` 会生成嵌套模型完整 dict（含默认值），导致 PATCH `{"browser": {"timeout": 25}}` 时 `headless` 默认值 `True` 覆盖已有 `False`
+- `pyproject.toml`：`addopts` 新增 `--import-mode=importlib` — 解决 `test_integration/test_scheduled_task.py` 与 `test_e2e/test_scheduled_task.py` 重复基名导致的 pytest 收集错误
+
+### fix: 浏览器定时任务补全 template_vars 注入，修复系统变量无法解析
+
+- `app/workers/playwright_worker.py`：`_handle_browser_task` 调用 `build_login_template_vars` 构建 `template_vars`（`auth_url`/`username`/`password`/`isp` 取自 worker config，`task_url` 取自 `task_config.url`），传入 `BrowserTaskRunner`
+- **问题**：原 `template_vars=config.get("template_vars", {})` 永远拿到空 dict，因为 `runtime_config_to_worker_dict` 不生成 `template_vars` 字段，导致任务 JSON 中的 `{{USERNAME}}`/`{{PASSWORD}}`/`{{LOGIN_URL}}`/`{{ISP}}` 原样保留无法解析
+- 与 `LoginAttempt` 登录路径行为对齐，浏览器定时任务现可正常引用系统预定义变量
+
 ### refactor: services 层删除直接 import workers，统一通过 worker_port 访问
 
 - `app/services/worker_port.py`：

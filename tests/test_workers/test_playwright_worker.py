@@ -6,7 +6,7 @@ import asyncio
 import contextlib
 import threading
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import psutil
 import pytest
@@ -447,6 +447,59 @@ class TestHandleBrowserTask:
         assert resp.success is False
         assert resp.error == "浏览器任务不存在: script_task"
 
+    async def test_template_vars_built_from_runtime_config(self):
+        """_handle_browser_task 应从 worker config 构建 template_vars 传入 BrowserTaskRunner。
+
+        回归测试：原 template_vars=config.get("template_vars", {}) 永远为空 dict，
+        因 runtime_config_to_worker_dict 不生成该字段，导致 {{USERNAME}} 等无法解析。
+        """
+        from app.workers.playwright_worker import PlaywrightWorker
+
+        worker = PlaywrightWorker()
+        cancel_event = threading.Event()
+        data = {
+            "config": {
+                "active_task": "test_task",
+                "auth_url": "http://auth.example.com",
+                "username": "testuser",
+                "password": "testpass",
+                "isp": "@cmcc",
+            },
+            "cancel_event": cancel_event,
+        }
+        task_detail = {
+            "id": "test_task",
+            "type": "browser",
+            "name": "测试任务",
+            "url": "",
+            "steps": [],
+        }
+
+        captured_runner = MagicMock()
+        captured_runner.execute = AsyncMock(return_value=(True, "成功"))
+
+        with (
+            patch("app.tasks.TaskManager") as MockTaskManager,
+            patch("app.tasks.BrowserTaskRunner") as MockRunner,
+            patch.object(worker, "ensure_browser", new_callable=AsyncMock),
+            patch.object(worker, "_close_browser", new_callable=AsyncMock),
+        ):
+            MockTaskManager.return_value.get_task_detail.return_value = task_detail
+            MockRunner.return_value = captured_runner
+            worker._page = MagicMock()
+            worker._page.is_closed.return_value = False
+
+            resp = await worker._handle_browser_task(data)
+
+        assert resp.success is True
+        # 验证 BrowserTaskRunner 构造时收到正确的 template_vars
+        MockRunner.assert_called_once()
+        _, kwargs = MockRunner.call_args
+        template_vars = kwargs["template_vars"]
+        assert template_vars["LOGIN_URL"] == "http://auth.example.com"
+        assert template_vars["USERNAME"] == "testuser"
+        assert template_vars["PASSWORD"] == "testpass"
+        assert template_vars["ISP"] == "@cmcc"
 
 # ── Task 2.3: PlaywrightWorker 显式实现 WorkerPort 协议 ──
 
