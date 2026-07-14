@@ -118,9 +118,9 @@ def test_has_playwright_chromium_arm64_linux(tmp_path):
         patch(
             "app.utils.browser_registry.get_playwright_cache_dir", return_value=tmp_path
         ),
+        patch("importlib.util.find_spec", return_value=None),
     ):
         assert has_playwright_chromium() is True
-
 
 def test_has_playwright_chromium_arm64_mac(tmp_path):
     """ARM64 macOS 上应检测 chrome-mac-arm64 路径。"""
@@ -133,9 +133,9 @@ def test_has_playwright_chromium_arm64_mac(tmp_path):
         patch(
             "app.utils.browser_registry.get_playwright_cache_dir", return_value=tmp_path
         ),
+        patch("importlib.util.find_spec", return_value=None),
     ):
         assert has_playwright_chromium() is True
-
 
 def test_has_playwright_chromium_non_arm64_no_arm64_paths(tmp_path):
     """非 ARM64 架构不应检测 chrome-linux-arm64 或 chrome-mac-arm64 路径。
@@ -151,5 +151,6 @@ def test_has_playwright_chromium_non_arm64_no_arm64_paths(tmp_path):
         patch(
             "app.utils.browser_registry.get_playwright_cache_dir", return_value=tmp_path
         ),
+        patch("importlib.util.find_spec", return_value=None),
     ):
         assert has_playwright_chromium() is False

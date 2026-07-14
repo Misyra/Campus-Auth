@@ -10,6 +10,8 @@
 import sys
 import pytest
 
+pytestmark = pytest.mark.slow
+
 import shutil
 
 # ── 辅助函数 ──
