@@ -69,10 +69,9 @@ $IncludeItems = @(
     "README.md",
     "启动请看我.md",
     "LICENSE",
-    "start.go",
     "start.sh",
     "resources/tools/start/start.go",
-    "resources/tools/git-puller/main.go"
+    "resources/tools/update/main.go"
 )
 
 if ($IncludeExe) {
