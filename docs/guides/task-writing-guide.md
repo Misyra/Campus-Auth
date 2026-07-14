@@ -434,9 +434,66 @@ ddddocr 内置两套模型，`old` 参数控制使用哪一套：
 
 ## 成功判断
 
-系统统一使用网络连通性检测判断任务成功与否：任务步骤全部完成后，默认等待 5 秒，然后自动检测网络是否可达。网络通 = 认证成功，网络断 = 认证失败。检测失败时会在日志中显示具体原因。
+任务的成功判断分两种路径，由任务是否声明 `success_checks` / `failure_checks` 决定：
 
-> **关于等待时间：** 等待时长由系统监控配置中的 `post_login_delay` 字段控制（默认 5 秒），属于**系统监控设置**而非任务 JSON 字段。如需调整，请在 Web 控制台的监控设置中修改，不要在任务 JSON 中添加此字段。
+### 路径 1：未声明成功条件（默认）
+
+任务步骤全部完成后，登录路径自动追加网络检测：
+1. 等待 `post_login_delay` 秒（默认 5s，让 portal 完成跳转和会话生效）
+2. 检测网络是否可达（TCP/HTTP/URL 三种方式，任一通即成功）
+3. 网络通 → SUCCESS；网络断 → RETRYABLE（按重试策略重试）
+
+通用浏览器任务路径（非登录任务，如打卡/签到）不走网络检测，步骤跑完即成功。
+
+### 路径 2：声明了 success_checks 或 failure_checks
+
+任务可声明任意 JS 表达式作为成功/失败信号，runner 在步骤跑完后评估，**登录路径跳过网络检测，信任判定结果**。
+
+- `failure_checks` 任一命中 → `INVALID_CREDENTIAL`（终态，不重试）
+- `success_checks` 任一命中 → SUCCESS
+- 两者均未命中 → 兜底信任步骤
+
+**字段结构**：
+
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `expr` | string | （必填） | JS 表达式，返回真值即命中。支持 `{{VAR}}` 模板 |
+| `message` | string | "" | 命中时显示的消息（可省略） |
+| `timeout` | int | 2000 | 等待/轮询超时（ms），超时未命中视为 false |
+
+**判定优先级**（runner 内部）：
+
+1. failure_checks 任一命中 → 失败（INVALID_CREDENTIAL）
+2. assert_text 步骤命中 → 成功
+3. success_checks 任一命中 → 成功
+4. 兜底 → 信任步骤结果
+
+**示例**：
+
+```json
+{
+  "name": "校园网登录",
+  "steps": [
+    {"id": "s1", "type": "goto", "url": "{{auth_url}}"},
+    {"id": "s2", "type": "fill", "selector": "#username", "value": "{{username}}"},
+    {"id": "s3", "type": "fill", "selector": "#password", "value": "{{password}}"},
+    {"id": "s4", "type": "click", "selector": "#login"}
+  ],
+  "failure_checks": [
+    {
+      "expr": "document.body.innerText.includes('密码错误') || document.body.innerText.includes('认证失败')",
+      "message": "凭证错误",
+      "timeout": 2000
+    }
+  ]
+}
+```
+
+**核心规则**：任务声明了 `success_checks` 或 `failure_checks`（任一非空）→ 登录路径跳过网络检测，信任判定结果；未声明 → 登录路径走网络检测兜底。
+
+### 关于等待时间
+
+`post_login_delay` 字段已实装到 `MonitorSettings`（默认 5 秒，可配置 0-60），属于**系统监控设置**而非任务 JSON 字段。如需调整，请在 Web 控制台的监控设置中修改。
 
 > **注意：** 原有 `success_conditions` 字段已被废弃，不再参与成功判断。任务文件中无需再添加该字段。
 
