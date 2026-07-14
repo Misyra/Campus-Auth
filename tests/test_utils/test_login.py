@@ -37,9 +37,8 @@ def _make_task_config(task_id: str = "default", steps: list | None = None):
     task.task_id = task_id
     task.url = "http://example.com"
     task.steps = steps or [{"type": "input", "selector": "#user"}]
-    # 显式设为空列表，避免 MagicMock truthy 影响 has_explicit_checks 判断
-    task.success_checks = []
-    task.failure_checks = []
+    # 显式设为空字符串，避免 MagicMock truthy 影响 has_explicit_condition 判断
+    task.success_condition = ""
     # 确保 isinstance(task, ScriptTaskInfo) 为 False
     type(task).__name__ = "TaskConfig"
     return task

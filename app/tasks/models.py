@@ -55,6 +55,7 @@ class StepType(str, Enum):
     OCR = "ocr"
     CLICK_SELECT = "click_select"
     ASSERT_TEXT = "assert_text"
+    GOTO = "goto"
 
 
 @dataclass
@@ -148,39 +149,6 @@ class StepConfig:
 
 
 @dataclass
-class JsCheck:
-    """JS 表达式断言 — runner 在步骤跑完后评估，返回真值即命中。
-
-    用于 success_checks / failure_checks，可覆盖 DOM 文本、URL、Cookie、
-    localStorage 等任意页面状态判定。
-
-    expr 经 VariableResolver.resolve_for_js 解析，支持 {{VAR}} 模板。
-    """
-
-    expr: str                            # JS 表达式，需返回真值即命中
-    message: str = ""                    # 命中时显示的消息（可省略，默认用 expr 前 40 字符）
-    timeout: int = 2000                  # 等待/轮询超时（ms），超时未命中视为 false
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> JsCheck:
-        """从字典创建，仅识别 expr/message/timeout 三个字段。"""
-        return cls(
-            expr=str(data.get("expr", "")),
-            message=str(data.get("message", "")),
-            timeout=int(data.get("timeout", 2000)),
-        )
-
-    def to_dict(self) -> dict[str, Any]:
-        """序列化为紧凑字典，跳过默认值。"""
-        result: dict[str, Any] = {"expr": self.expr}
-        if self.message:
-            result["message"] = self.message
-        if self.timeout != 2000:
-            result["timeout"] = self.timeout
-        return result
-
-
-@dataclass
 class TaskConfig:
     """任务配置"""
 
@@ -199,12 +167,12 @@ class TaskConfig:
     reveal_hidden: bool = False  # 默认关闭，由每个步骤的 force 降级自动处理隐藏输入框
     step_delay: float = 0.5
     navigation_wait: float = 1  # 页面加载后额外等待秒数，用于等待 AJAX 初始化
-    # JS 表达式断言列表
-    # - failure_checks 任一命中 → INVALID_CREDENTIAL（终态，不重试）
-    # - success_checks 任一命中 → SUCCESS
-    # - 两者均未命中 → 走兜底（登录路径网络检测，通用路径信任步骤）
-    success_checks: list[JsCheck] = field(default_factory=list)
-    failure_checks: list[JsCheck] = field(default_factory=list)
+    # 成功条件变量名：声明后，runner 在步骤跑完后从 runtime_vars 取该变量的值做真值判定
+    # - 真值 → 成功
+    # - 假值 → 失败（按重试策略重试）
+    # - 留空 → 走兜底（登录路径网络检测，通用路径信任步骤）
+    # 用户通过 eval 步骤的 store_as 写入该变量
+    success_condition: str = ""
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> TaskConfig:
@@ -227,16 +195,7 @@ class TaskConfig:
             reveal_hidden=data.get("reveal_hidden", False),
             step_delay=_safe_float(data.get("step_delay"), 0.5),
             navigation_wait=_safe_float(data.get("navigation_wait"), 1),
-            success_checks=[
-                JsCheck.from_dict(c)
-                for c in data.get("success_checks", [])
-                if isinstance(c, dict) and c.get("expr")
-            ],
-            failure_checks=[
-                JsCheck.from_dict(c)
-                for c in data.get("failure_checks", [])
-                if isinstance(c, dict) and c.get("expr")
-            ],
+            success_condition=str(data.get("success_condition", "")),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -263,10 +222,8 @@ class TaskConfig:
             result["step_delay"] = self.step_delay
         if self.navigation_wait != 1:
             result["navigation_wait"] = self.navigation_wait
-        if self.success_checks:
-            result["success_checks"] = [c.to_dict() for c in self.success_checks]
-        if self.failure_checks:
-            result["failure_checks"] = [c.to_dict() for c in self.failure_checks]
+        if self.success_condition:
+            result["success_condition"] = self.success_condition
         return result
 
 

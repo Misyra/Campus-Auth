@@ -44,27 +44,13 @@ class TestExecuteOutcomeMapping:
         assert outcome.message == "ok"
 
     @pytest.mark.asyncio
-    async def test_failure_signal_returns_invalid_credential(self):
-        """命中失败信号 → INVALID_CREDENTIAL（终态，不重试）。"""
-        attempt = _make_attempt()
-        with patch.object(
-            attempt,
-            "attempt_login",
-            new=AsyncMock(return_value=(False, "命中失败信号: 密码错误")),
-        ):
-            outcome = await attempt.execute()
-        assert outcome.type == AttemptOutcomeType.INVALID_CREDENTIAL
-        assert "密码错误" in outcome.message
-        assert outcome.should_retry is False
-
-    @pytest.mark.asyncio
     async def test_generic_failure_returns_retryable(self):
-        """attempt_login 普通失败（非失败信号）→ RETRYABLE。"""
+        """attempt_login 失败 → RETRYABLE（统一按重试策略处理）。"""
         attempt = _make_attempt()
         with patch.object(
             attempt,
             "attempt_login",
-            new=AsyncMock(return_value=(False, "网络未通")),
+            new=AsyncMock(return_value=(False, "密码错误")),
         ):
             outcome = await attempt.execute()
         assert outcome.type == AttemptOutcomeType.RETRYABLE
@@ -84,7 +70,7 @@ class TestExecuteOutcomeMapping:
 
 
 class TestRedundantBranchesRemoved:
-    """验证冗余异常分支被删除。"""
+    """验证冗余分支被删除。"""
 
     @pytest.mark.asyncio
     async def test_settle_seconds_constant_removed(self):
@@ -98,8 +84,6 @@ class TestRedundantBranchesRemoved:
         """attempt_login 内部 catch 异常返回 (False, str(exc))，
         execute 不会再 catch PlaywrightError 等异常。"""
         attempt = _make_attempt()
-        # attempt_login 内部已 catch 异常返回 (False, str(exc))，
-        # execute 看不到原始异常
         with patch.object(
             attempt,
             "attempt_login",
@@ -156,7 +140,6 @@ class TestVerifyNetworkAfterLogin:
                 "active_task": "",
             }
         )
-        # check_network_status 是在方法内部 import 的，需要 patch 正确路径
         with patch(
             "app.network.decision.check_network_status",
             new=AsyncMock(return_value=(True, "ok", "tcp")),
@@ -191,21 +174,20 @@ class TestVerifyNetworkAfterLogin:
         assert msg == "tcp_failed"
 
 
-class TestExecuteBrowserTaskExplicitChecks:
-    """_execute_browser_task 的 has_explicit_checks 分支测试。"""
+class TestExecuteBrowserTaskSuccessCondition:
+    """_execute_browser_task 的 has_explicit_condition 分支测试。"""
 
     @pytest.mark.asyncio
-    async def test_declared_checks_skips_network_detection(self):
-        """任务声明 failure_checks → has_explicit_checks=True → 跳过网络检测直接 SUCCESS。"""
+    async def test_declared_condition_skips_network_detection(self):
+        """任务声明 success_condition → 跳过网络检测直接 SUCCESS。"""
         attempt = _make_attempt()
 
-        # 构造带 failure_checks 的 task
+        # 构造带 success_condition 的 task
         task = MagicMock()
         task.task_id = "t1"
         task.url = "http://example.com"
         task.steps = []
-        task.success_checks = []
-        task.failure_checks = [MagicMock()]  # 非空 → has_explicit_checks=True
+        task.success_condition = "success_flag"  # 非空 → has_explicit_condition=True
         type(task).__name__ = "TaskConfig"
 
         # mock executor.execute 返回成功
@@ -241,20 +223,19 @@ class TestExecuteBrowserTaskExplicitChecks:
             )
 
         assert ok is True
-        # _verify_network_after_login 不应被调用（声明了 checks）
+        # _verify_network_after_login 不应被调用（声明了 success_condition）
         verify_mock.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_no_checks_runs_network_detection(self):
-        """任务未声明 checks → has_explicit_checks=False → 走网络检测。"""
+    async def test_no_condition_runs_network_detection(self):
+        """任务未声明 success_condition → 走网络检测。"""
         attempt = _make_attempt()
 
         task = MagicMock()
         task.task_id = "t1"
         task.url = "http://example.com"
         task.steps = []
-        task.success_checks = []  # 空
-        task.failure_checks = []  # 空 → has_explicit_checks=False
+        task.success_condition = ""  # 空 → has_explicit_condition=False
         type(task).__name__ = "TaskConfig"
 
         mock_executor = MagicMock()
@@ -292,16 +273,15 @@ class TestExecuteBrowserTaskExplicitChecks:
         verify_mock.assert_awaited_once()
 
     @pytest.mark.asyncio
-    async def test_no_checks_network_down_returns_failure(self):
-        """任务未声明 checks + 网络检测失败 → 返回失败（可重试）。"""
+    async def test_no_condition_network_down_returns_failure(self):
+        """任务未声明 success_condition + 网络检测失败 → 返回失败（可重试）。"""
         attempt = _make_attempt()
 
         task = MagicMock()
         task.task_id = "t1"
         task.url = "http://example.com"
         task.steps = []
-        task.success_checks = []
-        task.failure_checks = []
+        task.success_condition = ""
         type(task).__name__ = "TaskConfig"
 
         mock_executor = MagicMock()
@@ -336,3 +316,48 @@ class TestExecuteBrowserTaskExplicitChecks:
 
         assert ok is False
         assert "步骤通过但网络未恢复" in msg
+
+    @pytest.mark.asyncio
+    async def test_whitespace_only_condition_runs_network_detection(self):
+        """success_condition 仅含空白 → 视为未声明 → 走网络检测。"""
+        attempt = _make_attempt()
+
+        task = MagicMock()
+        task.task_id = "t1"
+        task.url = "http://example.com"
+        task.steps = []
+        task.success_condition = "   "  # 仅空白 → strip() 后为空
+        type(task).__name__ = "TaskConfig"
+
+        mock_executor = MagicMock()
+        mock_executor.execute = AsyncMock(return_value=(True, "步骤通过"))
+
+        mock_page = MagicMock()
+        mock_page.on = MagicMock()
+        mock_page.remove_listener = MagicMock()
+        mock_browser_mgr = MagicMock()
+        mock_browser_mgr.page = mock_page
+        mock_browser_mgr.__aenter__ = AsyncMock(return_value=mock_browser_mgr)
+        mock_browser_mgr.__aexit__ = AsyncMock()
+
+        verify_mock = AsyncMock(return_value=(True, "network_ok"))
+
+        with (
+            patch(
+                "app.workers.login_attempt.BrowserContextManager",
+                return_value=mock_browser_mgr,
+            ),
+            patch(
+                "app.workers.login_attempt.build_login_template_vars", return_value={}
+            ),
+            patch("app.tasks.BrowserTaskRunner", return_value=mock_executor),
+            patch.object(
+                attempt, "_verify_network_after_login", verify_mock
+            ),
+        ):
+            ok, msg = await attempt._execute_browser_task(
+                task, "default", time.perf_counter()
+            )
+
+        assert ok is True
+        verify_mock.assert_awaited_once()

@@ -82,9 +82,7 @@ class LoginAttempt:
     async def execute(self) -> AttemptOutcome:
         """执行单次登录尝试，返回 AttemptOutcome。
 
-        失败分类：
-        - 命中失败信号（failure_checks 任一返回真）→ INVALID_CREDENTIAL（终态，不重试）
-        - 其他失败 → RETRYABLE（默认可重试）
+        失败统一标记为 RETRYABLE（按重试策略重试）。
 
         异常处理：
         - LoginCancelledError → CANCELLED
@@ -95,11 +93,6 @@ class LoginAttempt:
             success, message = await self.attempt_login()
             if success:
                 return AttemptOutcome(AttemptOutcomeType.SUCCESS, message)
-            # 失败信号识别（failure_checks 命中）
-            if "命中失败信号" in message:
-                return AttemptOutcome(
-                    AttemptOutcomeType.INVALID_CREDENTIAL, message
-                )
             return AttemptOutcome(AttemptOutcomeType.RETRYABLE, message)
         except LoginCancelledError:
             return AttemptOutcome(AttemptOutcomeType.CANCELLED, "登录已取消")
@@ -285,12 +278,10 @@ class LoginAttempt:
                 browser_manager.page.remove_listener("dialog", _handle_dialog)
             total = time.perf_counter() - phase_start
             if success:
-                # 任务已声明成功条件（success_checks 或 failure_checks）→ 信任判定，不走网络检测
-                # 任务未声明 → 登录路径追加网络检测作为兜底确认
-                has_explicit_checks = bool(
-                    task.success_checks or task.failure_checks
-                )
-                if has_explicit_checks:
+                # 任务声明了 success_condition → 信任 runner 的判定，不走网络检测
+                # 未声明 → 登录路径追加网络检测作为兜底确认
+                has_explicit_condition = bool(task.success_condition.strip())
+                if has_explicit_condition:
                     self.logger.info(
                         "登录成功: {} (已声明成功条件, 跳过网络检测, 耗时 {:.1f}s)",
                         message,

@@ -3,31 +3,58 @@
 
 ## 2026-07-14
 
-### refactor: 成功条件判断彻底重构 — JS 表达式断言 + 路径区分
+### feat: 新增 goto 步骤类型 — 显式页面导航
+
+**背景**：文档示例（task-writing-guide.md、tasks.html）中早已使用 `"type": "goto"` 步骤，但代码未实现，存在文档与代码不一致。本次补齐实现。
 
 **新增**：
-- `app/tasks/models.py`：`JsCheck` dataclass；`TaskConfig` 新增 `success_checks` / `failure_checks` 字段及 from_dict/to_dict
-- `app/schemas.py`：`MonitorSettings.post_login_delay` 字段（修复字段悬空 bug，默认 5s，可配置 0-60）
+- `app/tasks/models.py`：`StepType.GOTO` 枚举值
+- `app/tasks/step_handlers.py`：`GotoHandler` 处理器
+  - 必填 `url` 字段（支持 `{{变量}}` 模板）
+  - 可选 `wait_until`（通过 `extra` 传入，默认 `load`，可选 `domcontentloaded`/`networkidle`/`commit`）
+  - 复用 `step.timeout`（默认 `DEFAULT_STEP_TIMEOUT_MS`）
+  - `wait_until` 无效值回退到 `load` 并记录警告
+  - 导航成功返回 HTTP 状态码，失败返回错误信息
+- `app/tasks/step_handlers.py`：`DEFAULT_HANDLERS` 注册 `GotoHandler`
+
+**与自动导航的关系**：任务顶层声明 `url` 时 runner 仍会自动导航（含重定向链处理、`navigation_wait`），`goto` 步骤用于执行过程中需要额外跳转的场景（如登录后跳到打卡页、分步跨页表单）。顶层未声明 `url` 且首步是 `goto` 则跳过自动导航。
+
+**测试**：`tests/test_core/test_step_handlers.py` 新增 `TestGotoHandler` 类共 9 个测试（step_type/缺 url/默认 wait_until/模板解析/自定义 wait_until/无效值回退/导航失败/无响应/超时传递）。
+
+**文档**：
+- `docs/guides/task-writing-guide.md`：新增 `goto — 页面导航` 章节及速查表条目
+- `frontend/partials/pages/tasks.html`：步骤类型列表添加 `goto` 说明
+
+
+### refactor: 成功条件判断简化 — success_condition 单字段 + eval 步骤自判定
+
+**设计思路**：复用现有 `eval` 步骤 + `store_as` 机制，让用户自己写 JS 判定逻辑存到变量，顶层用 `success_condition` 字段引用变量名，系统读取变量值做真值判定。比上一版 `success_checks`/`failure_checks` 列表方案大幅简化（删除 JsCheck 数据类、轮询逻辑等）。
+
+**新增**：
+- `app/tasks/models.py`：`TaskConfig.success_condition` 字段（string，变量名，默认空）
+- `app/schemas.py`：`MonitorSettings.post_login_delay` 字段（默认 5s，可配置 0-60）
 - `app/workers/login_attempt.py`：`_verify_network_after_login` 方法（网络检测归位到 LoginAttempt）
 
 **重构**：
-- `app/tasks/browser_runner.py`：移除 `monitor_config` 参数和 `_network_detection_check` 方法，纯化为步骤执行器+JS 判定器；新增 `_evaluate_js_checks` / `_poll_js_expression`；`_check_success` 返回 `tuple[bool, str]`
-- `app/workers/login_attempt.py`：`_execute_browser_task` 增加 `has_explicit_checks` 分支（声明成功条件则跳过网络检测，否则追加网络检测兜底）；`execute` 识别 `INVALID_CREDENTIAL`（通过 "命中失败信号" message 前缀）；`_execute_script_task` 改用 `post_login_delay`
+- `app/tasks/browser_runner.py`：移除 `monitor_config` 参数和 `_network_detection_check` 方法；删除 `_poll_js_expression` / `_evaluate_js_checks`；`_check_success` 改为读取 `success_condition` 指向的运行时变量做真值判定，新增 `_is_truthy` 静态方法
+- `app/workers/login_attempt.py`：`_execute_browser_task` 增加 `has_explicit_condition` 分支（声明 `success_condition` 则跳过网络检测，否则追加网络检测兜底）；`execute` 失败统一返回 RETRYABLE（不再区分 INVALID_CREDENTIAL）；`_execute_script_task` 改用 `post_login_delay`
 
 **删除**：
-- `app/workers/login_attempt.py`：`LOGIN_SUCCESS_SETTLE_SECONDS` 常量；`execute` 冗余异常分支（`_RETRYABLE_ERRORS` / `_RETRYABLE_PLAYWRIGHT_SUBSTRINGS` / PlaywrightError catch）
+- `app/tasks/models.py`：`JsCheck` dataclass；`TaskConfig.success_checks` / `failure_checks` 字段
+- `app/tasks/browser_runner.py`：`_poll_js_expression` / `_evaluate_js_checks` 方法
+- `app/workers/login_attempt.py`：`LOGIN_SUCCESS_SETTLE_SECONDS` 常量；`execute` 冗余异常分支
 
 **行为变化**：
-- 任务声明 `success_checks` 或 `failure_checks`（任一非空）→ 登录路径跳过网络检测，信任判定结果
+- 任务声明 `success_condition`（非空变量名）→ 登录路径跳过网络检测，读取变量值做真值判定
 - 任务未声明 + 登录路径 → 自动追加网络检测（post_login_delay + check_network_status）
 - 通用浏览器任务路径 → 不走网络检测（运行时一定有网）
-- failure_checks 命中 → INVALID_CREDENTIAL（终态，不重试），修复"密码错误也重试 5 次"问题
+- 变量值为假值 → 判定失败，按重试策略重试（统一处理，不区分密码错误和网络抖动）
 
-**测试**：新增 25 个测试（TaskConfig 字段、BrowserTaskRunner JS 判定、LoginAttempt outcome 映射、has_explicit_checks 分支、_verify_network_after_login）。全量 2585 个测试通过（1 个 e2e 因环境失败）。
+**测试**：更新 test_models/test_browser_runner/test_login_attempt/test_login 同步新方案，新增 `_is_truthy` 参数化测试。全量 2615 个测试通过（1 个 e2e 因环境失败）。
 
-**文档**：`docs/guides/task-writing-guide.md` 更新"成功判断"章节说明两路径规则与新字段。
+**文档**：`docs/guides/task-writing-guide.md` 重写"成功判断"章节；`frontend/partials/pages/tasks.html` 更新顶层配置说明与示例。
 
-**关联 spec/plan**：`docs/superpowers/specs/2026-07-14-success-condition-design.md`、`docs/superpowers/plans/2026-07-14-success-condition-refactor.md`
+**清理**：删除误创建的 `AGENTS.md`、`docs/manual_verification_checklist.md`。
 
 
 ## 2026-07-13

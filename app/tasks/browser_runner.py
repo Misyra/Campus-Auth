@@ -15,7 +15,7 @@ from playwright.sync_api import TimeoutError as PlaywrightTimeout
 from app.constants import DEFAULT_STEP_TIMEOUT_MS, DEFAULT_TASK_TIMEOUT_MS
 from app.utils.logging import get_logger
 
-from .models import JsCheck, StepConfig, StepType, TaskConfig
+from .models import StepConfig, StepType, TaskConfig
 from .step_handlers import DEFAULT_HANDLERS
 from .variable_resolver import VariableResolver
 
@@ -306,98 +306,61 @@ class BrowserTaskRunner:
         self._step_results.append(result)
         return result
 
-    async def _poll_js_expression(
-        self, page, expr: str, timeout_ms: int
-    ) -> bool:
-        """在 timeout 内轮询 JS 表达式，任一时刻返回真值即返回 True。
-
-        使用 page.wait_for_function 让 Playwright 内部按 100ms 间隔轮询，
-        避免应用层忙等。timeout_ms 超时返回 False。
-        """
-        try:
-            # 表达式包装为函数形式：() => Boolean(expr)
-            wrapped = f"() => Boolean({expr})"
-            await page.wait_for_function(wrapped, timeout=timeout_ms)
-            return True
-        except PlaywrightTimeout:
-            return False
-        except Exception as e:
-            logger.debug(
-                "[js_check] 表达式评估失败: expr={}, error={}",
-                expr[:60],
-                e,
-            )
-            return False
-
-    async def _evaluate_js_checks(
-        self, page, checks: list[JsCheck], label: str
-    ) -> str | None:
-        """评估 JS 表达式列表，返回首个命中的 message（或 expr 前 40 字符）。
-
-        Args:
-            checks: 待评估的 JsCheck 列表
-            label: "success" 或 "failure"，仅用于日志
-
-        Returns:
-            命中的 check 的 message（或 expr 截断），全部未命中返回 None。
-            评估异常视为未命中（不阻断流程），记录 warning。
-        """
-        for check in checks:
-            if not check.expr:
-                continue
-            try:
-                resolved_expr = self.resolver.resolve_for_js(check.expr)
-                result = await self._poll_js_expression(
-                    page, resolved_expr, check.timeout
-                )
-                if result:
-                    msg = check.message or check.expr[:40]
-                    logger.info(
-                        "[js_check/{}] 命中: {} (expr={})",
-                        label,
-                        msg,
-                        check.expr[:60],
-                    )
-                    return msg
-            except Exception as e:
-                logger.warning(
-                    "[js_check/{}] 评估异常: expr={}, error={}",
-                    label,
-                    check.expr[:60],
-                    e,
-                )
-        return None
-
     async def _check_success(self, page) -> tuple[bool, str]:
-        """成功条件判断（纯文本/JS 判定，不含网络检测）。
+        """成功条件判断（不含网络检测）。
 
-        优先级：
-        1. failure_checks 任一命中 → 失败（识别为 INVALID_CREDENTIAL）
-        2. _asserted（步骤 assert_text 命中）→ 成功
-        3. success_checks 任一命中 → 成功
-        4. 都未命中 → 兜底"信任步骤"（登录路径由 LoginAttempt 追加网络检测）
+        判定逻辑：
+        1. 任务声明了 success_condition（变量名）→ 从 runtime_vars 取值做真值判定
+           - 真值 → 成功
+           - 假值 → 失败（按重试策略重试）
+           - 变量未设置 → 失败（提示步骤配置问题）
+        2. 未声明 success_condition → 兜底信任步骤执行结果
+           - _asserted（步骤 assert_text 命中）→ 成功
+           - 否则 → 成功（登录路径由 LoginAttempt 追加网络检测）
         """
-        # 1. 失败信号优先（短路）
-        failure_msg = await self._evaluate_js_checks(
-            page, self.config.failure_checks, "failure"
-        )
-        if failure_msg is not None:
-            return False, f"命中失败信号: {failure_msg}"
+        var_name = self.config.success_condition.strip()
+        if not var_name:
+            # 未声明成功条件 → 信任步骤执行结果
+            if self._asserted:
+                return True, "断言文本已命中"
+            return True, "步骤执行完成"
 
-        # 2. 步骤内置 assert_text 命中
-        if self._asserted:
-            return True, "断言文本已命中"
+        # 从 runtime_vars 读取变量值
+        if var_name not in self.resolver.runtime_vars:
+            logger.warning(
+                "[success_condition] 变量未设置: {} (请检查 eval 步骤的 store_as)",
+                var_name,
+            )
+            return False, f"成功条件变量未设置: {var_name}"
 
-        # 3. 成功信号
-        success_msg = await self._evaluate_js_checks(
-            page, self.config.success_checks, "success"
-        )
-        if success_msg is not None:
-            return True, f"命中成功信号: {success_msg}"
+        value = self.resolver.runtime_vars[var_name]
+        if self._is_truthy(value):
+            logger.info(
+                "[success_condition] 命中成功: {}={}", var_name, value
+            )
+            return True, f"成功条件命中: {var_name}={value}"
+        logger.info("[success_condition] 未命中: {}={}", var_name, value)
+        return False, f"成功条件未命中: {var_name}={value}"
 
-        # 4. 兜底：信任步骤结果
-        # 登录路径由 LoginAttempt._execute_browser_task 追加网络检测
-        return True, "步骤执行完成"
+    @staticmethod
+    def _is_truthy(value: Any) -> bool:
+        """判定变量值的真假。
+
+        - bool: 直接返回
+        - None: False
+        - str: "false"/"0"/""/no/off → False；其他 → True
+        - 数字: 非零 → True
+        - 其他: bool(value)
+        """
+        if isinstance(value, bool):
+            return value
+        if value is None:
+            return False
+        if isinstance(value, str):
+            return value.strip().lower() not in ("false", "0", "", "no", "off")
+        if isinstance(value, int | float):
+            return value != 0
+        return bool(value)
 
     async def _handle_success(self, page) -> tuple[bool, str]:
         """处理成功情况"""

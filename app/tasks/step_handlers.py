@@ -608,6 +608,58 @@ class WaitUrlHandler(StepHandler):
             await asyncio.sleep(min(0.2, remaining))
 
 
+class GotoHandler(StepHandler):
+    """页面导航步骤处理器 — 导航到指定 URL。
+
+    与任务顶层的 `url` 字段自动导航互补：顶层 `url` 在步骤执行前自动导航一次，
+    `goto` 步骤用于在执行过程中切换页面（如登录后跳到打卡页）。
+    """
+
+    # 合法的 wait_until 值（与 Playwright page.goto 一致）
+    _VALID_WAIT_UNTIL = ("load", "domcontentloaded", "networkidle", "commit")
+
+    @property
+    def step_type(self) -> str:
+        return StepType.GOTO
+
+    async def execute(
+        self, page, step: StepConfig, resolver: VariableResolver
+    ) -> tuple[bool, str]:
+        params = self.resolve_params(step, resolver)
+        url = params.get("url", "")
+        timeout = step.timeout or DEFAULT_STEP_TIMEOUT_MS
+
+        if not url:
+            return False, "goto 步骤需要 url"
+
+        # wait_until 通过 extra 传入，默认 load
+        wait_until = "load"
+        if step.extra:
+            raw = step.extra.get("wait_until", "load")
+            if isinstance(raw, str) and raw in self._VALID_WAIT_UNTIL:
+                wait_until = raw
+            else:
+                logger.warning(
+                    "[goto] wait_until 值 '{}' 无效，可选: {}，使用默认 'load'",
+                    raw,
+                    ", ".join(self._VALID_WAIT_UNTIL),
+                )
+
+        logger.debug(
+            "[goto] url={}, wait_until={}, timeout={}ms", url, wait_until, timeout
+        )
+        try:
+            response = await page.goto(
+                url, wait_until=wait_until, timeout=timeout
+            )
+        except Exception as e:
+            return False, f"导航失败: {url} ({e})"
+
+        status = response.status if response else "?"
+        logger.info("[goto] 已导航: {} (HTTP {})", url, status)
+        return True, f"已导航: {url} (HTTP {status})"
+
+
 class EvalHandler(StepHandler):
     """JavaScript求值处理器"""
 
@@ -944,6 +996,7 @@ DEFAULT_HANDLERS: dict[str, StepHandler] = {
         ClickSelectHandler(),
         WaitHandler(),
         WaitUrlHandler(),
+        GotoHandler(),
         EvalHandler(),
         ScreenshotHandler(),
         SleepHandler(),
