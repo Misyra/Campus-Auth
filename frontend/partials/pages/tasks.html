@@ -180,6 +180,8 @@
             <li><code>reveal_hidden</code> - 执行前强制显示所有隐藏输入框（布尔值，默认 false）。通常无需开启，每个步骤在普通操作失败后会自动降级到强制模式</li>
             <li><code>step_delay</code> - 步骤间休眠时间（秒，默认 0.5）</li>
             <li><code>navigation_wait</code> - 页面加载后额外等待时间（秒，默认 1）。适用于页面通过 AJAX 动态渲染表单的场景，等待时间不足会导致后续步骤找不到元素</li>
+            <li><code>success_checks</code> - 成功信号 JS 表达式列表（可选）。任一命中即判定 SUCCESS，登录任务声明后<strong>跳过网络检测</strong>。每项含 <code>expr</code>（JS 表达式，支持 <code v-pre>{{VAR}}</code> 模板）、<code>message</code>（命中消息，可选）、<code>timeout</code>（轮询超时 ms，默认 2000）</li>
+            <li><code>failure_checks</code> - 失败信号 JS 表达式列表（可选）。任一命中即判定 INVALID_CREDENTIAL（终态，不重试）。字段结构与 <code>success_checks</code> 相同</li>
           </ul>
           <h4>可用变量</h4>
           <ul>
@@ -199,6 +201,24 @@
       "selector": "#username",
       "value": "{{username}}",
       "description": "输入用户名"
+    }
+  ]
+}</pre>
+          <h4>成功判定示例（识别密码错误）</h4>
+          <p>声明 <code>failure_checks</code> 后，登录任务跳过网络检测，命中即终态不重试：</p>
+          <pre v-pre>{
+  "name": "校园网登录",
+  "steps": [
+    {"id": "s1", "type": "goto", "url": "{{auth_url}}"},
+    {"id": "s2", "type": "fill", "selector": "#username", "value": "{{username}}"},
+    {"id": "s3", "type": "fill", "selector": "#password", "value": "{{password}}"},
+    {"id": "s4", "type": "click", "selector": "#login"}
+  ],
+  "failure_checks": [
+    {
+      "expr": "document.body.innerText.includes('密码错误') || document.body.innerText.includes('认证失败')",
+      "message": "凭证错误",
+      "timeout": 2000
     }
   ]
 }</pre>

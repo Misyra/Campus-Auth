@@ -1,6 +1,35 @@
 # 修改日志
 
 
+## 2026-07-14
+
+### refactor: 成功条件判断彻底重构 — JS 表达式断言 + 路径区分
+
+**新增**：
+- `app/tasks/models.py`：`JsCheck` dataclass；`TaskConfig` 新增 `success_checks` / `failure_checks` 字段及 from_dict/to_dict
+- `app/schemas.py`：`MonitorSettings.post_login_delay` 字段（修复字段悬空 bug，默认 5s，可配置 0-60）
+- `app/workers/login_attempt.py`：`_verify_network_after_login` 方法（网络检测归位到 LoginAttempt）
+
+**重构**：
+- `app/tasks/browser_runner.py`：移除 `monitor_config` 参数和 `_network_detection_check` 方法，纯化为步骤执行器+JS 判定器；新增 `_evaluate_js_checks` / `_poll_js_expression`；`_check_success` 返回 `tuple[bool, str]`
+- `app/workers/login_attempt.py`：`_execute_browser_task` 增加 `has_explicit_checks` 分支（声明成功条件则跳过网络检测，否则追加网络检测兜底）；`execute` 识别 `INVALID_CREDENTIAL`（通过 "命中失败信号" message 前缀）；`_execute_script_task` 改用 `post_login_delay`
+
+**删除**：
+- `app/workers/login_attempt.py`：`LOGIN_SUCCESS_SETTLE_SECONDS` 常量；`execute` 冗余异常分支（`_RETRYABLE_ERRORS` / `_RETRYABLE_PLAYWRIGHT_SUBSTRINGS` / PlaywrightError catch）
+
+**行为变化**：
+- 任务声明 `success_checks` 或 `failure_checks`（任一非空）→ 登录路径跳过网络检测，信任判定结果
+- 任务未声明 + 登录路径 → 自动追加网络检测（post_login_delay + check_network_status）
+- 通用浏览器任务路径 → 不走网络检测（运行时一定有网）
+- failure_checks 命中 → INVALID_CREDENTIAL（终态，不重试），修复"密码错误也重试 5 次"问题
+
+**测试**：新增 25 个测试（TaskConfig 字段、BrowserTaskRunner JS 判定、LoginAttempt outcome 映射、has_explicit_checks 分支、_verify_network_after_login）。全量 2585 个测试通过（1 个 e2e 因环境失败）。
+
+**文档**：`docs/guides/task-writing-guide.md` 更新"成功判断"章节说明两路径规则与新字段。
+
+**关联 spec/plan**：`docs/superpowers/specs/2026-07-14-success-condition-design.md`、`docs/superpowers/plans/2026-07-14-success-condition-refactor.md`
+
+
 ## 2026-07-13
 
 ### test: 新增 E2E 全量测试套件（106 个测试，覆盖后端核心模块 + 前端全量页面回归）
