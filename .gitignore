@@ -91,3 +91,4 @@ pyrightconfig.json
 
 # Brainstorm visual companion (local mockups)
 .superpowers/
+docs/superpowers/

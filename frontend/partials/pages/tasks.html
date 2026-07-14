@@ -181,7 +181,7 @@
             <li><code>reveal_hidden</code> - 执行前强制显示所有隐藏输入框（布尔值，默认 false）。通常无需开启，每个步骤在普通操作失败后会自动降级到强制模式</li>
             <li><code>step_delay</code> - 步骤间休眠时间（秒，默认 0.5）</li>
             <li><code>navigation_wait</code> - 页面加载后额外等待时间（秒，默认 1）。适用于页面通过 AJAX 动态渲染表单的场景，等待时间不足会导致后续步骤找不到元素</li>
-            <li><code>success_condition</code> - 成功条件变量名（可选，字符串）。声明后系统在步骤跑完后从运行时变量中读取该值做真值判定：真值→成功；假值→失败（按重试策略重试）。登录任务声明后<strong>跳过网络检测</strong>。配合 <code>eval</code> 步骤的 <code>store_as</code> 使用：在 <code>eval</code> 步骤里写 JS 判定逻辑存到变量，顶层用此字段引用变量名</li>
+            <li><code>success_condition</code> - 成功条件变量名（可选，字符串）。声明后系统在步骤跑完后从运行时变量中读取该值做真值判定：真值→成功；假值→失败（按重试策略重试）。登录任务声明后<strong>跳过网络检测</strong>。配合 <code>eval</code> 步骤的 <code>store_as</code> 使用：在 <code>eval</code> 步骤里写 JS 判定逻辑存到变量，顶层用此字段引用变量名。单纯的校园网登录任务可以不设，系统会自动通过网络检测判断登录是否成功</li>
           </ul>
           <h4>可用变量</h4>
           <ul>
@@ -210,8 +210,8 @@
   "name": "校园网登录",
   "steps": [
     {"id": "s1", "type": "goto", "url": "{{auth_url}}"},
-    {"id": "s2", "type": "fill", "selector": "#username", "value": "{{username}}"},
-    {"id": "s3", "type": "fill", "selector": "#password", "value": "{{password}}"},
+    {"id": "s2", "type": "input", "selector": "#username", "value": "{{username}}"},
+    {"id": "s3", "type": "input", "selector": "#password", "value": "{{password}}"},
     {"id": "s4", "type": "click", "selector": "#login"},
     {
       "id": "check_result",
