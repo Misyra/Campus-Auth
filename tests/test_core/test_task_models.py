@@ -335,6 +335,7 @@ class TestStepType:
             "ocr",
             "click_select",
             "assert_text",
+            "goto",
         }
         actual = {t.value for t in StepType}
         assert actual == expected
