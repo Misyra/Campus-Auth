@@ -1,4 +1,4 @@
-> **📢 项目已迁移**：本仓库（Python 版）已停止更新，后续版本请前往 Rust 重写版 **[Misyra/Campus-Auth-rs](https://github.com/Misyra/Campus-Auth-rs)**（单二进制便携包，解压即用，含全部功能）。本仓库 Release 页附件即新版便携包，可直接下载。
+> **📢 项目已迁移**：本仓库（Python 版）已停止更新，后续版本请前往 Rust 重写版 **[Misyra/Campus-Auth-rs](https://github.com/Misyra/Campus-Auth-rs)**（单二进制便携包，解压即用，大部分功能）。本仓库 Release 页附件即新版便携包，可直接下载。
 >
 # Campus-Auth 校园网自动认证
 
