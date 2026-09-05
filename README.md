@@ -1,3 +1,5 @@
+> **📢 项目已迁移**：本仓库（Python 版）已停止更新，后续版本请前往 Rust 重写版 **[Misyra/Campus-Auth-rs](https://github.com/Misyra/Campus-Auth-rs)**（单二进制便携包，解压即用，含全部功能）。本仓库 Release 页附件即新版便携包，可直接下载。
+>
 # Campus-Auth 校园网自动认证
 
 Campus-Auth 是一个基于 Playwright、FastAPI 和 Vue 3 的校园网自动认证工具。它既可以作为终端用户直接运行的本地服务，也适合作为开发调试项目使用。项目提供 Web 控制台、自动监控、任务模板、多网络配置方案、系统托盘、自启动与日志可视化，目标是让校园网认证尽量做到"装好即用、断网即连、问题可查"。
